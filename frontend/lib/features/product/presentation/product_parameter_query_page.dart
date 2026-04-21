@@ -106,18 +106,6 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
     return '${local.year}-$mm-$dd $hh:$min:$sec';
   }
 
-  String _lifecycleLabel(String value) {
-    switch (value) {
-      case 'active':
-      case 'effective':
-        return '启用';
-      case 'inactive':
-        return '停用';
-      default:
-        return value;
-    }
-  }
-
   ProductItem? _findProductById(int productId) {
     for (final product in _products) {
       if (product.id == productId) {

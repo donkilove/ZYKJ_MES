@@ -2198,6 +2198,12 @@ void main() {
 
       expect(service.detailCalls, 1);
       expect(find.textContaining('产品参数 - 产品81'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('product-parameter-summary-header')),
+        findsOneWidget,
+      );
+      expect(find.text('仅展示当前生效版本参数'), findsOneWidget);
+      expect(find.text('参数总数：2 项'), findsOneWidget);
       expect(find.widgetWithText(TextButton, 'spec.pdf'), findsOneWidget);
       expect(find.widgetWithText(TextButton, 'manual.pdf'), findsOneWidget);
 
@@ -2219,6 +2225,10 @@ void main() {
       await tester.pumpAndSettle();
       expect(service.detailCalls, 2);
       expect(find.textContaining('产品参数 - 产品81'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('product-parameter-summary-header')),
+        findsOneWidget,
+      );
     });
   });
 }
