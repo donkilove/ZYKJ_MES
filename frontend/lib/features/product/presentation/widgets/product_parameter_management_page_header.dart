@@ -13,16 +13,19 @@ class ProductParameterManagementPageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MesPageHeader(
-      title: '版本参数管理',
-      subtitle: '按版本查看、编辑和导出产品参数。',
-      actions: [
-        FilledButton.tonalIcon(
-          onPressed: loading ? null : onRefresh,
-          icon: const Icon(Icons.refresh),
-          label: const Text('刷新页面'),
-        ),
-      ],
+    return KeyedSubtree(
+      key: const ValueKey('product-parameter-management-page-header'),
+      child: MesPageHeader(
+        title: '版本参数管理',
+        subtitle: '按版本查看、编辑和导出产品参数。',
+        actions: [
+          FilledButton.tonalIcon(
+            onPressed: loading ? null : onRefresh,
+            icon: const Icon(Icons.refresh),
+            label: const Text('刷新页面'),
+          ),
+        ],
+      ),
     );
   }
 }

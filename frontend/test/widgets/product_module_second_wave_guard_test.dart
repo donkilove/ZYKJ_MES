@@ -542,5 +542,135 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('product-detail-drawer')), findsOneWidget);
     });
+
+    testWidgets('产品参数管理页保留第二波列表 编辑和历史结构', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1800, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final service = _ParameterManagementGuardService([
+        _buildParameterVersionRow(
+          productId: 81,
+          productName: '产品81',
+          version: 1,
+          versionLabel: 'V1.0',
+          lifecycleStatus: 'effective',
+          isEffectiveVersion: true,
+        ),
+        _buildParameterVersionRow(
+          productId: 81,
+          productName: '产品81',
+          version: 2,
+          versionLabel: 'V1.1',
+          lifecycleStatus: 'draft',
+          isCurrentVersion: true,
+        ),
+      ]);
+
+      await tester.pumpWidget(
+        _guardHost(
+          ProductParameterManagementPage(
+            session: _session(),
+            onLogout: () {},
+            tabCode: 'product-parameter-management',
+            service: service,
+            canExportParameters: true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('product-parameter-management-page-header')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('product-parameter-filter-section')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('product-parameter-version-table-section')),
+        findsOneWidget,
+      );
+
+      await _openPopupMenu(tester, _popupMenuButtonFinder().first);
+      await tester.tap(find.text('查看历史'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('product-parameter-history-dialog')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.widgetWithText(FilledButton, '关闭'));
+      await tester.pumpAndSettle();
+
+      await _openPopupMenu(tester, _popupMenuButtonFinder().at(1));
+      await tester.tap(find.text('编辑参数'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('product-parameter-editor-header')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('product-parameter-editor-toolbar')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('product-parameter-editor-table')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('product-parameter-editor-footer')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('产品参数查询页保留第二波查询骨架与参数弹窗摘要结构', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1800, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final service = _ParameterQueryGuardService([
+        _buildProduct(id: 91, currentVersion: 2, effectiveVersion: 1),
+      ]);
+
+      await tester.pumpWidget(
+        _guardHost(
+          ProductParameterQueryPage(
+            session: _session(),
+            onLogout: () {},
+            tabCode: productParameterQueryTabCode,
+            service: service,
+            canExportParameters: true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('product-parameter-query-page-header')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('product-parameter-query-filter-section')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('product-parameter-query-table-section')),
+        findsOneWidget,
+      );
+      expect(service.queryCalls, 1);
+
+      await tester.tap(find.widgetWithText(TextButton, '查看参数'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey('product-parameter-query-dialog')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('product-parameter-summary-header')),
+        findsOneWidget,
+      );
+      expect(find.text('仅展示当前生效版本参数'), findsOneWidget);
+    });
   });
 }
