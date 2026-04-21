@@ -13,16 +13,19 @@ class ProductVersionPageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MesPageHeader(
-      title: '版本管理',
-      subtitle: '左侧选择产品，右侧查看版本工作区与参数动作。',
-      actions: [
-        FilledButton.tonalIcon(
-          onPressed: loading ? null : onRefresh,
-          icon: const Icon(Icons.refresh),
-          label: const Text('刷新页面'),
-        ),
-      ],
+    return KeyedSubtree(
+      key: const ValueKey('product-version-page-header'),
+      child: MesPageHeader(
+        title: '版本管理',
+        subtitle: '左侧选择产品，右侧查看版本工作区与参数动作。',
+        actions: [
+          FilledButton.tonalIcon(
+            onPressed: loading ? null : onRefresh,
+            icon: const Icon(Icons.refresh),
+            label: const Text('刷新页面'),
+          ),
+        ],
+      ),
     );
   }
 }

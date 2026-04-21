@@ -13,16 +13,19 @@ class ProductManagementPageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MesPageHeader(
-      title: '产品管理',
-      subtitle: '统一管理产品筛选、列表、详情和版本工作区入口。',
-      actions: [
-        FilledButton.tonalIcon(
-          onPressed: loading ? null : onRefresh,
-          icon: const Icon(Icons.refresh),
-          label: const Text('刷新页面'),
-        ),
-      ],
+    return KeyedSubtree(
+      key: const ValueKey('product-management-page-header'),
+      child: MesPageHeader(
+        title: '产品管理',
+        subtitle: '统一管理产品筛选、列表、详情和版本工作区入口。',
+        actions: [
+          FilledButton.tonalIcon(
+            onPressed: loading ? null : onRefresh,
+            icon: const Icon(Icons.refresh),
+            label: const Text('刷新页面'),
+          ),
+        ],
+      ),
     );
   }
 }
