@@ -7,6 +7,7 @@ import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/product_page.dart';
 import 'package:mes_client/features/product/presentation/product_parameter_query_page.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_dialog.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_feedback_banner.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_filter_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_page_header.dart';
@@ -81,6 +82,24 @@ class _QueryPageStructureService extends ProductService {
     queryCalls += 1;
     return ProductListResult(total: products.length, items: products);
   }
+}
+
+ProductParameterListResult _buildParameterResult({
+  required String productName,
+  required String versionLabel,
+  required int total,
+  required List<ProductParameterItem> items,
+}) {
+  return ProductParameterListResult(
+    productId: 81,
+    productName: productName,
+    parameterScope: 'effective',
+    version: 1,
+    versionLabel: versionLabel,
+    lifecycleStatus: 'effective',
+    total: total,
+    items: items,
+  );
 }
 
 void main() {
@@ -200,5 +219,76 @@ void main() {
     expect(find.widgetWithText(OutlinedButton, '导出'), findsOneWidget);
     expect(service.queryCalls, 1);
     expect(find.text('产品91'), findsOneWidget);
+  });
+
+  testWidgets('参数查看弹窗展示顶部摘要和参数表格', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductParameterQueryDialog(
+            result: _buildParameterResult(
+              productName: '产品81',
+              versionLabel: 'V1.0',
+              total: 2,
+              items: [
+                ProductParameterItem(
+                  name: '图纸链接',
+                  category: '文档',
+                  type: 'Link',
+                  value: 'https://example.com/files/spec.pdf',
+                  description: '在线资料',
+                  sortOrder: 1,
+                  isPreset: false,
+                ),
+                ProductParameterItem(
+                  name: '本地图纸',
+                  category: '文档',
+                  type: 'Link',
+                  value: r'C:\docs\manual.pdf',
+                  description: '',
+                  sortOrder: 2,
+                  isPreset: false,
+                ),
+              ],
+            ),
+            buildParameterValueCell: (item) => Text(item.value),
+            onClose: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('product-parameter-query-dialog')), findsOneWidget);
+    expect(find.byKey(const ValueKey('product-parameter-summary-header')), findsOneWidget);
+    expect(find.text('产品81'), findsOneWidget);
+    expect(find.text('版本：V1.0'), findsOneWidget);
+    expect(find.text('参数总数：2 项'), findsOneWidget);
+    expect(find.text('仅展示当前生效版本参数'), findsOneWidget);
+    expect(find.text('图纸链接'), findsOneWidget);
+    expect(find.text('本地图纸'), findsOneWidget);
+  });
+
+  testWidgets('参数查看弹窗空态时仍保留顶部摘要区', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductParameterQueryDialog(
+            result: _buildParameterResult(
+              productName: '产品82',
+              versionLabel: 'V1.1',
+              total: 0,
+              items: const [],
+            ),
+            buildParameterValueCell: (item) => Text(item.value),
+            onClose: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('product-parameter-summary-header')), findsOneWidget);
+    expect(find.text('产品82'), findsOneWidget);
+    expect(find.text('参数总数：0 项'), findsOneWidget);
+    expect(find.text('该产品暂无参数'), findsOneWidget);
   });
 }

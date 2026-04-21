@@ -10,12 +10,12 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_dialog.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_feedback_banner.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_filter_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_page_header.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_table_section.dart';
 import 'package:mes_client/features/product/services/product_service.dart';
-import 'package:mes_client/core/widgets/adaptive_table_container.dart';
 
 const List<String> _productCategoryOptions = ['贴片', 'DTU', '套件'];
 
@@ -331,48 +331,10 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
     await showDialog<void>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: Text('产品参数 - ${product.name}（${result.versionLabel}）'),
-          content: SizedBox(
-            width: 1000,
-            height: 520,
-            child: result.items.isEmpty
-                ? const Center(child: Text('该产品暂无参数'))
-                : AdaptiveTableContainer(
-                    child: DataTable(
-                      columns: const [
-                        DataColumn(label: Text('参数名称')),
-                        DataColumn(label: Text('参数分类')),
-                        DataColumn(label: Text('参数类型')),
-                        DataColumn(label: Text('参数值')),
-                        DataColumn(label: Text('参数说明')),
-                      ],
-                      rows: result.items.map((item) {
-                        return DataRow(
-                          cells: [
-                            DataCell(Text(item.name)),
-                            DataCell(Text(item.category)),
-                            DataCell(Text(item.type)),
-                            DataCell(_buildParameterValueCell(item)),
-                            DataCell(
-                              Text(
-                                item.description.isEmpty
-                                    ? '-'
-                                    : item.description,
-                              ),
-                            ),
-                          ],
-                        );
-                      }).toList(),
-                    ),
-                  ),
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
+        return ProductParameterQueryDialog(
+          result: result,
+          buildParameterValueCell: _buildParameterValueCell,
+          onClose: () => Navigator.of(context).pop(),
         );
       },
     );
