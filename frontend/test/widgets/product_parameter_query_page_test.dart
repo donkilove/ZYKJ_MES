@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/foundation/mes_theme.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
+import 'package:mes_client/features/product/presentation/product_page.dart';
+import 'package:mes_client/features/product/presentation/product_parameter_query_page.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_feedback_banner.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_filter_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_page_header.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_table_section.dart';
+import 'package:mes_client/features/product/services/product_service.dart';
 
 final DateTime _fixedDate = DateTime.parse('2026-04-21T00:00:00Z');
 
@@ -35,6 +41,46 @@ ProductItem _buildProduct({
     createdAt: _fixedDate,
     updatedAt: _fixedDate,
   );
+}
+
+AppSession _session() => AppSession(baseUrl: '', accessToken: 'token');
+
+class _QueryPageStructureService extends ProductService {
+  _QueryPageStructureService(this.products) : super(_session());
+
+  final List<ProductItem> products;
+  int queryCalls = 0;
+
+  @override
+  Future<ProductListResult> listProducts({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? category,
+    String? lifecycleStatus,
+    bool? hasEffectiveVersion,
+    DateTime? updatedAfter,
+    DateTime? updatedBefore,
+    String? currentVersionKeyword,
+    String? currentParamNameKeyword,
+    String? currentParamCategoryKeyword,
+  }) async {
+    throw ApiException('参数查询页不应回退产品管理列表接口', 500);
+  }
+
+  @override
+  Future<ProductListResult> listProductsForParameterQuery({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? category,
+    String? lifecycleStatus,
+    bool? hasEffectiveVersion,
+    String? effectiveVersionKeyword,
+  }) async {
+    queryCalls += 1;
+    return ProductListResult(total: products.length, items: products);
+  }
 }
 
 void main() {
@@ -106,5 +152,53 @@ void main() {
     expect(find.text('产品81'), findsOneWidget);
     expect(find.text('产品82'), findsOneWidget);
     expect(find.widgetWithText(TextButton, '查看参数'), findsNWidgets(2));
+  });
+
+  testWidgets('ProductParameterQueryPage 列表态接入统一查询骨架并展示锚点', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final service = _QueryPageStructureService([
+      _buildProduct(id: 91, effectiveVersion: 1),
+    ]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildMesTheme(
+          brightness: Brightness.light,
+          visualDensity: VisualDensity.standard,
+        ),
+        home: Scaffold(
+          body: SizedBox(
+            width: 1440,
+            height: 900,
+            child: ProductParameterQueryPage(
+              session: _session(),
+              onLogout: () {},
+              tabCode: productParameterQueryTabCode,
+              service: service,
+              canExportParameters: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MesCrudPageScaffold), findsOneWidget);
+    expect(find.byType(ProductParameterQueryPageHeader), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('product-parameter-query-filter-section')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('product-parameter-query-table-section')),
+      findsOneWidget,
+    );
+    expect(find.widgetWithText(OutlinedButton, '导出'), findsOneWidget);
+    expect(service.queryCalls, 1);
+    expect(find.text('产品91'), findsOneWidget);
   });
 }

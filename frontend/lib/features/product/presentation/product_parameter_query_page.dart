@@ -7,12 +7,15 @@ import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
-import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/features/product/models/product_models.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_feedback_banner.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_filter_section.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_page_header.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_table_section.dart';
 import 'package:mes_client/features/product/services/product_service.dart';
 import 'package:mes_client/core/widgets/adaptive_table_container.dart';
-import 'package:mes_client/core/widgets/crud_page_header.dart';
-import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 
 const List<String> _productCategoryOptions = ['贴片', 'DTU', '套件'];
 
@@ -375,154 +378,42 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CrudPageHeader(
-            title: '产品参数查询',
-            onRefresh: _loading ? null : _loadProducts,
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _keywordController,
-                  decoration: const InputDecoration(
-                    labelText: '搜索产品名称',
-                    border: OutlineInputBorder(),
-                  ),
-                  onSubmitted: (_) => _loadProducts(),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 160,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _selectedCategoryFilter,
-                  decoration: const InputDecoration(
-                    labelText: '分类筛选',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: [
-                    const DropdownMenuItem<String>(
-                      value: '',
-                      child: Text('全部'),
-                    ),
-                    ..._productCategoryOptions.map(
-                      (c) => DropdownMenuItem<String>(value: c, child: Text(c)),
-                    ),
-                  ],
-                  onChanged: _loading
-                      ? null
-                      : (value) {
-                          setState(() {
-                            _selectedCategoryFilter = value ?? '';
-                          });
-                          _loadProducts();
-                        },
-                ),
-              ),
-              const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: _loading ? null : _loadProducts,
-                icon: const Icon(Icons.search),
-                label: const Text('搜索'),
-              ),
-              const SizedBox(width: 12),
-              OutlinedButton.icon(
-                onPressed: _loading || !widget.canExportParameters
-                    ? null
-                    : _exportParameters,
-                icon: const Icon(Icons.download),
-                label: const Text('导出'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                _message,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            ),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _products.isEmpty
-                ? const Center(child: Text('暂无产品'))
-                : Card(
-                    child: AdaptiveTableContainer(
-                      child: UnifiedListTableHeaderStyle.wrap(
-                        theme: theme,
-                        child: DataTable(
-                          columns: [
-                            UnifiedListTableHeaderStyle.column(context, '产品名称'),
-                            UnifiedListTableHeaderStyle.column(context, '产品分类'),
-                            UnifiedListTableHeaderStyle.column(context, '生效版本'),
-                            UnifiedListTableHeaderStyle.column(context, '当前状态'),
-                            UnifiedListTableHeaderStyle.column(context, '创建时间'),
-                            UnifiedListTableHeaderStyle.column(
-                              context,
-                              '操作',
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                          rows: _filteredProducts.map((product) {
-                            return DataRow(
-                              cells: [
-                                DataCell(Text(product.name)),
-                                DataCell(
-                                  Text(
-                                    product.category.isEmpty
-                                        ? '-'
-                                        : product.category,
-                                  ),
-                                ),
-                                DataCell(
-                                  Text(
-                                    product.effectiveVersionLabel ??
-                                        (product.effectiveVersion > 0
-                                            ? 'V1.${product.effectiveVersion - 1}'
-                                            : '-'),
-                                  ),
-                                ),
-                                DataCell(
-                                  Text(
-                                    _lifecycleLabel(product.lifecycleStatus),
-                                  ),
-                                ),
-                                DataCell(Text(_formatTime(product.createdAt))),
-                                DataCell(
-                                  UnifiedListTableHeaderStyle.cellContent(
-                                    TextButton(
-                                      onPressed: () =>
-                                          _showParametersDialog(product),
-                                      child: const Text('查看参数'),
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
-                              ],
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    ),
-                  ),
-          ),
-        ],
+  Widget _buildListView() {
+    return MesCrudPageScaffold(
+      header: ProductParameterQueryPageHeader(
+        loading: _loading,
+        onRefresh: _loadProducts,
+      ),
+      filters: ProductParameterQueryFilterSection(
+        keywordController: _keywordController,
+        categoryOptions: _productCategoryOptions,
+        selectedCategory: _selectedCategoryFilter,
+        loading: _loading,
+        canExportParameters: widget.canExportParameters,
+        onCategoryChanged: (value) {
+          setState(() {
+            _selectedCategoryFilter = value;
+          });
+          _loadProducts();
+        },
+        onSearch: _loadProducts,
+        onExport: _exportParameters,
+      ),
+      banner: _message.isEmpty
+          ? null
+          : ProductParameterQueryFeedbackBanner(message: _message),
+      content: ProductParameterQueryTableSection(
+        products: _filteredProducts,
+        loading: _loading,
+        emptyText: '暂无产品',
+        formatTime: _formatTime,
+        onViewParameters: _showParametersDialog,
       ),
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _buildListView();
   }
 }
