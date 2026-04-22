@@ -70,6 +70,19 @@ class MessageService {
     return MessageListResult.fromJson((body['data'] as Map<String, dynamic>?) ?? const {});
   }
 
+  Future<List<MessageItem>> getAnnouncements({
+    int pageSize = 20,
+    String? priority,
+  }) async {
+    final result = await listMessages(
+      messageType: 'announcement',
+      status: 'active',
+      pageSize: pageSize,
+      priority: priority,
+    );
+    return result.items;
+  }
+
   Future<void> markRead(int messageId) async {
     final uri = Uri.parse('$_base/$messageId/read');
     final resp = await http.post(uri, headers: _headers).timeout(const Duration(seconds: 30));
