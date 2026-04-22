@@ -7,6 +7,7 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/message/models/message_models.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/features/message/presentation/widgets/message_center_filter_section.dart';
 import 'package:mes_client/features/message/presentation/widgets/message_center_header.dart';
 import 'package:mes_client/features/message/presentation/widgets/message_center_list_section.dart';
@@ -554,34 +555,28 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final effectiveNow = widget.nowProvider();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        MessageCenterHeader(
-          nowText: _formatDateTime(effectiveNow),
-          errorText: _error,
-          loading: _loading,
-          canPublishAnnouncement: widget.canPublishAnnouncement,
-          onReset: _resetFilters,
-          onRefresh: () => _load(),
-          onMaintenance: () => _runMaintenance(),
-          onPublishAnnouncement: () => _publishAnnouncement(),
-          onMarkAllRead: () => _markAllRead(),
-          onMarkBatchRead: () => _markBatchRead(),
-          batchReadCount: _selectedIds.length,
-        ),
-        const SizedBox(height: 8),
-        MessageCenterOverviewSection(
-          unreadCount: _unreadCount,
-          todoCount: _todoCount,
-          urgentCount: _urgentCount,
-          allCount: _allMessageCount,
-        ),
-        const SizedBox(height: 8),
-        MessageCenterFilterSection(child: _buildFilterBar(theme)),
-        const SizedBox(height: 8),
-        Expanded(child: _buildBody(theme)),
-      ],
+    return MesCrudPageScaffold(
+      header: MessageCenterHeader(
+        nowText: _formatDateTime(effectiveNow),
+        errorText: _error,
+        loading: _loading,
+        canPublishAnnouncement: widget.canPublishAnnouncement,
+        onReset: _resetFilters,
+        onRefresh: () => _load(),
+        onMaintenance: () => _runMaintenance(),
+        onPublishAnnouncement: () => _publishAnnouncement(),
+        onMarkAllRead: () => _markAllRead(),
+        onMarkBatchRead: () => _markBatchRead(),
+        batchReadCount: _selectedIds.length,
+      ),
+      filters: MessageCenterFilterSection(child: _buildFilterBar(theme)),
+      banner: MessageCenterOverviewSection(
+        unreadCount: _unreadCount,
+        todoCount: _todoCount,
+        urgentCount: _urgentCount,
+        allCount: _allMessageCount,
+      ),
+      content: _buildBody(theme),
     );
   }
 
