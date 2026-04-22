@@ -142,6 +142,9 @@ class _ProductionPipelineInstancesPageState
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('子订单ID必须为大于 0 的数字')),
         );
+        setState(() {
+          _loading = false;
+        });
         return;
       }
     }
