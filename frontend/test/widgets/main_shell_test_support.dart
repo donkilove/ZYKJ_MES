@@ -135,6 +135,7 @@ MessageItem buildMessageItem() {
     status: 'active',
     inactiveReason: null,
     publishedAt: DateTime.parse('2026-04-01T08:00:00Z'),
+    expiresAt: null,
     isRead: false,
     readAt: null,
     deliveredAt: DateTime.parse('2026-04-01T08:00:00Z'),
