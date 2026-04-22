@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/models/authz_models.dart';
+import 'package:mes_client/features/equipment/presentation/widgets/equipment_page_shell.dart';
 import 'package:mes_client/features/equipment/presentation/equipment_ledger_page.dart';
 import 'package:mes_client/features/equipment/presentation/equipment_rule_parameter_page.dart';
 import 'package:mes_client/features/equipment/presentation/maintenance_execution_page.dart';
@@ -257,24 +258,20 @@ class _EquipmentPageState extends State<EquipmentPage>
       return const Center(child: Text('当前账号没有可访问的设备模块页面。'));
     }
 
-    return Column(
-      children: [
-        Material(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          child: TabBar(
-            controller: _tabController,
-            tabs: _orderedVisibleTabCodes
-                .map((code) => Tab(text: _tabTitle(code)))
-                .toList(),
-          ),
+    return EquipmentPageShell(
+      tabBar: Material(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: TabBar(
+          controller: _tabController,
+          tabs: _orderedVisibleTabCodes
+              .map((code) => Tab(text: _tabTitle(code)))
+              .toList(),
         ),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: _orderedVisibleTabCodes.map(_buildTabContent).toList(),
-          ),
-        ),
-      ],
+      ),
+      tabBarView: TabBarView(
+        controller: _tabController,
+        children: _orderedVisibleTabCodes.map(_buildTabContent).toList(),
+      ),
     );
   }
 }
