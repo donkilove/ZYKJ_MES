@@ -139,10 +139,8 @@ class _ProductionPipelineInstancesPageState
     if (rawSubOrderId.isNotEmpty) {
       subOrderId = int.tryParse(rawSubOrderId);
       if (subOrderId == null || subOrderId <= 0) {
-        setState(() {
-          _loading = false;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('子订单ID必须为大于 0 的数字')),
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('子订单ID必须为大于 0 的数字')),
         );
         return;
       }
