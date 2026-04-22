@@ -431,78 +431,116 @@ class _LoginPageState extends State<LoginPage> {
         ),
         child: Padding(
           padding: const EdgeInsets.all(28),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: colorScheme.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '系统公告',
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: colorScheme.primary,
-                        fontWeight: FontWeight.w700,
+          child: fillHeight
+              ? Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildAnnouncementHeader(theme),
+                      const SizedBox(height: 20),
+                      Text(
+                        '欢迎使用 ZYKJ MES 制造执行系统',
+                        style: theme.textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          height: 1.2,
+                        ),
                       ),
-                    ),
-                    if (_session != null && _announcements.isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: const Icon(Icons.refresh, size: 16),
-                        onPressed: _refreshAnnouncements,
-                        tooltip: '刷新公告',
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
+                      const SizedBox(height: 12),
+                      Text(
+                        '请先阅读当日运维通知与业务变更说明，确认账号状态正常后再进行登录。',
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          height: 1.6,
+                        ),
                       ),
+                      const SizedBox(height: 24),
+                      _buildAnnouncementTags(theme),
+                      const SizedBox(height: 24),
+                      Expanded(child: contentWidget),
                     ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                '欢迎使用 ZYKJ MES 制造执行系统',
-                style: theme.textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  height: 1.2,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '请先阅读当日运维通知与业务变更说明，确认账号状态正常后再进行登录。',
-                style: theme.textTheme.bodyLarge?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  height: 1.6,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  if (_announcements.isNotEmpty)
-                    _NoticeTag(label: '共 ${_announcements.length} 条公告')
-                  else
-                    const _NoticeTag(label: '最后更新 2026-03-23 08:30'),
-                  const _NoticeTag(label: '发布部门 信息化推进组'),
-                  _NoticeTag(
-                    label: _announcementError != null ? '静态公告' : '状态 正常运行',
                   ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              Expanded(child: contentWidget),
-            ],
-          ),
+                )
+              : SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildAnnouncementHeader(theme),
+                      const SizedBox(height: 20),
+                      Text(
+                        '欢迎使用 ZYKJ MES 制造执行系统',
+                        style: theme.textTheme.headlineMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          height: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        '请先阅读当日运维通知与业务变更说明，确认账号状态正常后再进行登录。',
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                          height: 1.6,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      _buildAnnouncementTags(theme),
+                      const SizedBox(height: 24),
+                      contentWidget,
+                    ],
+                  ),
+                ),
         ),
       ),
+    );
+  }
+
+  Widget _buildAnnouncementHeader(ThemeData theme) {
+    final colorScheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: colorScheme.primary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '系统公告',
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: colorScheme.primary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (_session != null && _announcements.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            IconButton(
+              icon: const Icon(Icons.refresh, size: 16),
+              onPressed: _refreshAnnouncements,
+              tooltip: '刷新公告',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnnouncementTags(ThemeData theme) {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        if (_announcements.isNotEmpty)
+          _NoticeTag(label: '共 ${_announcements.length} 条公告')
+        else
+          const _NoticeTag(label: '最后更新 2026-03-23 08:30'),
+        const _NoticeTag(label: '发布部门 信息化推进组'),
+        _NoticeTag(
+          label: _announcementError != null ? '静态公告' : '状态 正常运行',
+        ),
+      ],
     );
   }
 
