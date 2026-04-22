@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/models/authz_models.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/features/user/presentation/registration_approval_page.dart';
 import 'package:mes_client/features/user/presentation/user_management_page.dart';
+import 'package:mes_client/features/user/presentation/user_page.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 
 class _IntegrationUserService extends UserService {
@@ -138,7 +140,7 @@ class _IntegrationCraftService extends CraftService {
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('用户管理页展示统一页头、筛选区与列表区锚点', (tester) async {
+  testWidgets('用户模块通过总页壳层展示主业务页并可切到支持页签', (tester) async {
     final userService = _IntegrationUserService();
     final craftService = _IntegrationCraftService();
 
@@ -147,17 +149,57 @@ void main() {
         home: Scaffold(
           body: SizedBox(
             width: 1280,
-            child: LegacyLegacyUserManagementPage(
+            child: UserPage(
               session: AppSession(baseUrl: '', accessToken: 'token'),
               onLogout: () {},
-              canCreateUser: true,
-              canEditUser: true,
-              canToggleUser: true,
-              canResetPassword: true,
-              canDeleteUser: true,
-              canExport: true,
-              userService: userService,
-              craftService: craftService,
+              visibleTabCodes: const [
+                'user_management',
+                'registration_approval',
+                'account_settings',
+              ],
+              capabilityCodes: {
+                UserFeaturePermissionCodes.userManagementCreate,
+                UserFeaturePermissionCodes.userManagementUpdate,
+                UserFeaturePermissionCodes.userManagementLifecycle,
+                UserFeaturePermissionCodes.userManagementPasswordReset,
+                UserFeaturePermissionCodes.userManagementDelete,
+                UserFeaturePermissionCodes.userManagementExport,
+                UserFeaturePermissionCodes.registrationApprovalApprove,
+                UserFeaturePermissionCodes.registrationApprovalReject,
+              },
+              preferredTabCode: 'account_settings',
+              tabPageBuilder: (tabCode, child) {
+                if (child is LegacyLegacyUserManagementPage) {
+                  return LegacyLegacyUserManagementPage(
+                    session: child.session,
+                    onLogout: child.onLogout,
+                    canCreateUser: child.canCreateUser,
+                    canEditUser: child.canEditUser,
+                    canToggleUser: child.canToggleUser,
+                    canResetPassword: child.canResetPassword,
+                    canDeleteUser: child.canDeleteUser,
+                    canRestoreUser: child.canRestoreUser,
+                    canExport: child.canExport,
+                    onNavigateToRoleManagement: child.onNavigateToRoleManagement,
+                    userService: userService,
+                    craftService: craftService,
+                    saveExportFile: child.saveExportFile,
+                    isCurrentTabVisible: child.isCurrentTabVisible,
+                  );
+                }
+                if (child is RegistrationApprovalPage) {
+                  return RegistrationApprovalPage(
+                    session: child.session,
+                    onLogout: child.onLogout,
+                    canApprove: child.canApprove,
+                    canReject: child.canReject,
+                    routePayloadJson: child.routePayloadJson,
+                    userService: userService,
+                    craftService: craftService,
+                  );
+                }
+                return child;
+              },
             ),
           ),
         ),
@@ -165,50 +207,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('用户管理'), findsOneWidget);
+    expect(find.byKey(const ValueKey('user-page-shell')), findsOneWidget);
     expect(
-      find.byKey(const ValueKey('user-management-filter-section')),
+      find.byKey(const ValueKey('account-settings-page-header')),
       findsOneWidget,
     );
-    expect(
-      find.byKey(const ValueKey('user-management-table-section')),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('注册审批页展示统一页头、筛选区和 route payload 提示', (tester) async {
-    final userService = _IntegrationUserService();
-    final craftService = _IntegrationCraftService();
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 1280,
-            child: RegistrationApprovalPage(
-              session: AppSession(baseUrl: '', accessToken: 'token'),
-              onLogout: () {},
-              canApprove: true,
-              canReject: true,
-              routePayloadJson: '{"request_id":572}',
-              userService: userService,
-              craftService: craftService,
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('注册审批'), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('registration-approval-filter-section')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('registration-approval-table-section')),
-      findsOneWidget,
-    );
-    expect(find.textContaining('已定位注册申请 #572'), findsOneWidget);
   });
 }

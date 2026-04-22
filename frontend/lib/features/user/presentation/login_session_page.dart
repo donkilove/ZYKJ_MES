@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/features/user/presentation/widgets/login_session_page_header.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
@@ -263,10 +264,7 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CrudPageHeader(
-              title: '在线会话',
-              onRefresh: _loadingSessions ? null : () => _loadOnlineSessions(),
-            ),
+            const LoginSessionPageHeader(),
             const SizedBox(height: 12),
             Semantics(
               container: true,

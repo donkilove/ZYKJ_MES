@@ -5,8 +5,8 @@ import 'package:mes_client/core/models/authz_models.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/auth/services/authz_service.dart';
+import 'package:mes_client/features/user/presentation/widgets/function_permission_config_page_header.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
-import 'package:mes_client/core/widgets/crud_page_header.dart';
 
 const Map<String, String> _moduleNameFallbackZh = {
   'user': '用户管理',
@@ -827,10 +827,7 @@ class _FunctionPermissionConfigPageState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CrudPageHeader(
-              title: '功能权限配置',
-              onRefresh: _loading || _saving ? null : _refreshCurrentModule,
-            ),
+            const FunctionPermissionConfigPageHeader(),
             const SizedBox(height: 12),
             Card(
               margin: EdgeInsets.zero,

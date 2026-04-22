@@ -7,8 +7,8 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/auth/services/auth_service.dart';
+import 'package:mes_client/features/user/presentation/widgets/account_settings_page_header.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
-import 'package:mes_client/core/widgets/crud_page_header.dart';
 
 class AccountSettingsPage extends StatefulWidget {
   const AccountSettingsPage({
@@ -1016,7 +1016,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  CrudPageHeader(title: '个人中心', onRefresh: _loadData),
+                  const AccountSettingsPageHeader(),
                   const SizedBox(height: 12),
                   _buildOverviewCard(),
                   const SizedBox(height: 16),

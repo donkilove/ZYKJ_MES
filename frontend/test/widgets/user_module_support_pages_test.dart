@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/models/authz_models.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
+import 'package:mes_client/features/user/presentation/account_settings_page.dart';
 import 'package:mes_client/features/user/presentation/audit_log_page.dart';
 import 'package:mes_client/features/user/presentation/function_permission_config_page.dart';
 import 'package:mes_client/features/user/presentation/login_session_page.dart';
@@ -540,7 +541,10 @@ void main() {
     );
 
     expect(find.byType(FunctionPermissionConfigPage), findsOneWidget);
-    expect(find.byType(CrudPageHeader), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('function-permission-config-page-header')),
+      findsOneWidget,
+    );
     expect(find.text('功能权限配置'), findsOneWidget);
     expect(find.text('系统管理'), findsNothing);
     expect(tester.takeException(), isNull);
@@ -563,12 +567,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('未保存'), findsWidgets);
-
-    await tester.tap(find.byTooltip('刷新'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('刷新页面'), findsOneWidget);
-    expect(find.text('当前有未保存改动，是否放弃并刷新？'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('function-permission-config-page-header')),
+      findsOneWidget,
+    );
+    expect(find.text('刷新页面'), findsNothing);
   });
 
   testWidgets('function permission config save success triggers callback', (
@@ -930,9 +933,9 @@ void main() {
       ),
     );
 
-    expect(find.text('在线会话'), findsOneWidget);
+    expect(find.text('登录会话'), findsOneWidget);
     expect(find.text('tester'), findsOneWidget);
-    expect(find.byType(CrudPageHeader), findsOneWidget);
+    expect(find.byKey(const ValueKey('login-session-page-header')), findsOneWidget);
     expect(find.byType(CrudListTableSection), findsOneWidget);
     expect(find.text('登录日志'), findsNothing);
     expect(find.text('全选当前页'), findsOneWidget);
@@ -1061,5 +1064,57 @@ void main() {
     expect(find.text('在线会话'), findsNothing);
     expect(find.text('当前账号没有在线会话查看权限。'), findsOneWidget);
     expect(userService.listOnlineSessionsCalls, 0);
+  });
+
+  testWidgets('account settings page 接入统一页头锚点', (tester) async {
+    await _pumpPage(
+      tester,
+      AccountSettingsPage(
+        session: _session,
+        onLogout: () {},
+        canChangePassword: true,
+        canViewSession: true,
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('account-settings-page-header')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('login session page 接入统一页头锚点', (tester) async {
+    await _pumpPage(
+      tester,
+      LoginSessionPage(
+        session: _session,
+        onLogout: () {},
+        canViewOnlineSessions: true,
+        canForceOffline: true,
+        userService: userService,
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('login-session-page-header')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('function permission config page 接入统一页头锚点', (tester) async {
+    await _pumpPage(
+      tester,
+      FunctionPermissionConfigPage(
+        session: _session,
+        onLogout: () {},
+        authzService: authzService,
+        userService: userService,
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('function-permission-config-page-header')),
+      findsOneWidget,
+    );
   });
 }
