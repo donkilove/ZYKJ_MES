@@ -4,12 +4,13 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
-import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
-import 'package:mes_client/features/production/services/production_service.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
+import 'package:mes_client/features/production/models/production_models.dart';
+import 'package:mes_client/features/production/services/production_service.dart';
 
 enum ProductionDataSection { processStats, todayRealtime, operatorStats }
 
@@ -41,8 +42,6 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
   bool _loadingToday = false;
   bool _loadingProcessStats = false;
   bool _loadingOperatorStats = false;
-
-  String _pageMessage = '';
 
   ProductionStatsOverview _overview = ProductionStatsOverview(
     totalOrders: 0,
@@ -138,9 +137,6 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
   Future<void> _reloadOverview({bool clearMessage = true}) async {
     setState(() {
       _loadingOverview = true;
-      if (clearMessage) {
-        _pageMessage = '';
-      }
     });
     try {
       final result = await _service.getOverviewStats();
@@ -158,9 +154,11 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
         widget.onLogout();
         return;
       }
-      setState(() {
-        _pageMessage = '刷新总览失败：${_errorMessage(error)}';
-      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('刷新总览失败：${_errorMessage(error)}')),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -173,9 +171,6 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
   Future<void> _reloadToday({bool clearMessage = true}) async {
     setState(() {
       _loadingToday = true;
-      if (clearMessage) {
-        _pageMessage = '';
-      }
     });
     try {
       final result = await _service.getTodayRealtimeData(
@@ -196,9 +191,11 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
         widget.onLogout();
         return;
       }
-      setState(() {
-        _pageMessage = '加载今日实时失败：${_errorMessage(error)}';
-      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('加载今日实时失败：${_errorMessage(error)}')),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -211,9 +208,6 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
   Future<void> _reloadProcessStats({bool clearMessage = true}) async {
     setState(() {
       _loadingProcessStats = true;
-      if (clearMessage) {
-        _pageMessage = '';
-      }
     });
     try {
       final result = await _service.getProcessStats();
@@ -231,9 +225,11 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
         widget.onLogout();
         return;
       }
-      setState(() {
-        _pageMessage = '加载工序统计失败：${_errorMessage(error)}';
-      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('加载工序统计失败：${_errorMessage(error)}')),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -246,9 +242,6 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
   Future<void> _reloadOperatorStats({bool clearMessage = true}) async {
     setState(() {
       _loadingOperatorStats = true;
-      if (clearMessage) {
-        _pageMessage = '';
-      }
     });
     try {
       final result = await _service.getOperatorStats();
@@ -266,9 +259,11 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
         widget.onLogout();
         return;
       }
-      setState(() {
-        _pageMessage = '加载人员统计失败：${_errorMessage(error)}';
-      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('加载人员统计失败：${_errorMessage(error)}')),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -278,31 +273,97 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
     }
   }
 
-  Widget _buildOverviewCard({
-    required String title,
-    required int value,
-    required ThemeData theme,
-  }) {
-    return SizedBox(
-      width: 180,
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: theme.textTheme.bodyMedium),
-              const SizedBox(height: 8),
-              Text(
-                '$value',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+  Widget _buildOverviewCards() {
+    final theme = Theme.of(context);
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        SizedBox(
+          width: 180,
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('待生产', style: theme.textTheme.bodyMedium),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${_overview.pendingOrders}',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
-      ),
+        SizedBox(
+          width: 180,
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('生产中', style: theme.textTheme.bodyMedium),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${_overview.inProgressOrders}',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 180,
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('生产完成', style: theme.textTheme.bodyMedium),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${_overview.completedOrders}',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 180,
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('完成总量', style: theme.textTheme.bodyMedium),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${_overview.finishedQuantity}',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -387,11 +448,11 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
     );
   }
 
-  Widget _buildTodaySection(ThemeData theme) {
+  Widget _buildTodaySection() {
+    final theme = Theme.of(context);
     final result = _todayResult;
     final rows = result?.tableRows ?? const [];
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Wrap(
           spacing: 12,
@@ -568,12 +629,12 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
     );
   }
 
-  Widget _buildSectionBody(ThemeData theme) {
+  Widget _buildSectionBody() {
     switch (widget.section) {
       case ProductionDataSection.processStats:
         return _buildProcessStatsSection();
       case ProductionDataSection.todayRealtime:
-        return _buildTodaySection(theme);
+        return _buildTodaySection();
       case ProductionDataSection.operatorStats:
         return _buildOperatorStatsSection();
     }
@@ -581,57 +642,13 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CrudPageHeader(
-            title: _pageTitle,
-            onRefresh: _anyLoading ? null : _reloadAll,
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              _buildOverviewCard(
-                title: '待生产',
-                value: _overview.pendingOrders,
-                theme: theme,
-              ),
-              _buildOverviewCard(
-                title: '生产中',
-                value: _overview.inProgressOrders,
-                theme: theme,
-              ),
-              _buildOverviewCard(
-                title: '生产完成',
-                value: _overview.completedOrders,
-                theme: theme,
-              ),
-              _buildOverviewCard(
-                title: '完成总量',
-                value: _overview.finishedQuantity,
-                theme: theme,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (_pageMessage.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                _pageMessage,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            ),
-          Expanded(child: _buildSectionBody(theme)),
-        ],
+    return MesCrudPageScaffold(
+      header: CrudPageHeader(
+        title: _pageTitle,
+        onRefresh: _anyLoading ? null : _reloadAll,
       ),
+      banner: _buildOverviewCards(),
+      content: _buildSectionBody(),
     );
   }
 }

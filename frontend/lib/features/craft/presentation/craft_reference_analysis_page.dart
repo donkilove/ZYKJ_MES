@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
-import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 
 enum _QueryMode { stage, process, template, product }
@@ -26,7 +27,7 @@ class CraftReferenceAnalysisPage extends StatefulWidget {
   final AppSession session;
   final VoidCallback onLogout;
   final void Function({required String moduleCode, String? jumpTarget})
-  onNavigate;
+      onNavigate;
   final CraftService? craftService;
 
   @override
@@ -39,7 +40,6 @@ class _CraftReferenceAnalysisPageState
   late final CraftService _service;
 
   bool _loadingBase = false;
-  String _message = '';
 
   List<CraftStageItem> _stages = const [];
   List<CraftProcessItem> _processes = const [];
@@ -93,7 +93,6 @@ class _CraftReferenceAnalysisPageState
   Future<void> _loadBaseData() async {
     setState(() {
       _loadingBase = true;
-      _message = '';
     });
     try {
       final stageResult = await _service.listStages(
@@ -137,9 +136,11 @@ class _CraftReferenceAnalysisPageState
         widget.onLogout();
         return;
       }
-      setState(() {
-        _message = '加载数据失败：${_errorMessage(error)}';
-      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('加载数据失败：${_errorMessage(error)}')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loadingBase = false);
     }
@@ -320,6 +321,29 @@ class _CraftReferenceAnalysisPageState
     return _productOptions
         .where((item) => item.name.toLowerCase().contains(kw))
         .toList();
+  }
+
+  Widget _buildHeader() {
+    return Row(
+      children: [
+        Text(
+          '工艺引用分析',
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+        ),
+        const Spacer(),
+        IconButton(
+          tooltip: '刷新',
+          onPressed: _loadingBase ? null : _loadBaseData,
+          icon: const Icon(Icons.refresh),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFilters() {
+    return _buildModeTab(Theme.of(context));
   }
 
   Widget _buildRefTypeChip(String refType) {
@@ -979,65 +1003,34 @@ class _CraftReferenceAnalysisPageState
     }
   }
 
+  Widget _buildContent() {
+    final theme = Theme.of(context);
+    if (_loadingBase) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSelectorPanel(theme),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: _buildResultPanel(theme),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                '工艺引用分析',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                tooltip: '刷新',
-                onPressed: _loadingBase ? null : _loadBaseData,
-                icon: const Icon(Icons.refresh),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _buildModeTab(theme),
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8, bottom: 4),
-              child: Text(
-                _message,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: _loadingBase
-                ? const Center(child: CircularProgressIndicator())
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildSelectorPanel(theme),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: _buildResultPanel(theme),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
-        ],
-      ),
+    return MesCrudPageScaffold(
+      header: _buildHeader(),
+      filters: _buildFilters(),
+      content: _buildContent(),
     );
   }
 }

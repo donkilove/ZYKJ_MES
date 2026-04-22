@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
-import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
-import 'package:mes_client/features/production/services/production_service.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
 import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
+import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/production_order_detail_page.dart';
+import 'package:mes_client/features/production/services/production_service.dart';
 
 class ProductionPipelineInstancesPage extends StatefulWidget {
   const ProductionPipelineInstancesPage({
@@ -24,7 +25,6 @@ class ProductionPipelineInstancesPage extends StatefulWidget {
   final AppSession session;
   final VoidCallback onLogout;
 
-  /// 从订单进入时传入，独立进入时为 null
   final int? orderId;
   final String? orderCode;
   final ProductionService? service;
@@ -39,7 +39,6 @@ class _ProductionPipelineInstancesPageState
   late final ProductionService _service;
 
   bool _loading = false;
-  String _message = '';
   int _page = 1;
   int _total = 0;
   bool? _isActiveFilter;
@@ -49,7 +48,6 @@ class _ProductionPipelineInstancesPageState
   final _pipelineSubOrderNoController = TextEditingController();
   List<PipelineInstanceItem> _items = const [];
 
-  /// 独立进入模式（无固定订单）
   bool get _standaloneMode => widget.orderId == null;
 
   static const int _pageSize = 500;
@@ -143,14 +141,14 @@ class _ProductionPipelineInstancesPageState
       if (subOrderId == null || subOrderId <= 0) {
         setState(() {
           _loading = false;
-          _message = '子订单ID必须为大于 0 的数字';
-        });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('子订单ID必须为大于 0 的数字')),
+        );
         return;
       }
     }
     setState(() {
       _loading = true;
-      _message = '';
     });
     try {
       final result = await _service.listPipelineInstances(
@@ -187,9 +185,11 @@ class _ProductionPipelineInstancesPageState
         widget.onLogout();
         return;
       }
-      setState(() {
-        _message = _errorMessage(error);
-      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('加载失败：${_errorMessage(error)}')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -200,6 +200,15 @@ class _ProductionPipelineInstancesPageState
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text('已复制订单号：${item.orderCode}')));
+  }
+
+  Widget _buildHeader() {
+    final title = _standaloneMode ? '并行实例追踪' : '并行实例 - ${widget.orderCode}';
+    return CrudPageHeader(title: title, onRefresh: _loading ? null : _load);
+  }
+
+  Widget _buildFilters() {
+    return _buildFilterBar();
   }
 
   Widget _buildTraceGroupCard(
@@ -426,212 +435,158 @@ class _ProductionPipelineInstancesPageState
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildContent() {
     final theme = Theme.of(context);
-    final title = _standaloneMode ? '并行实例追踪' : '并行实例 - ${widget.orderCode}';
-
-    final body = Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (_standaloneMode) ...[
-            CrudPageHeader(title: title, onRefresh: _loading ? null : _load),
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_items.isEmpty) {
+      return const Center(child: Text('暂无并行实例记录'));
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final tableHeight = constraints.maxHeight.isFinite
+            ? constraints.maxHeight * 0.45
+            : 420.0;
+        return ListView(
+          children: [
+            _buildTraceView(theme),
             const SizedBox(height: 12),
-          ],
-          _buildFilterBar(),
-          const SizedBox(height: 12),
-          Text('总数：$_total', style: theme.textTheme.titleMedium),
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                _message,
-                style: TextStyle(color: theme.colorScheme.error),
-              ),
-            ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _items.isEmpty
-                ? const Center(child: Text('暂无并行实例记录'))
-                : LayoutBuilder(
-                    builder: (context, constraints) {
-                      final tableHeight = constraints.maxHeight.isFinite
-                          ? constraints.maxHeight * 0.45
-                          : 420.0;
-                      return ListView(
-                        children: [
-                          _buildTraceView(theme),
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            height: tableHeight < 320 ? 320 : tableHeight,
-                            child: CrudListTableSection(
-                              loading: false,
-                              isEmpty: _items.isEmpty,
-                              emptyText: '暂无并行实例记录',
-                              enableUnifiedHeaderStyle: true,
-                              child: DataTable(
-                                columns: [
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    'ID',
+            SizedBox(
+              height: tableHeight < 320 ? 320 : tableHeight,
+              child: CrudListTableSection(
+                loading: false,
+                isEmpty: _items.isEmpty,
+                emptyText: '暂无并行实例记录',
+                enableUnifiedHeaderStyle: true,
+                child: DataTable(
+                  columns: [
+                    UnifiedListTableHeaderStyle.column(context, 'ID'),
+                    UnifiedListTableHeaderStyle.column(context, '子订单ID'),
+                    if (_standaloneMode)
+                      UnifiedListTableHeaderStyle.column(context, '订单号'),
+                    UnifiedListTableHeaderStyle.column(context, '工序'),
+                    UnifiedListTableHeaderStyle.column(context, '跨工序链路'),
+                    UnifiedListTableHeaderStyle.column(context, '并行序号'),
+                    UnifiedListTableHeaderStyle.column(context, '实例编号'),
+                    UnifiedListTableHeaderStyle.column(context, '状态'),
+                    UnifiedListTableHeaderStyle.column(context, '失效原因'),
+                    UnifiedListTableHeaderStyle.column(context, '失效时间'),
+                    UnifiedListTableHeaderStyle.column(context, '创建时间'),
+                    UnifiedListTableHeaderStyle.column(context, '更新时间'),
+                    if (_standaloneMode)
+                      UnifiedListTableHeaderStyle.column(context, '操作'),
+                  ],
+                  rows: _items.map((item) {
+                    return DataRow(
+                      cells: [
+                        DataCell(Text('${item.id}')),
+                        DataCell(Text('${item.subOrderId}')),
+                        if (_standaloneMode)
+                          DataCell(Text(item.orderCode)),
+                        DataCell(Text(item.processDisplayText)),
+                        DataCell(
+                          Tooltip(
+                            message: item.pipelineLinkId ?? '未生成跨工序链路标识',
+                            child: SelectableText(_pipelineLinkLabel(item)),
+                          ),
+                        ),
+                        DataCell(Text('${item.pipelineSeq}')),
+                        DataCell(Text(item.pipelineSubOrderNo)),
+                        DataCell(Text(item.isActive ? '活跃' : '已失效')),
+                        DataCell(Text(item.invalidReason ?? '-')),
+                        DataCell(
+                          Text(
+                            item.invalidatedAt != null
+                                ? _formatDateTime(item.invalidatedAt!)
+                                : '-',
+                          ),
+                        ),
+                        DataCell(Text(_formatDateTime(item.createdAt))),
+                        DataCell(Text(_formatDateTime(item.updatedAt))),
+                        if (_standaloneMode)
+                          DataCell(
+                            Wrap(
+                              spacing: 8,
+                              children: [
+                                TextButton(
+                                  onPressed: () => _openOrderDetail(item),
+                                  child: const Text('查看订单'),
+                                ),
+                                TextButton(
+                                  onPressed: () => _openOrderDetail(
+                                    item,
+                                    initialTabIndex: 3,
                                   ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '子订单ID',
-                                  ),
-                                  if (_standaloneMode)
-                                    UnifiedListTableHeaderStyle.column(
-                                      context,
-                                      '订单号',
-                                    ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '工序',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '跨工序链路',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '并行序号',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '实例编号',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '状态',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '失效原因',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '失效时间',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '创建时间',
-                                  ),
-                                  UnifiedListTableHeaderStyle.column(
-                                    context,
-                                    '更新时间',
-                                  ),
-                                  if (_standaloneMode)
-                                    UnifiedListTableHeaderStyle.column(
-                                      context,
-                                      '操作',
-                                    ),
-                                ],
-                                rows: _items.map((item) {
-                                  return DataRow(
-                                    cells: [
-                                      DataCell(Text('${item.id}')),
-                                      DataCell(Text('${item.subOrderId}')),
-                                      if (_standaloneMode)
-                                        DataCell(Text(item.orderCode)),
-                                      DataCell(Text(item.processDisplayText)),
-                                      DataCell(
-                                        Tooltip(
-                                          message:
-                                              item.pipelineLinkId ??
-                                              '未生成跨工序链路标识',
-                                          child: SelectableText(
-                                            _pipelineLinkLabel(item),
-                                          ),
-                                        ),
-                                      ),
-                                      DataCell(Text('${item.pipelineSeq}')),
-                                      DataCell(Text(item.pipelineSubOrderNo)),
-                                      DataCell(
-                                        Text(item.isActive ? '活跃' : '已失效'),
-                                      ),
-                                      DataCell(Text(item.invalidReason ?? '-')),
-                                      DataCell(
-                                        Text(
-                                          item.invalidatedAt != null
-                                              ? _formatDateTime(
-                                                  item.invalidatedAt!,
-                                                )
-                                              : '-',
-                                        ),
-                                      ),
-                                      DataCell(
-                                        Text(_formatDateTime(item.createdAt)),
-                                      ),
-                                      DataCell(
-                                        Text(_formatDateTime(item.updatedAt)),
-                                      ),
-                                      if (_standaloneMode)
-                                        DataCell(
-                                          Wrap(
-                                            spacing: 8,
-                                            children: [
-                                              TextButton(
-                                                onPressed: () =>
-                                                    _openOrderDetail(item),
-                                                child: const Text('查看订单'),
-                                              ),
-                                              TextButton(
-                                                onPressed: () =>
-                                                    _openOrderDetail(
-                                                      item,
-                                                      initialTabIndex: 3,
-                                                    ),
-                                                child: const Text('查看事件日志'),
-                                              ),
-                                              TextButton(
-                                                onPressed: () =>
-                                                    _copyOrderCode(item),
-                                                child: const Text('复制订单号'),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                    ],
-                                  );
-                                }).toList(),
-                              ),
+                                  child: const Text('查看事件日志'),
+                                ),
+                                TextButton(
+                                  onPressed: () => _copyOrderCode(item),
+                                  child: const Text('复制订单号'),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
-                      );
-                    },
-                  ),
-          ),
-          const SizedBox(height: 12),
-          SimplePaginationBar(
-            page: _page,
-            totalPages: _totalPages,
-            total: _total,
-            loading: _loading,
-            onPrevious: () => _load(page: _page - 1),
-            onNext: () => _load(page: _page + 1),
-          ),
-        ],
-      ),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
+  }
 
-    // 从订单进入时用 Scaffold 包裹（保留返回按钮），独立进入时直接返回内容
+  Widget _buildBanner() {
+    return Row(
+      children: [
+        Text(
+          '总数：$_total',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPagination() {
+    return SimplePaginationBar(
+      page: _page,
+      totalPages: _totalPages,
+      total: _total,
+      loading: _loading,
+      onPrevious: () => _load(page: _page - 1),
+      onNext: () => _load(page: _page + 1),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     if (!_standaloneMode) {
       return Scaffold(
         appBar: AppBar(
-          title: Text(title),
+          title: Text(_standaloneMode ? '并行实例追踪' : '并行实例 - ${widget.orderCode}'),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () => Navigator.of(context).pop(),
           ),
         ),
-        body: body,
+        body: MesCrudPageScaffold(
+          header: _buildHeader(),
+          filters: _buildFilters(),
+          banner: _buildBanner(),
+          content: _buildContent(),
+          pagination: _buildPagination(),
+        ),
       );
     }
-    return body;
+    return MesCrudPageScaffold(
+      header: _buildHeader(),
+      filters: _buildFilters(),
+      banner: _buildBanner(),
+      content: _buildContent(),
+      pagination: _buildPagination(),
+    );
   }
 }

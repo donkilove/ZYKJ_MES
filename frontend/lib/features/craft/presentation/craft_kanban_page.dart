@@ -4,10 +4,11 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
-import 'package:mes_client/features/craft/models/craft_models.dart';
-import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
+import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 
 class CraftKanbanPage extends StatefulWidget {
@@ -37,7 +38,6 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
   bool _loadingProducts = false;
   bool _loadingMetrics = false;
   bool _exporting = false;
-  String _message = '';
 
   List<ProductionProductOption> _products = const [];
   List<CraftStageItem> _stages = const [];
@@ -72,7 +72,6 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
   Future<void> _loadProducts() async {
     setState(() {
       _loadingProducts = true;
-      _message = '';
     });
     try {
       final products = await _productionService.listProductOptions();
@@ -121,9 +120,11 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
         widget.onLogout();
         return;
       }
-      setState(() {
-        _message = '加载产品失败：${_errorMessage(error)}';
-      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('加载产品失败：${_errorMessage(error)}')),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -144,7 +145,6 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
 
     setState(() {
       _loadingMetrics = true;
-      _message = '';
     });
     try {
       final metrics = await _craftService.getCraftKanbanProcessMetrics(
@@ -169,10 +169,14 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
         widget.onLogout();
         return;
       }
-      setState(() {
-        _message = '加载看板失败：${_errorMessage(error)}';
-        _metrics = null;
-      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('加载看板失败：${_errorMessage(error)}')),
+        );
+        setState(() {
+          _metrics = null;
+        });
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -228,9 +232,11 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
         widget.onLogout();
         return;
       }
-      setState(() {
-        _message = '导出失败：${_errorMessage(error)}';
-      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导出失败：${_errorMessage(error)}')),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -258,173 +264,149 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
     return _processes.where((p) => p.stageId == _selectedStageId).toList();
   }
 
-  Widget _buildFilterGroup({
-    required BuildContext context,
-    required String title,
-    required List<Widget> children,
-  }) {
-    final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLowest,
-        border: Border.all(color: theme.dividerColor),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
+  Widget _buildHeader() {
+    return Row(
+      children: [
+        Text(
+          '工艺看板',
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+        ),
+        const Spacer(),
+        if (_loadingProducts || _loadingMetrics || _exporting)
+          const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
           ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: children,
-          ),
-        ],
-      ),
+      ],
     );
   }
 
-  Widget _buildMetricHeader() {
+  Widget _buildFilterBar() {
     final bool busy = _loadingProducts || _loadingMetrics || _exporting;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildFilterGroup(
-          context: context,
-          title: '主筛选',
-          children: [
-            SizedBox(
-              width: 320,
-              child: DropdownButtonFormField<int>(
-                initialValue: _selectedProductId,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: '选择产品',
-                  border: OutlineInputBorder(),
+        if (_products.isEmpty && !_loadingProducts)
+          const Text('暂无产品数据')
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SizedBox(
+                width: 320,
+                child: DropdownButtonFormField<int>(
+                  initialValue: _selectedProductId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: '选择产品',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: _products
+                      .map(
+                        (item) => DropdownMenuItem<int>(
+                          value: item.id,
+                          child: Text(item.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: busy
+                      ? null
+                      : (value) async {
+                          if (value == null) {
+                            return;
+                          }
+                          setState(() {
+                            _selectedProductId = value;
+                          });
+                          await _loadMetrics();
+                        },
                 ),
-                items: _products
-                    .map(
-                      (item) => DropdownMenuItem<int>(
-                        value: item.id,
-                        child: Text(item.name),
+              ),
+              SizedBox(
+                width: 220,
+                child: DropdownButtonFormField<int?>(
+                  initialValue: _selectedStageId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: '工段筛选',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    const DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text('全部工段'),
+                    ),
+                    ..._stages.map(
+                      (s) => DropdownMenuItem<int?>(
+                        value: s.id,
+                        child: Text(s.name),
                       ),
-                    )
-                    .toList(),
-                onChanged: busy
-                    ? null
-                    : (value) async {
-                        if (value == null) {
-                          return;
-                        }
-                        setState(() {
-                          _selectedProductId = value;
-                        });
-                        await _loadMetrics();
-                      },
-              ),
-            ),
-            SizedBox(
-              width: 220,
-              child: DropdownButtonFormField<int?>(
-                initialValue: _selectedStageId,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: '工段筛选',
-                  border: OutlineInputBorder(),
-                ),
-                items: [
-                  const DropdownMenuItem<int?>(
-                    value: null,
-                    child: Text('全部工段'),
-                  ),
-                  ..._stages.map(
-                    (s) => DropdownMenuItem<int?>(
-                      value: s.id,
-                      child: Text(s.name),
                     ),
-                  ),
-                ],
-                onChanged: busy
-                    ? null
-                    : (value) async {
-                        setState(() {
-                          _selectedStageId = value;
-                          _selectedProcessId = null;
-                        });
-                        await _loadMetrics();
-                      },
-              ),
-            ),
-            SizedBox(
-              width: 220,
-              child: DropdownButtonFormField<int?>(
-                initialValue: _selectedProcessId,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: '工序筛选',
-                  border: OutlineInputBorder(),
+                  ],
+                  onChanged: busy
+                      ? null
+                      : (value) async {
+                          setState(() {
+                            _selectedStageId = value;
+                            _selectedProcessId = null;
+                          });
+                          await _loadMetrics();
+                        },
                 ),
-                items: [
-                  const DropdownMenuItem<int?>(
-                    value: null,
-                    child: Text('全部工序'),
+              ),
+              SizedBox(
+                width: 220,
+                child: DropdownButtonFormField<int?>(
+                  initialValue: _selectedProcessId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: '工序筛选',
+                    border: OutlineInputBorder(),
                   ),
-                  ..._filteredProcesses.map(
-                    (p) => DropdownMenuItem<int?>(
-                      value: p.id,
-                      child: Text(p.name),
+                  items: [
+                    const DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text('全部工序'),
                     ),
-                  ),
-                ],
-                onChanged: busy
-                    ? null
-                    : (value) async {
-                        setState(() {
-                          _selectedProcessId = value;
-                        });
-                        await _loadMetrics();
-                      },
+                    ..._filteredProcesses.map(
+                      (p) => DropdownMenuItem<int?>(
+                        value: p.id,
+                        child: Text(p.name),
+                      ),
+                    ),
+                  ],
+                  onChanged: busy
+                      ? null
+                      : (value) async {
+                          setState(() {
+                            _selectedProcessId = value;
+                          });
+                          await _loadMetrics();
+                        },
+                ),
               ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                border: Border.all(color: Theme.of(context).dividerColor),
-                borderRadius: BorderRadius.circular(8),
+              FilledButton.icon(
+                onPressed: busy ? null : _loadMetrics,
+                icon: const Icon(Icons.refresh),
+                label: const Text('刷新'),
               ),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  FilledButton.icon(
-                    onPressed: busy ? null : _loadMetrics,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('刷新'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: busy ? null : _exportMetricsCsv,
-                    icon: const Icon(Icons.download),
-                    label: const Text('导出数据'),
-                  ),
-                ],
+              OutlinedButton.icon(
+                onPressed: busy ? null : _exportMetricsCsv,
+                icon: const Icon(Icons.download),
+                label: const Text('导出数据'),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
         const SizedBox(height: 8),
-        _buildFilterGroup(
-          context: context,
-          title: '日期范围',
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             OutlinedButton.icon(
               onPressed: busy
@@ -490,6 +472,20 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
           ],
         ),
       ],
+    );
+  }
+
+  Widget _buildBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        border: Border.all(color: Theme.of(context).dividerColor),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Text(
+        '统计口径：仅统计已完成工序记录；工时=首件/生产记录最早时间到最后一次生产记录时间（分钟）；产能=产出数量/工时。红色柱体表示工时超过该工序样本均值的 130%。',
+      ),
     );
   }
 
@@ -751,59 +747,26 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
     );
   }
 
+  Widget _buildContent() {
+    return (_loadingProducts || _loadingMetrics)
+        ? const Center(child: CircularProgressIndicator())
+        : (_metrics == null || _metrics!.items.isEmpty)
+            ? const Center(child: Text('暂无可统计数据'))
+            : ListView(
+                children: [
+                  _buildTrendComparison(_metrics!.items),
+                  ..._metrics!.items.map(_buildProcessCard),
+                ],
+              );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '工艺看板',
-            style: Theme.of(
-              context,
-            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 12),
-          if (_products.isEmpty && !_loadingProducts)
-            const Text('暂无产品数据')
-          else
-            _buildMetricHeader(),
-          const SizedBox(height: 12),
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                _message,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              border: Border.all(color: Theme.of(context).dividerColor),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Text(
-              '统计口径：仅统计已完成工序记录；工时=首件/生产记录最早时间到最后一次生产记录时间（分钟）；产能=产出数量/工时。红色柱体表示工时超过该工序样本均值的 130%。',
-            ),
-          ),
-          Expanded(
-            child: (_loadingProducts || _loadingMetrics)
-                ? const Center(child: CircularProgressIndicator())
-                : (_metrics == null || _metrics!.items.isEmpty)
-                ? const Center(child: Text('暂无可统计数据'))
-                : ListView(
-                    children: [
-                      _buildTrendComparison(_metrics!.items),
-                      ..._metrics!.items.map(_buildProcessCard),
-                    ],
-                  ),
-          ),
-        ],
-      ),
+    return MesCrudPageScaffold(
+      header: _buildHeader(),
+      filters: _buildFilterBar(),
+      banner: _buildBanner(),
+      content: _buildContent(),
     );
   }
 }
