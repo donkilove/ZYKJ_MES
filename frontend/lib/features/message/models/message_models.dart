@@ -15,6 +15,7 @@ class MessageItem {
     required this.status,
     required this.inactiveReason,
     required this.publishedAt,
+    required this.expiresAt,
     required this.isRead,
     required this.readAt,
     required this.deliveredAt,
@@ -39,6 +40,7 @@ class MessageItem {
   final String status;
   final String? inactiveReason;
   final DateTime? publishedAt;
+  final DateTime? expiresAt;
   final bool isRead;
   final DateTime? readAt;
   final DateTime? deliveredAt;
@@ -65,6 +67,9 @@ class MessageItem {
       inactiveReason: json['inactive_reason'] as String?,
       publishedAt: json['published_at'] != null
           ? DateTime.tryParse(json['published_at'] as String)
+          : null,
+      expiresAt: json['expires_at'] != null
+          ? DateTime.tryParse(json['expires_at'] as String)
           : null,
       isRead: (json['is_read'] as bool?) ?? false,
       readAt: json['read_at'] != null
