@@ -15,6 +15,7 @@ import 'package:mes_client/core/widgets/crud_page_header.dart';
 import 'package:mes_client/core/widgets/locked_form_dialog.dart';
 import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_order_status_chip.dart';
 import 'package:mes_client/features/production/presentation/production_first_article_page.dart';
 import 'package:mes_client/features/production/presentation/production_order_query_detail_page.dart';
 
@@ -1469,7 +1470,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                       DataCell(Text(item.currentProcessName)),
                       DataCell(Text(_buildQuantitySummary(item))),
                       DataCell(
-                        Text(productionOrderStatusLabel(item.orderStatus)),
+                        ProductionOrderStatusChip(status: item.orderStatus),
                       ),
                       DataCell(Text(_formatDate(item.dueDate))),
                       DataCell(

@@ -12,6 +12,7 @@ import 'package:mes_client/core/widgets/crud_page_header.dart';
 import 'package:mes_client/core/widgets/locked_form_dialog.dart';
 import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_order_status_chip.dart';
 import 'package:mes_client/features/production/presentation/production_order_detail_page.dart';
 import 'package:mes_client/features/production/presentation/production_order_form_page.dart';
 import 'package:mes_client/features/production/presentation/production_pipeline_instances_page.dart';
@@ -747,7 +748,7 @@ class _ProductionOrderManagementPageState
                       ),
                       DataCell(Text('${item.quantity}')),
                       DataCell(Text(_formatDate(item.dueDate))),
-                      DataCell(Text(productionOrderStatusLabel(item.status))),
+                      DataCell(ProductionOrderStatusChip(status: item.status)),
                       DataCell(Text(item.currentProcessName ?? '-')),
                       DataCell(
                         Text(remark == null || remark.isEmpty ? '-' : remark),
