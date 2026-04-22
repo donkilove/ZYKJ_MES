@@ -7,10 +7,10 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/services/export_file_service.dart';
+import 'package:mes_client/features/quality/presentation/widgets/quality_defect_analysis_page_header.dart';
 import 'package:mes_client/features/quality/services/quality_service.dart';
 import 'package:mes_client/core/widgets/adaptive_table_container.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
-import 'package:mes_client/core/widgets/crud_page_header.dart';
 import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
 
 class QualityDefectAnalysisPage extends StatefulWidget {
@@ -239,20 +239,14 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
           Row(
             children: [
               Expanded(
-                child: CrudPageHeader(
-                  title: '质量缺陷分析',
-                  onRefresh: _loading ? null : _load,
+                child: QualityDefectAnalysisPageHeader(
+                  loading: _loading,
+                  canExport: widget.canExport,
+                  exporting: _exporting,
+                  onRefresh: _load,
+                  onExport: _export,
                 ),
               ),
-              if (widget.canExport)
-                Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: OutlinedButton.icon(
-                    onPressed: (_loading || _exporting) ? null : _export,
-                    icon: const Icon(Icons.download),
-                    label: const Text('导出'),
-                  ),
-                ),
             ],
           ),
           const SizedBox(height: 12),

@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/features/quality/presentation/widgets/quality_supplier_management_page_header.dart';
 import 'package:mes_client/features/quality/services/quality_supplier_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
-import 'package:mes_client/core/widgets/crud_page_header.dart';
 import 'package:mes_client/core/widgets/locked_form_dialog.dart';
 import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
 
@@ -284,16 +284,12 @@ class _QualitySupplierManagementPageState
     return Row(
       children: [
         Expanded(
-          child: CrudPageHeader(
-            title: '供应商管理（共 $_total 条）',
-            onRefresh: _loading ? null : _loadSuppliers,
+          child: QualitySupplierManagementPageHeader(
+            total: _total,
+            loading: _loading,
+            onRefresh: _loadSuppliers,
+            onCreate: () => _showEditDialog(),
           ),
-        ),
-        const SizedBox(width: 12),
-        FilledButton.icon(
-          onPressed: _loading ? null : () => _showEditDialog(),
-          icon: const Icon(Icons.add),
-          label: const Text('新增供应商'),
         ),
       ],
     );

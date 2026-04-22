@@ -11,6 +11,7 @@ import 'package:mes_client/features/production/presentation/quality_repair_order
 import 'package:mes_client/features/quality/presentation/quality_supplier_management_page.dart';
 import 'package:mes_client/features/quality/presentation/quality_scrap_statistics_page.dart';
 import 'package:mes_client/features/quality/presentation/quality_trend_page.dart';
+import 'package:mes_client/features/quality/presentation/widgets/quality_page_shell.dart';
 
 const String firstArticleManagementTabCode = 'first_article_management';
 const String qualityDataQueryTabCode = 'quality_data_query';
@@ -240,24 +241,20 @@ class _QualityPageState extends State<QualityPage>
       return const Center(child: Text('当前账号无可见质量页面。'));
     }
 
-    return Column(
-      children: [
-        Material(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          child: TabBar(
-            controller: _tabController,
-            tabs: _orderedVisibleTabCodes
-                .map((code) => Tab(text: _tabTitle(code)))
-                .toList(),
-          ),
+    return QualityPageShell(
+      tabBar: Material(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: TabBar(
+          controller: _tabController,
+          tabs: _orderedVisibleTabCodes
+              .map((code) => Tab(text: _tabTitle(code)))
+              .toList(),
         ),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: _orderedVisibleTabCodes.map(_buildTabContent).toList(),
-          ),
-        ),
-      ],
+      ),
+      tabBarView: TabBarView(
+        controller: _tabController,
+        children: _orderedVisibleTabCodes.map(_buildTabContent).toList(),
+      ),
     );
   }
 }

@@ -219,6 +219,10 @@ void main() {
     await tester.pump();
     await tester.pumpAndSettle();
 
+    expect(
+      find.byKey(const ValueKey('quality-page-shell'), skipOffstage: false),
+      findsOneWidget,
+    );
     expect(find.text('首件详情 #1'), findsOneWidget);
     expect(find.text('首件基础信息'), findsOneWidget);
     expect(find.text('默认首件模板'), findsOneWidget);

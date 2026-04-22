@@ -47,6 +47,33 @@ void main() {
     expect(find.text('初始供应商'), findsOneWidget);
   });
 
+  testWidgets('质量供应商管理页接入统一页头锚点', (tester) async {
+    setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = _FakeQualitySupplierService([
+      _buildSupplier(id: 1, name: '初始供应商', remark: '初始备注'),
+    ]);
+
+    await tester.pumpWidget(
+      wrapBody(
+        QualitySupplierManagementPage(
+          session: session,
+          onLogout: () {},
+          service: service,
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('quality-supplier-management-page-header')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('供应商管理页可完成新增编辑', (tester) async {
     setDesktopViewport(tester);
     addTearDown(tester.view.resetPhysicalSize);

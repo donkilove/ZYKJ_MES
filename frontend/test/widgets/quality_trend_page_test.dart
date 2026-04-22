@@ -190,6 +190,7 @@ void main() {
     expect(service.processCalls, 1);
     expect(service.operatorCalls, 1);
 
+    expect(find.byKey(const ValueKey('quality-trend-page-header')), findsOneWidget);
     expect(find.text('整体通过率'), findsOneWidget);
     expect(find.text('80.0%'), findsWidgets);
     expect(find.text('不良总数'), findsOneWidget);

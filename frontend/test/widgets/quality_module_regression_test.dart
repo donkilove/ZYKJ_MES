@@ -15,6 +15,7 @@ import 'package:mes_client/features/quality/presentation/quality_defect_analysis
 import 'package:mes_client/features/quality/presentation/quality_page.dart';
 import 'package:mes_client/features/production/presentation/quality_repair_orders_page.dart';
 import 'package:mes_client/features/quality/presentation/quality_scrap_statistics_page.dart';
+import 'package:mes_client/features/quality/presentation/quality_trend_page.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/quality/services/quality_service.dart';
 import 'package:mes_client/features/quality/services/quality_supplier_service.dart';
@@ -855,6 +856,83 @@ void main() {
     expect(find.text('供应商A'), findsNothing);
     expect(find.text('报废统计'), findsWidgets);
     expect(find.text('维修订单'), findsWidgets);
+  });
+
+  testWidgets('报废统计页接入统一页头锚点', (tester) async {
+    await tester.pumpWidget(
+      _wrapBody(
+        QualityScrapStatisticsPage(
+          session: session,
+          onLogout: () {},
+          canExport: true,
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('quality-scrap-statistics-page-header')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('不良分析页接入统一页头锚点', (tester) async {
+    await tester.pumpWidget(
+      _wrapBody(
+        QualityDefectAnalysisPage(
+          session: session,
+          onLogout: () {},
+          canExport: true,
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('quality-defect-analysis-page-header')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('质量趋势页接入统一页头锚点', (tester) async {
+    await tester.pumpWidget(
+      _wrapBody(
+        QualityTrendPage(
+          session: session,
+          onLogout: () {},
+          canExport: true,
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('quality-trend-page-header')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('质量维修订单页签接入统一页头锚点', (tester) async {
+    await tester.pumpWidget(
+      _wrapBody(
+        QualityRepairOrdersPage(
+          session: session,
+          onLogout: () {},
+          canComplete: true,
+          canExport: true,
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('quality-repair-orders-page-header')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('质量数据页支持 route payload 进入预警过滤态', (tester) async {
