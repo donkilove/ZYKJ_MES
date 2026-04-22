@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/models/authz_models.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_page_shell.dart';
 import 'package:mes_client/features/production/presentation/production_assist_records_page.dart';
 import 'package:mes_client/features/production/presentation/production_data_page.dart';
 import 'package:mes_client/features/production/presentation/production_order_management_page.dart';
@@ -279,24 +280,20 @@ class _ProductionPageState extends State<ProductionPage>
       return const Center(child: Text('当前账号无可见生产页面'));
     }
 
-    return Column(
-      children: [
-        Material(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          child: TabBar(
-            controller: _tabController,
-            tabs: _orderedVisibleTabCodes
-                .map((code) => Tab(text: _tabTitle(code)))
-                .toList(),
-          ),
+    return ProductionPageShell(
+      tabBar: Material(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: TabBar(
+          controller: _tabController,
+          tabs: _orderedVisibleTabCodes
+              .map((code) => Tab(text: _tabTitle(code)))
+              .toList(),
         ),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: _orderedVisibleTabCodes.map(_buildTabContent).toList(),
-          ),
-        ),
-      ],
+      ),
+      tabBarView: TabBarView(
+        controller: _tabController,
+        children: _orderedVisibleTabCodes.map(_buildTabContent).toList(),
+      ),
     );
   }
 }

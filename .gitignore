@@ -13,6 +13,7 @@ $RECYCLE.BIN/
 *.orig
 *.log
 .claude/
+.trae/
 
 # ===============================
 # Python / 后端产物与本地环境
