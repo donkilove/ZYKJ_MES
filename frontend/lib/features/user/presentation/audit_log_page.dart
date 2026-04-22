@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
-import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/features/user/models/user_models.dart';
+import 'package:mes_client/features/user/presentation/widgets/audit_log_page_header.dart';
+import 'package:mes_client/features/user/presentation/widgets/shared/user_module_filter_panel.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
-import 'package:mes_client/core/widgets/crud_page_header.dart';
 import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 
@@ -214,125 +216,118 @@ class _AuditLogPageState extends State<AuditLogPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CrudPageHeader(
-            title: '审计日志',
-            onRefresh: _loading ? null : () => _loadAuditLogs(page: _page),
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              SizedBox(
-                width: 160,
-                child: TextField(
-                  controller: _operatorController,
-                  decoration: const InputDecoration(
-                    labelText: '操作人账号',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadAuditLogs(page: 1),
+    return MesCrudPageScaffold(
+      header: AuditLogPageHeader(
+        loading: _loading,
+        onRefresh: () => _loadAuditLogs(page: _page),
+      ),
+      filters: UserModuleFilterPanel(
+        sectionKey: const ValueKey('audit-log-filter-section'),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SizedBox(
+              width: 160,
+              child: TextField(
+                controller: _operatorController,
+                decoration: const InputDecoration(
+                  labelText: '操作人账号',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onSubmitted: (_) => _loadAuditLogs(page: 1),
+              ),
+            ),
+            SizedBox(
+              width: 160,
+              child: TextField(
+                controller: _actionController,
+                decoration: const InputDecoration(
+                  labelText: '操作编码',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onSubmitted: (_) => _loadAuditLogs(page: 1),
+              ),
+            ),
+            SizedBox(
+              width: 160,
+              child: TextField(
+                controller: _targetController,
+                decoration: const InputDecoration(
+                  labelText: '目标类型',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onSubmitted: (_) => _loadAuditLogs(page: 1),
+              ),
+            ),
+            OutlinedButton.icon(
+              onPressed: _pickDateRange,
+              icon: const Icon(Icons.date_range, size: 16),
+              label: Text(
+                _startTime != null && _endTime != null
+                    ? '${_formatDate(_startTime)} ~ ${_formatDate(_endTime)}'
+                    : '选择时间范围',
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+            if (_startTime != null)
+              IconButton(
+                onPressed: _clearDateRange,
+                icon: const Icon(Icons.clear, size: 16),
+                tooltip: '清除时间范围',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(
+                  minWidth: 28,
+                  minHeight: 28,
                 ),
               ),
-              SizedBox(
-                width: 160,
-                child: TextField(
-                  controller: _actionController,
-                  decoration: const InputDecoration(
-                    labelText: '操作编码',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadAuditLogs(page: 1),
-                ),
+            FilledButton(
+              onPressed: () => _loadAuditLogs(page: 1),
+              child: const Text('查询'),
+            ),
+          ],
+        ),
+      ),
+      banner: _message.isEmpty
+          ? null
+          : Text(
+              _message,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.error,
               ),
-              SizedBox(
-                width: 160,
-                child: TextField(
-                  controller: _targetController,
-                  decoration: const InputDecoration(
-                    labelText: '目标类型',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadAuditLogs(page: 1),
-                ),
-              ),
-              OutlinedButton.icon(
-                onPressed: _pickDateRange,
-                icon: const Icon(Icons.date_range, size: 16),
-                label: Text(
-                  _startTime != null && _endTime != null
-                      ? '${_formatDate(_startTime)} ~ ${_formatDate(_endTime)}'
-                      : '选择时间范围',
-                  style: const TextStyle(fontSize: 13),
-                ),
-              ),
-              if (_startTime != null)
-                IconButton(
-                  onPressed: _clearDateRange,
-                  icon: const Icon(Icons.clear, size: 16),
-                  tooltip: '清除时间范围',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 28,
-                    minHeight: 28,
-                  ),
-                ),
-              FilledButton(
-                onPressed: () => _loadAuditLogs(page: 1),
-                child: const Text('查询'),
-              ),
+            ),
+      content: KeyedSubtree(
+        key: const ValueKey('audit-log-table-section'),
+        child: CrudListTableSection(
+          loading: _loading,
+          isEmpty: _items.isEmpty,
+          emptyText: '暂无数据',
+          enableUnifiedHeaderStyle: true,
+          child: DataTable(
+            columnSpacing: 16,
+            dataRowMinHeight: 56,
+            dataRowMaxHeight: 72,
+            columns: [
+              for (final column in _columns)
+                UnifiedListTableHeaderStyle.column(context, column.label),
             ],
+            rows: _items.map((item) {
+              return DataRow(cells: _buildCells(item));
+            }).toList(),
           ),
-          const SizedBox(height: 12),
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                _message,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            ),
-          Expanded(
-            child: CrudListTableSection(
-              loading: _loading,
-              isEmpty: _items.isEmpty,
-              emptyText: '暂无数据',
-              enableUnifiedHeaderStyle: true,
-              child: DataTable(
-                columnSpacing: 16,
-                dataRowMinHeight: 56,
-                dataRowMaxHeight: 72,
-                columns: [
-                  for (final column in _columns)
-                    UnifiedListTableHeaderStyle.column(context, column.label),
-                ],
-                rows: _items.map((item) {
-                  return DataRow(cells: _buildCells(item));
-                }).toList(),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          SimplePaginationBar(
-            page: _page,
-            totalPages: _totalPages,
-            total: _total,
-            loading: _loading,
-            onPrevious: () => _loadAuditLogs(page: _page - 1),
-            onNext: () => _loadAuditLogs(page: _page + 1),
-          ),
-        ],
+        ),
+      ),
+      pagination: SimplePaginationBar(
+        page: _page,
+        totalPages: _totalPages,
+        total: _total,
+        loading: _loading,
+        onPrevious: () => _loadAuditLogs(page: _page - 1),
+        onNext: () => _loadAuditLogs(page: _page + 1),
       ),
     );
   }

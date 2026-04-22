@@ -361,6 +361,54 @@ void main() {
   final userService = _FakeSupportUserService();
   final authzService = _FakeSupportAuthzService();
 
+  testWidgets('role management page 接入统一页头和列表区锚点', (tester) async {
+    await _pumpPage(
+      tester,
+      RoleManagementPage(
+        session: _session,
+        onLogout: () {},
+        canCreateRole: true,
+        canEditRole: true,
+        canToggleRole: true,
+        canDeleteRole: true,
+        userService: userService,
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('role-management-page-header')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('role-management-table-section')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('audit log page 接入统一页头和筛选区锚点', (tester) async {
+    await _pumpPage(
+      tester,
+      AuditLogPage(
+        session: _session,
+        onLogout: () {},
+        userService: userService,
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey('audit-log-page-header')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('audit-log-filter-section')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('audit-log-table-section')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('role management page renders role list', (tester) async {
     await _pumpPage(
       tester,
@@ -378,7 +426,10 @@ void main() {
     expect(find.text('维修员'), findsOneWidget);
     expect(find.text('maintenance_staff'), findsNothing);
     expect(find.text('系统内置'), findsWidgets);
-    expect(find.byType(CrudPageHeader), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('role-management-page-header')),
+      findsOneWidget,
+    );
     expect(find.byType(CrudListTableSection), findsOneWidget);
     expect(find.textContaining('总数'), findsNothing);
     expect(find.text('第 1 / 1 页'), findsOneWidget);
@@ -715,7 +766,7 @@ void main() {
     expect(find.text('终端信息'), findsNothing);
     expect(find.text('127.0.0.1'), findsNothing);
     expect(find.text('widget-test'), findsNothing);
-    expect(find.byType(CrudPageHeader), findsOneWidget);
+    expect(find.byKey(const ValueKey('audit-log-page-header')), findsOneWidget);
     expect(find.byType(CrudListTableSection), findsOneWidget);
     expect(find.text('第 1 / 1 页'), findsOneWidget);
     expect(userService.listAuditLogsCalls, 1);
