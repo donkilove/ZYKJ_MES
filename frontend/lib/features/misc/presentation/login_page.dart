@@ -432,65 +432,42 @@ class _LoginPageState extends State<LoginPage> {
         child: Padding(
           padding: const EdgeInsets.all(28),
           child: fillHeight
-              ? Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildAnnouncementHeader(theme),
-                      const SizedBox(height: 20),
-                      Text(
-                        '欢迎使用 ZYKJ MES 制造执行系统',
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          height: 1.2,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        '请先阅读当日运维通知与业务变更说明，确认账号状态正常后再进行登录。',
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                          height: 1.6,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      _buildAnnouncementTags(theme),
-                      const SizedBox(height: 24),
-                      Expanded(child: contentWidget),
-                    ],
-                  ),
-                )
+              ? Expanded(child: _buildAnnouncementContent(theme, contentWidget))
               : SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildAnnouncementHeader(theme),
-                      const SizedBox(height: 20),
-                      Text(
-                        '欢迎使用 ZYKJ MES 制造执行系统',
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          height: 1.2,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        '请先阅读当日运维通知与业务变更说明，确认账号状态正常后再进行登录。',
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                          height: 1.6,
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      _buildAnnouncementTags(theme),
-                      const SizedBox(height: 24),
-                      contentWidget,
-                    ],
-                  ),
+                  child: _buildAnnouncementContent(theme, contentWidget),
                 ),
         ),
       ),
+    );
+  }
+
+  Widget _buildAnnouncementContent(ThemeData theme, Widget contentWidget) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildAnnouncementHeader(theme),
+        const SizedBox(height: 20),
+        Text(
+          '欢迎使用 ZYKJ MES 制造执行系统',
+          style: theme.textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+            height: 1.2,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          '请先阅读当日运维通知与业务变更说明，确认账号状态正常后再进行登录。',
+          style: theme.textTheme.bodyLarge?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            height: 1.6,
+          ),
+        ),
+        const SizedBox(height: 24),
+        _buildAnnouncementTags(theme),
+        const SizedBox(height: 24),
+        contentWidget,
+      ],
     );
   }
 
