@@ -5,6 +5,9 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/config/runtime_endpoints.dart';
 import 'package:mes_client/features/auth/services/auth_service.dart';
+import 'package:mes_client/features/message/models/message_models.dart';
+import 'package:mes_client/features/message/presentation/widgets/announcement_card.dart';
+import 'package:mes_client/features/message/services/message_service.dart';
 import 'package:mes_client/features/misc/presentation/register_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -64,6 +67,11 @@ class _LoginPageState extends State<LoginPage> {
   String _message = '';
   List<String> _accounts = const [];
 
+  List<MessageItem> _announcements = [];
+  bool _loadingAnnouncements = false;
+  String? _announcementError;
+  AppSession? _session;
+
   @override
   void initState() {
     super.initState();
@@ -71,6 +79,33 @@ class _LoginPageState extends State<LoginPage> {
     _authService = widget.authService ?? AuthService();
     _message = widget.initialMessage ?? '';
     _loadAccounts();
+  }
+
+  Future<void> _refreshAnnouncements() async {
+    if (_session == null) return;
+
+    setState(() {
+      _loadingAnnouncements = true;
+      _announcementError = null;
+    });
+
+    try {
+      final service = MessageService(_session!);
+      final items = await service.getAnnouncements(pageSize: 10);
+      if (mounted) {
+        setState(() {
+          _announcements = items;
+          _loadingAnnouncements = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _announcementError = e.toString();
+          _loadingAnnouncements = false;
+        });
+      }
+    }
   }
 
   @override
@@ -208,13 +243,13 @@ class _LoginPageState extends State<LoginPage> {
         username: account,
         password: _passwordController.text,
       );
-      widget.onLoginSuccess(
-        AppSession(
-          baseUrl: baseUrl,
-          accessToken: result.token,
-          mustChangePassword: result.mustChangePassword,
-        ),
+      final session = AppSession(
+        baseUrl: baseUrl,
+        accessToken: result.token,
+        mustChangePassword: result.mustChangePassword,
       );
+      _session = session;
+      widget.onLoginSuccess(session);
     } catch (error) {
       if (!mounted) {
         return;
@@ -345,9 +380,136 @@ class _LoginPageState extends State<LoginPage> {
 
   Widget _buildAnnouncementCard(ThemeData theme, {required bool fillHeight}) {
     final colorScheme = theme.colorScheme;
-    final noticeList = ListView.separated(
+
+    if (_loadingAnnouncements) {
+      return Card(
+        elevation: 6,
+        clipBehavior: Clip.antiAlias,
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                colorScheme.primaryContainer.withValues(alpha: 0.92),
+                colorScheme.surfaceContainerHigh,
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: const Center(
+            child: Padding(
+              padding: EdgeInsets.all(48),
+              child: CircularProgressIndicator(),
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget contentWidget;
+    if (_announcements.isEmpty && _announcementError == null) {
+      contentWidget = _buildStaticAnnouncementCard(theme);
+    } else if (_announcements.isNotEmpty) {
+      contentWidget = _buildDynamicAnnouncementList(theme, fillHeight: fillHeight);
+    } else {
+      contentWidget = _buildStaticAnnouncementCard(theme);
+    }
+
+    return Card(
+      elevation: 6,
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              colorScheme.primaryContainer.withValues(alpha: 0.92),
+              colorScheme.surfaceContainerHigh,
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '系统公告',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: colorScheme.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (_session != null && _announcements.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.refresh, size: 16),
+                        onPressed: _refreshAnnouncements,
+                        tooltip: '刷新公告',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                '欢迎使用 ZYKJ MES 制造执行系统',
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  height: 1.2,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '请先阅读当日运维通知与业务变更说明，确认账号状态正常后再进行登录。',
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                  height: 1.6,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  if (_announcements.isNotEmpty)
+                    _NoticeTag(label: '共 ${_announcements.length} 条公告')
+                  else
+                    const _NoticeTag(label: '最后更新 2026-03-23 08:30'),
+                  const _NoticeTag(label: '发布部门 信息化推进组'),
+                  _NoticeTag(
+                    label: _announcementError != null ? '静态公告' : '状态 正常运行',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Expanded(child: contentWidget),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStaticAnnouncementCard(ThemeData theme) {
+    final colorScheme = theme.colorScheme;
+    return ListView.separated(
       physics: const BouncingScrollPhysics(),
-      shrinkWrap: !fillHeight,
       itemCount: _noticeSections.length,
       separatorBuilder: (_, index) => const SizedBox(height: 14),
       itemBuilder: (context, index) {
@@ -411,75 +573,26 @@ class _LoginPageState extends State<LoginPage> {
         );
       },
     );
+  }
 
-    return Card(
-      elevation: 6,
-      clipBehavior: Clip.antiAlias,
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              colorScheme.primaryContainer.withValues(alpha: 0.92),
-              colorScheme.surfaceContainerHigh,
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: colorScheme.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  '系统公告',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    color: colorScheme.primary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                '欢迎使用 ZYKJ MES 制造执行系统',
-                style: theme.textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  height: 1.2,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '请先阅读当日运维通知与业务变更说明，确认账号状态正常后再进行登录。',
-                style: theme.textTheme.bodyLarge?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                  height: 1.6,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: const [
-                  _NoticeTag(label: '最后更新 2026-03-23 08:30'),
-                  _NoticeTag(label: '发布部门 信息化推进组'),
-                  _NoticeTag(label: '状态 正常运行'),
-                ],
-              ),
-              const SizedBox(height: 24),
-              if (fillHeight) Expanded(child: noticeList) else noticeList,
-            ],
-          ),
-        ),
-      ),
+  Widget _buildDynamicAnnouncementList(ThemeData theme, {required bool fillHeight}) {
+    final cards = _announcements.map((item) => Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: AnnouncementCard(item: item),
+    )).toList();
+
+    if (fillHeight) {
+      return ListView(
+        physics: const BouncingScrollPhysics(),
+        shrinkWrap: true,
+        children: cards,
+      );
+    }
+
+    return ListView(
+      physics: const BouncingScrollPhysics(),
+      shrinkWrap: true,
+      children: cards,
     );
   }
 
