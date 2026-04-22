@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/quality/presentation/widgets/quality_scrap_statistics_page_header.dart';
@@ -23,23 +24,15 @@ class QualityScrapStatisticsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
-          child: QualityScrapStatisticsPageHeader(),
-        ),
-        Expanded(
-          child: ProductionScrapStatisticsPage(
-            session: session,
-            onLogout: onLogout,
-            canExport: canExport,
-            jumpPayloadJson: jumpPayloadJson,
-            service: service ?? QualityService(session),
-          ),
-        ),
-      ],
+    return MesCrudPageScaffold(
+      header: const QualityScrapStatisticsPageHeader(),
+      content: ProductionScrapStatisticsPage(
+        session: session,
+        onLogout: onLogout,
+        canExport: canExport,
+        jumpPayloadJson: jumpPayloadJson,
+        service: service ?? QualityService(session),
+      ),
     );
   }
 }

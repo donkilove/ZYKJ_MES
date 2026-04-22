@@ -4,14 +4,15 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
-import 'package:mes_client/features/quality/models/quality_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/services/export_file_service.dart';
-import 'package:mes_client/features/quality/presentation/widgets/quality_trend_page_header.dart';
-import 'package:mes_client/features/quality/services/quality_service.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/widgets/adaptive_table_container.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
+import 'package:mes_client/features/quality/models/quality_models.dart';
+import 'package:mes_client/features/quality/presentation/widgets/quality_trend_page_header.dart';
+import 'package:mes_client/features/quality/services/quality_service.dart';
 
 class QualityTrendPage extends StatefulWidget {
   const QualityTrendPage({
@@ -42,7 +43,6 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
 
   bool _loading = false;
   bool _exporting = false;
-  String _message = '';
   DateTime _startDate = DateTime.now().subtract(const Duration(days: 29));
   DateTime _endDate = DateTime.now();
   String? _resultFilter;
@@ -104,12 +104,13 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
 
   Future<void> _loadTrend() async {
     if (_startDate.isAfter(_endDate)) {
-      setState(() => _message = '开始日期不能晚于结束日期');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('开始日期不能晚于结束日期')),
+      );
       return;
     }
     setState(() {
       _loading = true;
-      _message = '';
     });
     try {
       final productName = _productController.text.trim();
@@ -175,7 +176,11 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
         widget.onLogout();
         return;
       }
-      setState(() => _message = '加载质量趋势失败：${_errorMessage(error)}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('加载质量趋势失败：${_errorMessage(error)}')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -184,7 +189,6 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
   Future<void> _exportTrend() async {
     setState(() {
       _exporting = true;
-      _message = '';
     });
     try {
       final exportFile = await _service.exportQualityTrend(
@@ -197,7 +201,9 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
       );
       if (!mounted) return;
       if (exportFile.contentBase64.isEmpty) {
-        setState(() => _message = '导出质量趋势失败：服务端返回空数据');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('导出质量趋势失败：服务端返回空数据')),
+        );
         return;
       }
       final savedPath = await _exportFileService.saveCsvBase64(
@@ -216,10 +222,148 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
         widget.onLogout();
         return;
       }
-      setState(() => _message = '导出质量趋势失败：${_errorMessage(error)}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导出质量趋势失败：${_errorMessage(error)}')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _exporting = false);
     }
+  }
+
+  Widget _buildFilterBar() {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        OutlinedButton.icon(
+          onPressed: _loading
+              ? null
+              : () => _pickDate(
+                    current: _startDate,
+                    helpText: '选择开始日期',
+                    onChanged: (v) => setState(() => _startDate = v),
+                  ),
+          icon: const Icon(Icons.event),
+          label: Text('开始：${_formatDate(_startDate)}'),
+        ),
+        OutlinedButton.icon(
+          onPressed: _loading
+              ? null
+              : () => _pickDate(
+                    current: _endDate,
+                    helpText: '选择结束日期',
+                    onChanged: (v) => setState(() => _endDate = v),
+                  ),
+          icon: const Icon(Icons.event_available),
+          label: Text('结束：${_formatDate(_endDate)}'),
+        ),
+        SizedBox(
+          width: 130,
+          child: TextField(
+            controller: _productController,
+            decoration: const InputDecoration(
+              labelText: '产品名称',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            onSubmitted: (_) => _loadTrend(),
+          ),
+        ),
+        SizedBox(
+          width: 120,
+          child: TextField(
+            controller: _processController,
+            decoration: const InputDecoration(
+              labelText: '工序编码',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            onSubmitted: (_) => _loadTrend(),
+          ),
+        ),
+        SizedBox(
+          width: 120,
+          child: TextField(
+            controller: _operatorController,
+            decoration: const InputDecoration(
+              labelText: '操作员',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            onSubmitted: (_) => _loadTrend(),
+          ),
+        ),
+        DropdownButton<String?>(
+          value: _resultFilter,
+          hint: const Text('全部结果'),
+          items: const [
+            DropdownMenuItem(value: null, child: Text('全部结果')),
+            DropdownMenuItem(value: 'passed', child: Text('合格')),
+            DropdownMenuItem(value: 'failed', child: Text('不合格')),
+          ],
+          onChanged: _loading ? null : (v) => setState(() => _resultFilter = v),
+        ),
+        FilledButton.icon(
+          onPressed: _loading ? null : _loadTrend,
+          icon: const Icon(Icons.search),
+          label: const Text('查询'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSummaryCards(BuildContext context) {
+    final theme = Theme.of(context);
+    final overallPassRate =
+        _overview?.passRatePercent ??
+        _ratioPercent(_totalPassedCount, _totalFirstArticleCount);
+    final scrapRate = _ratioPercent(_totalScrapCount, _totalFirstArticleCount);
+    final repairShare = _ratioPercent(_totalRepairCount, _totalFirstArticleCount);
+    final cards = [
+      ('整体通过率', _formatMetricPercent(overallPassRate), '首件通过表现'),
+      ('不良总数', '$_totalDefectCount', '趋势期累计不良'),
+      ('报废率', _formatMetricPercent(scrapRate), '报废占首件总数'),
+      ('维修占比', _formatMetricPercent(repairShare), '维修占首件总数'),
+    ];
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: cards
+          .map(
+            (card) => SizedBox(
+              width: 220,
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        card.$1,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        card.$2,
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(card.$3, style: theme.textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          )
+          .toList(),
+    );
   }
 
   Widget _buildChart() {
@@ -497,69 +641,16 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
     return items;
   }
 
-  Widget _buildSummaryCards(BuildContext context) {
-    final theme = Theme.of(context);
-    final overallPassRate =
-        _overview?.passRatePercent ??
-        _ratioPercent(_totalPassedCount, _totalFirstArticleCount);
-    final scrapRate = _ratioPercent(_totalScrapCount, _totalFirstArticleCount);
-    final repairShare = _ratioPercent(
-      _totalRepairCount,
-      _totalFirstArticleCount,
-    );
-    final cards = [
-      ('整体通过率', _formatMetricPercent(overallPassRate), '首件通过表现'),
-      ('不良总数', '$_totalDefectCount', '趋势期累计不良'),
-      ('报废率', _formatMetricPercent(scrapRate), '报废占首件总数'),
-      ('维修占比', _formatMetricPercent(repairShare), '维修占首件总数'),
-    ];
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      children: cards
-          .map(
-            (card) => SizedBox(
-              width: 220,
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        card.$1,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        card.$2,
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(card.$3, style: theme.textTheme.bodySmall),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          )
-          .toList(),
-    );
-  }
-
   Widget _buildDimensionSection() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           '维度观察',
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 12),
         _buildProductStatsCard(),
@@ -588,9 +679,10 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
         children: [
           Text(
             title,
-            style: Theme.of(
-              context,
-            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+            style: Theme.of(context)
+                .textTheme
+                .titleSmall
+                ?.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           Expanded(
@@ -797,159 +889,36 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: QualityTrendPageHeader(
-                  loading: _loading,
-                  canExport: widget.canExport,
-                  exporting: _exporting,
-                  onRefresh: _loadTrend,
-                  onExport: _exportTrend,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
+  Widget _buildMainContent() {
+    return ListView(
+      children: [
+        if (_items.length >= 2) ...[
+          _buildChart(),
+          const SizedBox(height: 8),
           Wrap(
-            spacing: 12,
+            spacing: 16,
             runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              OutlinedButton.icon(
-                onPressed: _loading
-                    ? null
-                    : () => _pickDate(
-                        current: _startDate,
-                        helpText: '选择开始日期',
-                        onChanged: (v) => setState(() => _startDate = v),
-                      ),
-                icon: const Icon(Icons.event),
-                label: Text('开始：${_formatDate(_startDate)}'),
-              ),
-              OutlinedButton.icon(
-                onPressed: _loading
-                    ? null
-                    : () => _pickDate(
-                        current: _endDate,
-                        helpText: '选择结束日期',
-                        onChanged: (v) => setState(() => _endDate = v),
-                      ),
-                icon: const Icon(Icons.event_available),
-                label: Text('结束：${_formatDate(_endDate)}'),
-              ),
-              SizedBox(
-                width: 130,
-                child: TextField(
-                  controller: _productController,
-                  decoration: const InputDecoration(
-                    labelText: '产品名称',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadTrend(),
-                ),
-              ),
-              SizedBox(
-                width: 120,
-                child: TextField(
-                  controller: _processController,
-                  decoration: const InputDecoration(
-                    labelText: '工序编码',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadTrend(),
-                ),
-              ),
-              SizedBox(
-                width: 120,
-                child: TextField(
-                  controller: _operatorController,
-                  decoration: const InputDecoration(
-                    labelText: '操作员',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadTrend(),
-                ),
-              ),
-              DropdownButton<String?>(
-                value: _resultFilter,
-                hint: const Text('全部结果'),
-                items: const [
-                  DropdownMenuItem(value: null, child: Text('全部结果')),
-                  DropdownMenuItem(value: 'passed', child: Text('合格')),
-                  DropdownMenuItem(value: 'failed', child: Text('不合格')),
-                ],
-                onChanged: _loading
-                    ? null
-                    : (v) => setState(() => _resultFilter = v),
-              ),
-              FilledButton.icon(
-                onPressed: _loading ? null : _loadTrend,
-                icon: const Icon(Icons.search),
-                label: const Text('查询'),
-              ),
+              _legendDot(Colors.green, '通过'),
+              _legendDot(Colors.red, '不通过'),
+              _legendDot(Colors.deepOrange, '不良'),
+              _legendDot(Colors.orange, '报废'),
+              _legendDot(Colors.purple, '维修'),
             ],
           ),
           const SizedBox(height: 12),
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                _message,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            ),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : ListView(
-                    children: [
-                      _buildSummaryCards(context),
-                      const SizedBox(height: 12),
-                      if (_items.length >= 2) ...[
-                        _buildChart(),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 16,
-                          runSpacing: 8,
-                          children: [
-                            _legendDot(Colors.green, '通过'),
-                            _legendDot(Colors.red, '不通过'),
-                            _legendDot(Colors.deepOrange, '不良'),
-                            _legendDot(Colors.orange, '报废'),
-                            _legendDot(Colors.purple, '维修'),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        _buildPassRateChart(),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 16,
-                          children: [_legendDot(Colors.blue, '通过率趋势')],
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      _buildDimensionSection(),
-                      const SizedBox(height: 12),
-                      _buildTrendTable(),
-                    ],
-                  ),
+          _buildPassRateChart(),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 16,
+            children: [_legendDot(Colors.blue, '通过率趋势')],
           ),
+          const SizedBox(height: 12),
         ],
-      ),
+        _buildDimensionSection(),
+        const SizedBox(height: 12),
+        _buildTrendTable(),
+      ],
     );
   }
 
@@ -965,6 +934,24 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
         const SizedBox(width: 4),
         Text(label, style: const TextStyle(fontSize: 12)),
       ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MesCrudPageScaffold(
+      header: QualityTrendPageHeader(
+        loading: _loading,
+        canExport: widget.canExport,
+        exporting: _exporting,
+        onRefresh: _loadTrend,
+        onExport: _exportTrend,
+      ),
+      filters: _buildFilterBar(),
+      banner: _buildSummaryCards(context),
+      content: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _buildMainContent(),
     );
   }
 }
