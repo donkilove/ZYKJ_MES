@@ -73,6 +73,46 @@ void main() {
     expect(authService.lastPassword, 'Pass123');
   });
 
+  testWidgets('登录页未登录时可展示全员公告', (tester) async {
+    final authService = _FakeAuthService();
+
+    await _pumpTestApp(
+      tester,
+      authService: authService,
+      userService: _FakeUserService(),
+      publicAnnouncementLoader: (_) async => [
+        MessageItem.fromJson({
+          'id': 901,
+          'message_type': 'announcement',
+          'priority': 'important',
+          'title': '集成测试全员公告',
+          'summary': '公告摘要',
+          'content': '登录前即可看到的全员公告内容。',
+          'source_module': 'message',
+          'source_type': 'announcement',
+          'source_code': 'all',
+          'target_page_code': null,
+          'target_tab_code': null,
+          'target_route_payload_json': null,
+          'status': 'active',
+          'inactive_reason': null,
+          'published_at': '2026-04-22T12:00:00Z',
+          'expires_at': '2026-04-23T12:00:00Z',
+          'is_read': false,
+          'read_at': null,
+          'delivered_at': null,
+          'delivery_status': 'pending',
+          'delivery_attempt_count': 0,
+          'last_push_at': null,
+          'next_retry_at': null,
+        }),
+      ],
+    );
+
+    expect(find.text('集成测试全员公告'), findsOneWidget);
+    expect(find.textContaining('共 1 条公告'), findsOneWidget);
+  });
+
   testWidgets('登录后进入用户管理并通过启停弹窗停用在线用户', (tester) async {
     final authService = _FakeAuthService();
     final userService = _FakeUserService()
@@ -1026,6 +1066,7 @@ Future<void> _pumpTestApp(
   required _FakeAuthService authService,
   required _FakeUserService userService,
   Widget Function(AppSession session)? homeBuilder,
+  Future<List<MessageItem>> Function(String baseUrl)? publicAnnouncementLoader,
 }) async {
   tester.view.physicalSize = const Size(1440, 1200);
   tester.view.devicePixelRatio = 1.0;
@@ -1044,6 +1085,7 @@ Future<void> _pumpTestApp(
         authService: authService,
         userService: userService,
         homeBuilder: homeBuilder,
+        publicAnnouncementLoader: publicAnnouncementLoader,
       ),
     ),
   );
@@ -1062,11 +1104,14 @@ class _IntegrationTestApp extends StatefulWidget {
     required this.authService,
     required this.userService,
     this.homeBuilder,
+    this.publicAnnouncementLoader,
   });
 
   final _FakeAuthService authService;
   final _FakeUserService userService;
   final Widget Function(AppSession session)? homeBuilder;
+  final Future<List<MessageItem>> Function(String baseUrl)?
+  publicAnnouncementLoader;
 
   @override
   State<_IntegrationTestApp> createState() => _IntegrationTestAppState();
@@ -1097,6 +1142,7 @@ class _IntegrationTestAppState extends State<_IntegrationTestApp> {
         defaultBaseUrl: 'http://example.test/api/v1',
         authService: widget.authService,
         initialMessage: _loginNotice,
+        publicAnnouncementLoader: widget.publicAnnouncementLoader,
         onLoginSuccess: _handleLoginSuccess,
       );
     }

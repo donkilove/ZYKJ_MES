@@ -150,7 +150,11 @@ void main() {
       );
 
       final summary = await service.getSummary();
-      final list = await service.listMessages(page: 2, pageSize: 10, todoOnly: true);
+      final list = await service.listMessages(
+        page: 2,
+        pageSize: 10,
+        todoOnly: true,
+      );
       final updated = await service.markBatchRead([1, 2]);
       final publishResult = await service.publishAnnouncement(
         const AnnouncementPublishRequest(
@@ -186,6 +190,65 @@ void main() {
       expect(jumpTarget.canJump, isTrue);
       expect(jumpTarget.targetPageCode, 'production');
     });
+
+    test(
+      'supports public announcements without authorization header',
+      () async {
+        final server = await TestHttpServer.start({
+          'GET /messages/public-announcements': (request) {
+            expect(request.uri.queryParameters['page'], '1');
+            expect(request.uri.queryParameters['page_size'], '10');
+            expect(request.headers.containsKey('authorization'), isFalse);
+            return TestResponse.json(
+              200,
+              body: {
+                'data': {
+                  'items': [
+                    {
+                      'id': 11,
+                      'message_type': 'announcement',
+                      'priority': 'important',
+                      'title': '全员停机公告',
+                      'summary': '今晚停机维护',
+                      'content': '今晚 20:00 至 21:00 执行维护。',
+                      'source_module': 'message',
+                      'source_type': 'announcement',
+                      'source_code': 'all',
+                      'target_page_code': null,
+                      'target_tab_code': null,
+                      'target_route_payload_json': null,
+                      'status': 'active',
+                      'inactive_reason': null,
+                      'published_at': '2026-04-22T12:00:00Z',
+                      'expires_at': '2026-04-23T12:00:00Z',
+                      'is_read': false,
+                      'read_at': null,
+                      'delivered_at': null,
+                      'delivery_status': 'pending',
+                      'delivery_attempt_count': 0,
+                      'last_push_at': null,
+                      'next_retry_at': null,
+                    },
+                  ],
+                  'total': 1,
+                  'page': 1,
+                  'page_size': 10,
+                },
+              },
+            );
+          },
+        });
+        addTearDown(server.close);
+
+        final service = MessageService.public(server.baseUrl);
+        final items = await service.getPublicAnnouncements(pageSize: 10);
+
+        expect(items, hasLength(1));
+        expect(items.single.title, '全员停机公告');
+        expect(items.single.sourceCode, 'all');
+        expect(items.single.expiresAt, DateTime.parse('2026-04-23T12:00:00Z'));
+      },
+    );
   });
 
   group('MessageWsService', () {

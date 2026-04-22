@@ -510,6 +510,7 @@ def _to_item(
         status=effective_status,
         inactive_reason=inactive_reason,
         published_at=msg.published_at,
+        expires_at=msg.expires_at,
         is_read=recipient.is_read,
         read_at=recipient.read_at,
         delivered_at=recipient.delivered_at,
@@ -517,6 +518,34 @@ def _to_item(
         delivery_attempt_count=recipient.delivery_attempt_count,
         last_push_at=recipient.last_push_at,
         next_retry_at=recipient.next_retry_at,
+    )
+
+
+def _to_public_announcement_item(msg: Message) -> MessageItem:
+    return MessageItem(
+        id=msg.id,
+        message_type=msg.message_type,
+        priority=msg.priority,
+        title=msg.title,
+        summary=msg.summary,
+        content=msg.content,
+        source_module=msg.source_module,
+        source_type=msg.source_type,
+        source_code=msg.source_code,
+        target_page_code=msg.target_page_code,
+        target_tab_code=msg.target_tab_code,
+        target_route_payload_json=msg.target_route_payload_json,
+        status="active",
+        inactive_reason=None,
+        published_at=msg.published_at,
+        expires_at=msg.expires_at,
+        is_read=False,
+        read_at=None,
+        delivered_at=None,
+        delivery_status="pending",
+        delivery_attempt_count=0,
+        last_push_at=None,
+        next_retry_at=None,
     )
 
 
@@ -704,6 +733,42 @@ def list_messages(
                 inactive_reason=inactive_reason,
             )
         )
+    return items, total
+
+
+def list_public_announcements(
+    db: Session,
+    *,
+    page: int = 1,
+    page_size: int = 10,
+    priority: str | None = None,
+) -> tuple[list[MessageItem], int]:
+    now = datetime.now(UTC)
+    base_stmt = select(Message).where(
+        Message.message_type == "announcement",
+        Message.source_type == "announcement",
+        Message.source_code == "all",
+        Message.status == "active",
+        or_(Message.expires_at.is_(None), Message.expires_at > now),
+    )
+    if priority:
+        base_stmt = base_stmt.where(Message.priority == priority)
+
+    count_stmt = select(func.count()).select_from(base_stmt.subquery())
+    total: int = db.execute(count_stmt).scalar_one()
+
+    priority_order = case(
+        (Message.priority == "urgent", 0),
+        (Message.priority == "important", 1),
+        else_=2,
+    )
+    data_stmt = (
+        base_stmt.order_by(priority_order, Message.published_at.desc(), Message.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    rows = db.execute(data_stmt).scalars().all()
+    items = [_to_public_announcement_item(row) for row in rows]
     return items, total
 
 

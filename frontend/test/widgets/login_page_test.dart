@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/features/message/models/message_models.dart';
 import 'package:mes_client/features/misc/presentation/login_page.dart';
 import 'package:mes_client/features/misc/presentation/register_page.dart';
 import 'package:mes_client/core/network/api_exception.dart';
@@ -63,6 +64,7 @@ Future<void> _pumpLoginPage(
   String defaultBaseUrl = 'http://example.test/api/v1',
   String? initialMessage,
   ValueChanged<AppSession>? onLoginSuccess,
+  Future<List<MessageItem>> Function(String baseUrl)? publicAnnouncementLoader,
 }) async {
   _setDesktopViewport(tester);
   addTearDown(() {
@@ -76,6 +78,7 @@ Future<void> _pumpLoginPage(
         defaultBaseUrl: defaultBaseUrl,
         initialMessage: initialMessage,
         authService: authService,
+        publicAnnouncementLoader: publicAnnouncementLoader,
         onLoginSuccess: onLoginSuccess ?? (_) {},
       ),
     ),
@@ -260,6 +263,43 @@ void main() {
     expect(find.text('生产运行提醒'), findsOneWidget);
     expect(find.text('质量与追溯要求'), findsOneWidget);
     expect(find.text('账号使用规范'), findsOneWidget);
+  });
+
+  testWidgets('登录页未登录时会加载后端全员公告', (tester) async {
+    await _pumpLoginPage(
+      tester,
+      authService: _FakeAuthService(),
+      publicAnnouncementLoader: (_) async => [
+        MessageItem(
+          id: 101,
+          messageType: 'announcement',
+          priority: 'important',
+          title: '停机维护公告',
+          summary: '今晚 20:00 维护',
+          content: '今晚 20:00 至 21:00 执行停机维护，请提前保存数据。',
+          sourceModule: 'message',
+          sourceType: 'announcement',
+          sourceCode: 'all',
+          targetPageCode: null,
+          targetTabCode: null,
+          targetRoutePayloadJson: null,
+          status: 'active',
+          inactiveReason: null,
+          publishedAt: DateTime.parse('2026-04-22T12:00:00Z'),
+          expiresAt: DateTime.parse('2026-04-23T12:00:00Z'),
+          isRead: false,
+          readAt: null,
+          deliveredAt: null,
+          deliveryStatus: 'pending',
+          deliveryAttemptCount: 0,
+          lastPushAt: null,
+          nextRetryAt: null,
+        ),
+      ],
+    );
+
+    expect(find.text('停机维护公告'), findsOneWidget);
+    expect(find.textContaining('共 1 条公告'), findsOneWidget);
   });
 
   testWidgets('登录失败时会展示服务端错误消息', (tester) async {

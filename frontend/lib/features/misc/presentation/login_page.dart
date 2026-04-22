@@ -17,12 +17,15 @@ class LoginPage extends StatefulWidget {
     this.defaultBaseUrl = defaultApiBaseUrl,
     this.initialMessage,
     this.authService,
+    this.publicAnnouncementLoader,
   });
 
   final ValueChanged<AppSession> onLoginSuccess;
   final String defaultBaseUrl;
   final String? initialMessage;
   final AuthService? authService;
+  final Future<List<MessageItem>> Function(String baseUrl)?
+  publicAnnouncementLoader;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -70,7 +73,6 @@ class _LoginPageState extends State<LoginPage> {
   List<MessageItem> _announcements = [];
   bool _loadingAnnouncements = false;
   String? _announcementError;
-  AppSession? _session;
 
   @override
   void initState() {
@@ -79,10 +81,14 @@ class _LoginPageState extends State<LoginPage> {
     _authService = widget.authService ?? AuthService();
     _message = widget.initialMessage ?? '';
     _loadAccounts();
+    _refreshAnnouncements();
   }
 
   Future<void> _refreshAnnouncements() async {
-    if (_session == null) return;
+    final baseUrl = _normalizeBaseUrl(_baseUrlController.text);
+    if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+      return;
+    }
 
     setState(() {
       _loadingAnnouncements = true;
@@ -90,8 +96,12 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      final service = MessageService(_session!);
-      final items = await service.getAnnouncements(pageSize: 10);
+      final loader = widget.publicAnnouncementLoader;
+      final items = loader != null
+          ? await loader(baseUrl)
+          : await MessageService.public(
+              baseUrl,
+            ).getPublicAnnouncements(pageSize: 10);
       if (mounted) {
         setState(() {
           _announcements = items;
@@ -198,6 +208,7 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
+      await _refreshAnnouncements();
       final accounts = await _authService.listAccounts(baseUrl: baseUrl);
       if (!mounted) {
         return;
@@ -248,7 +259,6 @@ class _LoginPageState extends State<LoginPage> {
         accessToken: result.token,
         mustChangePassword: result.mustChangePassword,
       );
-      _session = session;
       widget.onLoginSuccess(session);
     } catch (error) {
       if (!mounted) {
@@ -408,11 +418,20 @@ class _LoginPageState extends State<LoginPage> {
 
     Widget contentWidget;
     if (_announcements.isEmpty && _announcementError == null) {
-      contentWidget = _buildStaticAnnouncementCard(theme);
+      contentWidget = _buildStaticAnnouncementCard(
+        theme,
+        fillHeight: fillHeight,
+      );
     } else if (_announcements.isNotEmpty) {
-      contentWidget = _buildDynamicAnnouncementList(theme, fillHeight: fillHeight);
+      contentWidget = _buildDynamicAnnouncementList(
+        theme,
+        fillHeight: fillHeight,
+      );
     } else {
-      contentWidget = _buildStaticAnnouncementCard(theme);
+      contentWidget = _buildStaticAnnouncementCard(
+        theme,
+        fillHeight: fillHeight,
+      );
     }
 
     return Card(
@@ -431,20 +450,24 @@ class _LoginPageState extends State<LoginPage> {
         ),
         child: Padding(
           padding: const EdgeInsets.all(28),
-          child: fillHeight
-              ? Expanded(child: _buildAnnouncementContent(theme, contentWidget))
-              : SingleChildScrollView(
-                  child: _buildAnnouncementContent(theme, contentWidget),
-                ),
+          child: _buildAnnouncementContent(
+            theme,
+            contentWidget,
+            fillHeight: fillHeight,
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildAnnouncementContent(ThemeData theme, Widget contentWidget) {
+  Widget _buildAnnouncementContent(
+    ThemeData theme,
+    Widget contentWidget, {
+    required bool fillHeight,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
+      mainAxisSize: fillHeight ? MainAxisSize.max : MainAxisSize.min,
       children: [
         _buildAnnouncementHeader(theme),
         const SizedBox(height: 20),
@@ -466,7 +489,7 @@ class _LoginPageState extends State<LoginPage> {
         const SizedBox(height: 24),
         _buildAnnouncementTags(theme),
         const SizedBox(height: 24),
-        contentWidget,
+        if (fillHeight) Expanded(child: contentWidget) else contentWidget,
       ],
     );
   }
@@ -489,7 +512,7 @@ class _LoginPageState extends State<LoginPage> {
               fontWeight: FontWeight.w700,
             ),
           ),
-          if (_session != null && _announcements.isNotEmpty) ...[
+          ...[
             const SizedBox(width: 8),
             IconButton(
               icon: const Icon(Icons.refresh, size: 16),
@@ -514,17 +537,19 @@ class _LoginPageState extends State<LoginPage> {
         else
           const _NoticeTag(label: '最后更新 2026-03-23 08:30'),
         const _NoticeTag(label: '发布部门 信息化推进组'),
-        _NoticeTag(
-          label: _announcementError != null ? '静态公告' : '状态 正常运行',
-        ),
+        _NoticeTag(label: _announcementError != null ? '静态公告' : '状态 正常运行'),
       ],
     );
   }
 
-  Widget _buildStaticAnnouncementCard(ThemeData theme) {
+  Widget _buildStaticAnnouncementCard(
+    ThemeData theme, {
+    required bool fillHeight,
+  }) {
     final colorScheme = theme.colorScheme;
     return ListView.separated(
       physics: const BouncingScrollPhysics(),
+      shrinkWrap: !fillHeight,
       itemCount: _noticeSections.length,
       separatorBuilder: (_, index) => const SizedBox(height: 14),
       itemBuilder: (context, index) {
@@ -590,23 +615,25 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Widget _buildDynamicAnnouncementList(ThemeData theme, {required bool fillHeight}) {
-    final cards = _announcements.map((item) => Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: AnnouncementCard(item: item),
-    )).toList();
+  Widget _buildDynamicAnnouncementList(
+    ThemeData theme, {
+    required bool fillHeight,
+  }) {
+    final cards = _announcements
+        .map(
+          (item) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: AnnouncementCard(item: item),
+          ),
+        )
+        .toList();
 
     if (fillHeight) {
-      return ListView(
-        physics: const BouncingScrollPhysics(),
-        shrinkWrap: true,
-        children: cards,
-      );
+      return ListView(physics: const BouncingScrollPhysics(), children: cards);
     }
 
-    return ListView(
-      physics: const BouncingScrollPhysics(),
-      shrinkWrap: true,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: cards,
     );
   }

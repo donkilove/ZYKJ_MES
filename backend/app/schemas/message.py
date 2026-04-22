@@ -23,6 +23,7 @@ class MessageItem(BaseModel):
     status: str
     inactive_reason: str | None = None
     published_at: datetime | None
+    expires_at: datetime | None = None
     # 收件记录字段
     is_read: bool
     read_at: datetime | None

@@ -733,6 +733,76 @@ class MessageModuleIntegrationTest(unittest.TestCase):
         titles = [item["title"] for item in list_resp.json()["data"]["items"]]
         self.assertIn("全员公告", titles)
 
+    def test_public_announcements_endpoint_only_returns_active_all_announcements(self) -> None:
+        suffix = time.time_ns()
+        role = self._create_role(f"public_announcement_role_{suffix}", "公开公告角色")
+        role_user = self._create_user(
+            username=f"public_announcement_role_user_{suffix}",
+            role=role,
+        )
+        direct_user = self._create_user(
+            username=f"public_announcement_direct_user_{suffix}",
+            role=role,
+        )
+
+        all_response = self.client.post(
+            "/api/v1/messages/announcements",
+            headers=self._headers(),
+            json={
+                "title": "登录页全员公告",
+                "content": f"{self.case_token} 登录前可见",
+                "priority": "important",
+                "range_type": "all",
+                "role_codes": [],
+                "user_ids": [],
+                "expires_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+            },
+        )
+        self.assertEqual(all_response.status_code, 200, all_response.text)
+        all_payload = all_response.json()["data"]
+        self.message_ids.append(all_payload["message_id"])
+
+        roles_response = self.client.post(
+            "/api/v1/messages/announcements",
+            headers=self._headers(),
+            json={
+                "title": "角色公告不应公开",
+                "content": f"{self.case_token} 仅角色可见",
+                "priority": "normal",
+                "range_type": "roles",
+                "role_codes": [role.code],
+                "user_ids": [],
+                "expires_at": None,
+            },
+        )
+        self.assertEqual(roles_response.status_code, 200, roles_response.text)
+        self.message_ids.append(roles_response.json()["data"]["message_id"])
+
+        users_response = self.client.post(
+            "/api/v1/messages/announcements",
+            headers=self._headers(),
+            json={
+                "title": "定向公告不应公开",
+                "content": f"{self.case_token} 仅用户可见",
+                "priority": "urgent",
+                "range_type": "users",
+                "role_codes": [],
+                "user_ids": [direct_user.id, role_user.id],
+                "expires_at": None,
+            },
+        )
+        self.assertEqual(users_response.status_code, 200, users_response.text)
+        self.message_ids.append(users_response.json()["data"]["message_id"])
+
+        public_response = self.client.get("/api/v1/messages/public-announcements")
+        self.assertEqual(public_response.status_code, 200, public_response.text)
+        payload = public_response.json()["data"]
+        titles = [item["title"] for item in payload["items"]]
+
+        self.assertIn("登录页全员公告", titles)
+        self.assertNotIn("角色公告不应公开", titles)
+        self.assertNotIn("定向公告不应公开", titles)
+
     def test_registration_approval_message_targets_change_password_section(
         self,
     ) -> None:

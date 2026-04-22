@@ -357,6 +357,48 @@ class MessageServiceUnitTest(unittest.TestCase):
         maintenance.assert_not_called()
         self.assertEqual(db.execute.call_count, 1)
 
+    def test_list_public_announcements_returns_public_items(self):
+        now = datetime.now(UTC)
+        db = MagicMock()
+        db.execute.side_effect = [
+            _FakeScalarResult(one=1),
+            _FakeScalarResult(
+                all_rows=[
+                    SimpleNamespace(
+                        id=51,
+                        message_type="announcement",
+                        priority="important",
+                        title="登录页全员公告",
+                        summary="摘要",
+                        content="正文",
+                        source_module="message",
+                        source_type="announcement",
+                        source_code="all",
+                        target_page_code=None,
+                        target_tab_code=None,
+                        target_route_payload_json=None,
+                        status="active",
+                        published_at=now,
+                        expires_at=now + timedelta(days=1),
+                    )
+                ]
+            ),
+        ]
+
+        items, total = message_service.list_public_announcements(
+            db,
+            page=1,
+            page_size=10,
+        )
+
+        self.assertEqual(total, 1)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].title, "登录页全员公告")
+        self.assertEqual(items[0].source_code, "all")
+        self.assertEqual(items[0].delivery_status, "pending")
+        self.assertFalse(items[0].is_read)
+        self.assertEqual(items[0].expires_at, now + timedelta(days=1))
+
     def test_get_unread_count_does_not_run_maintenance_by_default(self):
         db = MagicMock()
         db.execute.return_value = _FakeScalarResult(one=3)

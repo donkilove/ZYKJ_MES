@@ -37,6 +37,7 @@ from app.services.message_service import (
     get_message_jump_target,
     get_message_summary,
     get_unread_count,
+    list_public_announcements,
     list_messages,
     mark_all_read,
     mark_messages_read_batch,
@@ -49,6 +50,24 @@ from app.services.user_service import get_user_by_id
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@router.get("/public-announcements", response_model=ApiResponse[MessageListResult])
+def api_list_public_announcements(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=50),
+    priority: str | None = Query(None),
+    db: Session = Depends(get_db),
+) -> ApiResponse[MessageListResult]:
+    items, total = list_public_announcements(
+        db,
+        page=page,
+        page_size=page_size,
+        priority=priority,
+    )
+    return success_response(
+        MessageListResult(items=items, total=total, page=page, page_size=page_size)
+    )
 
 
 @router.get("/unread-count", response_model=ApiResponse[UnreadCountResult])
