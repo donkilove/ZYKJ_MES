@@ -9,6 +9,7 @@ import 'package:mes_client/features/user/presentation/login_session_page.dart';
 import 'package:mes_client/features/user/presentation/registration_approval_page.dart';
 import 'package:mes_client/features/user/presentation/role_management_page.dart';
 import 'package:mes_client/features/user/presentation/user_management_page.dart';
+import 'package:mes_client/features/user/presentation/widgets/user_page_shell.dart';
 
 const List<String> _defaultTabOrder = [
   'user_management',
@@ -316,88 +317,76 @@ class _UserPageState extends State<UserPage> {
       _currentTabIndex = preferredIndex;
     }
 
-    return Column(
-      children: [
-        Expanded(
-          child: DefaultTabController(
-            key: ValueKey(
-              '${tabs.map((item) => item.code).join('|')}|$_currentTabIndex',
-            ),
-            length: tabs.length,
-            initialIndex: _currentTabIndex.clamp(0, tabs.length - 1),
-            child: Builder(
-              builder: (context) {
-                final tabController = DefaultTabController.of(context);
-                _tabController = tabController;
-                tabController.addListener(() {
-                  if (!tabController.indexIsChanging &&
-                      _currentTabIndex != tabController.index) {
-                    setState(() => _currentTabIndex = tabController.index);
-                  }
-                });
-                if (_currentTabIndex != tabController.index &&
-                    _currentTabIndex >= 0 &&
-                    _currentTabIndex < tabs.length) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (tabController.index != _currentTabIndex) {
-                      tabController.animateTo(_currentTabIndex);
-                    }
-                  });
-                }
-                return Column(
-                  children: [
-                    Material(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.surfaceContainerHighest,
-                      child: Semantics(
-                        container: true,
-                        label: '用户模块页签栏',
-                        child: TabBar(
-                          isScrollable: false,
-                          indicatorSize: TabBarIndicatorSize.tab,
-                          labelPadding: EdgeInsets.zero,
-                          tabs: tabs
-                              .map(
-                                (item) => Tab(
-                                  child: Semantics(
-                                    container: true,
-                                    label: _tabSemanticsLabel(item),
-                                    button: true,
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 6,
-                                      ),
-                                      child: Text(
-                                        item.title,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        textAlign: TextAlign.center,
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.labelMedium,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              )
-                              .toList(),
+    return DefaultTabController(
+      key: ValueKey(
+        '${tabs.map((item) => item.code).join('|')}|$_currentTabIndex',
+      ),
+      length: tabs.length,
+      initialIndex: _currentTabIndex.clamp(0, tabs.length - 1),
+      child: Builder(
+        builder: (context) {
+          final tabController = DefaultTabController.of(context);
+          _tabController = tabController;
+          tabController.addListener(() {
+            if (!tabController.indexIsChanging &&
+                _currentTabIndex != tabController.index) {
+              setState(() => _currentTabIndex = tabController.index);
+            }
+          });
+          if (_currentTabIndex != tabController.index &&
+              _currentTabIndex >= 0 &&
+              _currentTabIndex < tabs.length) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (tabController.index != _currentTabIndex) {
+                tabController.animateTo(_currentTabIndex);
+              }
+            });
+          }
+          return UserPageShell(
+            tabBar: Material(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: Semantics(
+                container: true,
+                label: '用户模块页签栏',
+                child: TabBar(
+                  isScrollable: false,
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  labelPadding: EdgeInsets.zero,
+                  tabs: tabs
+                      .map(
+                        (item) => Tab(
+                          child: Semantics(
+                            container: true,
+                            label: _tabSemanticsLabel(item),
+                            button: true,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 6,
+                              ),
+                              child: Text(
+                                item.title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: Theme.of(
+                                  context,
+                                ).textTheme.labelMedium,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                    Expanded(
-                      child: TabBarView(
-                        children: tabs.map((item) => item.child).toList(),
-                      ),
-                    ),
-                  ],
-                );
-              },
+                      )
+                      .toList(),
+                ),
+              ),
             ),
-          ),
-        ),
-      ],
+            tabBarView: TabBarView(
+              children: tabs.map((item) => item.child).toList(),
+            ),
+          );
+        },
+      ),
     );
   }
 }
