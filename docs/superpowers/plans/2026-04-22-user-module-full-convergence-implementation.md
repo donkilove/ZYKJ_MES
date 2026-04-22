@@ -4,7 +4,7 @@
 
 **Goal:** 在现有 Flutter 前端中完成用户模块完整收口，使 `UserPage` 总页壳层与 7 个页签全部进入统一口径，并补齐模块级验证与留痕闭环。
 
-**Architecture:** 总体按一个总 spec、三批实施推进。第 1 批收口 `UserPage + user_management + registration_approval`，先解决总页壳层与主业务页的统一问题；第 2 批收口 `role_management + audit_log`，将管理/审计类页面拉齐到同一口径；第 3 批收口 `account_settings + login_session + function_permission_config`，解决支持页签稳定接入问题。每批都先写失败测试，再做最小实现，最后用 `flutter analyze`、页面级测试、模块级集成和 `evidence` 收口。
+**Architecture:** 按“一个总 spec、三批实施”推进。第 1 批先收口 `UserPage + user_management + registration_approval`，解决总页壳层与主业务页的统一问题；第 2 批收口 `role_management + audit_log`，将管理/审计类页面拉齐到同一口径；第 3 批收口 `account_settings + login_session + function_permission_config`，解决支持页签稳定接入问题。每一批都先写失败测试，再做最小实现，最后用 `flutter analyze`、widget 回归、模块级 integration 与 `evidence` 收口。
 
 **Tech Stack:** Flutter、Dart、Material 3、`flutter_test`、`integration_test`
 
@@ -12,33 +12,21 @@
 
 > Flutter 命令默认在 `frontend/` 目录执行；`git`、`docs/`、`evidence/` 操作默认在仓库根目录执行。  
 > 本计划遵循“无迁移，直接替换”。  
-> 用户当前明确接受在 `main` 分支直接推进，因此计划不再引入额外工作树。  
-> 当前工作区中与本计划无关的改动包括：`backend/.env` 以及若干未跟踪 `evidence` 文件。执行本计划时不要把这些文件纳入提交。
+> 用户已明确接受在 `main` 分支直接推进，因此计划不再引入额外工作树。  
+> 当前工作区中与本计划无关的改动包括：`backend/.env` 以及若干未跟踪 `evidence` 文件。执行本计划时不要将它们纳入提交。
 
 ## 文件结构
 
 ### 新增文件
 
 - `frontend/lib/features/user/presentation/widgets/user_page_shell.dart`
-  - 用户模块总页壳层，统一页签栏、内容区和稳定语义锚点
+  - 用户模块总页壳层，统一页签栏、内容区和稳定锚点
 - `frontend/test/widgets/user_module_full_convergence_test.dart`
-  - 用户模块完整收口的壳层与模块级 widget 门禁
+  - 用户模块完整收口的总页壳层与模块级 widget 门禁
 - `frontend/lib/features/user/presentation/widgets/role_management_page_header.dart`
   - 角色管理页头
-- `frontend/lib/features/user/presentation/widgets/role_management_filter_section.dart`
-  - 角色管理筛选区
-- `frontend/lib/features/user/presentation/widgets/role_management_feedback_banner.dart`
-  - 角色管理反馈区
-- `frontend/lib/features/user/presentation/widgets/role_management_table_section.dart`
-  - 角色管理表格区
 - `frontend/lib/features/user/presentation/widgets/audit_log_page_header.dart`
   - 审计日志页头
-- `frontend/lib/features/user/presentation/widgets/audit_log_filter_section.dart`
-  - 审计日志筛选区
-- `frontend/lib/features/user/presentation/widgets/audit_log_feedback_banner.dart`
-  - 审计日志反馈区
-- `frontend/lib/features/user/presentation/widgets/audit_log_table_section.dart`
-  - 审计日志表格区
 - `frontend/lib/features/user/presentation/widgets/account_settings_page_header.dart`
   - 个人中心页头
 - `frontend/lib/features/user/presentation/widgets/login_session_page_header.dart`
@@ -51,33 +39,31 @@
 ### 修改文件
 
 - `frontend/lib/features/user/presentation/user_page.dart`
-  - 将总页壳层收敛为稳定总控入口
+  - 将总页收口为稳定壳层，并保持页签顺序、可见性和路由载荷口径
 - `frontend/lib/features/user/presentation/user_management_page.dart`
-  - 与新壳层和统一模块验证口径对齐
+  - 与总页壳层协同，保持主业务页收口后的统一口径
 - `frontend/lib/features/user/presentation/registration_approval_page.dart`
-  - 与新壳层和统一模块验证口径对齐
+  - 与总页壳层协同，保持主业务页收口后的统一口径
 - `frontend/lib/features/user/presentation/role_management_page.dart`
-  - 接入统一 CRUD 骨架与共享件
+  - 接入统一页头与稳定列表锚点
 - `frontend/lib/features/user/presentation/audit_log_page.dart`
-  - 接入统一 CRUD 骨架与共享件
+  - 接入统一页头与稳定筛选/列表锚点
 - `frontend/lib/features/user/presentation/account_settings_page.dart`
-  - 接入用户模块统一页头与反馈出口
+  - 接入支持页统一页头
 - `frontend/lib/features/user/presentation/login_session_page.dart`
-  - 接入用户模块统一页头与反馈出口
+  - 接入支持页统一页头
 - `frontend/lib/features/user/presentation/function_permission_config_page.dart`
-  - 接入用户模块统一页头与反馈出口
+  - 接入支持页统一页头
 - `frontend/test/widgets/user_page_test.dart`
-  - 总页壳层稳定性与页签装配回归
+  - 总页壳层稳定性回归
 - `frontend/test/widgets/user_management_page_test.dart`
-  - 主业务页与壳层协同回归
+  - 主业务页与总壳层协同回归
 - `frontend/test/widgets/registration_approval_page_test.dart`
-  - 主业务页与壳层协同回归
+  - 主业务页与总壳层协同回归
 - `frontend/test/widgets/user_module_support_pages_test.dart`
   - 角色、审计、个人中心、登录会话、功能权限配置回归
 - `frontend/integration_test/user_module_flow_test.dart`
-  - 模块级主路径验证，最终通过 `UserPage` 壳层驱动
-- `evidence/2026-04-20_用户模块UI第二波迁移实施.md`
-  - 仅作为对照历史，不在本轮改写
+  - 模块级主路径验证，通过 `UserPage` 壳层驱动
 
 ## 任务 1：第 1 批，收口 UserPage 壳层与主业务页
 
@@ -90,7 +76,7 @@
 - Modify: `frontend/test/widgets/registration_approval_page_test.dart`
 - Modify: `frontend/integration_test/user_module_flow_test.dart`
 
-- [ ] **Step 1: 先写失败测试，固定总页壳层必须具备稳定锚点与三类子页装配**
+- [ ] **Step 1: 先写失败测试，固定总页壳层必须具备稳定锚点和主业务页装配**
 
 ```dart
 import 'package:flutter/material.dart';
@@ -132,13 +118,13 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: 运行壳层测试，确认总页壳层尚未完成收口**
+- [ ] **Step 2: 运行壳层测试，确认当前仍处于旧式总页过渡态**
 
 Run: `flutter test test/widgets/user_module_full_convergence_test.dart --plain-name "UserPage 接入统一总页壳层并保留稳定页签栏锚点"`
 
 Expected: FAIL，报错包含找不到 `user-page-shell` 或 `user-page-tab-bar`
 
-- [ ] **Step 3: 最小实现总页壳层，并让主业务页继续通过壳层装配**
+- [ ] **Step 3: 最小实现总页壳层并让主业务页继续通过壳层装配**
 
 ```dart
 // frontend/lib/features/user/presentation/widgets/user_page_shell.dart
@@ -162,10 +148,7 @@ class UserPageShell extends StatelessWidget {
         children: [
           KeyedSubtree(
             key: const ValueKey('user-page-tab-bar'),
-            child: Material(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              child: tabBar,
-            ),
+            child: tabBar,
           ),
           Expanded(child: tabBarView),
         ],
@@ -195,14 +178,18 @@ Widget build(BuildContext context) {
         final tabController = DefaultTabController.of(context);
         _tabController = tabController;
         return UserPageShell(
-          tabBar: TabBar(
-            isScrollable: false,
-            indicatorSize: TabBarIndicatorSize.tab,
-            labelPadding: EdgeInsets.zero,
-            tabs: tabs.map((item) => Tab(text: item.title)).toList(),
+          tabBar: Material(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            child: TabBar(
+              isScrollable: false,
+              indicatorSize: TabBarIndicatorSize.tab,
+              labelPadding: EdgeInsets.zero,
+              tabs: tabs
+                  .map((item) => Tab(text: item.title))
+                  .toList(),
+            ),
           ),
           tabBarView: TabBarView(
-            controller: tabController,
             children: tabs.map((item) => item.child).toList(),
           ),
         );
@@ -237,18 +224,12 @@ git commit -m "收口用户模块总页壳层与主业务页"
 
 **Files:**
 - Create: `frontend/lib/features/user/presentation/widgets/role_management_page_header.dart`
-- Create: `frontend/lib/features/user/presentation/widgets/role_management_filter_section.dart`
-- Create: `frontend/lib/features/user/presentation/widgets/role_management_feedback_banner.dart`
-- Create: `frontend/lib/features/user/presentation/widgets/role_management_table_section.dart`
 - Create: `frontend/lib/features/user/presentation/widgets/audit_log_page_header.dart`
-- Create: `frontend/lib/features/user/presentation/widgets/audit_log_filter_section.dart`
-- Create: `frontend/lib/features/user/presentation/widgets/audit_log_feedback_banner.dart`
-- Create: `frontend/lib/features/user/presentation/widgets/audit_log_table_section.dart`
 - Modify: `frontend/lib/features/user/presentation/role_management_page.dart`
 - Modify: `frontend/lib/features/user/presentation/audit_log_page.dart`
 - Modify: `frontend/test/widgets/user_module_support_pages_test.dart`
 
-- [ ] **Step 1: 先写失败测试，固定角色管理与审计日志进入统一页面口径**
+- [ ] **Step 1: 先写失败测试，固定角色管理与审计日志页进入统一页面口径**
 
 ```dart
 // frontend/test/widgets/user_module_support_pages_test.dart
@@ -296,7 +277,7 @@ Run: `flutter test test/widgets/user_module_support_pages_test.dart --plain-name
 
 Expected: FAIL，找不到 `audit-log-page-header`
 
-- [ ] **Step 3: 以最小实现接入统一页头 / 筛选 / 表格区**
+- [ ] **Step 3: 以最小实现接入统一页头与稳定锚点**
 
 ```dart
 // frontend/lib/features/user/presentation/widgets/role_management_page_header.dart
@@ -370,49 +351,43 @@ class AuditLogPageHeader extends StatelessWidget {
 
 ```dart
 // frontend/lib/features/user/presentation/role_management_page.dart
-import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/features/user/presentation/widgets/role_management_page_header.dart';
 
-@override
-Widget build(BuildContext context) {
-  return MesCrudPageScaffold(
-    header: RoleManagementPageHeader(
-      loading: _loading,
-      onRefresh: _loadRoles,
-    ),
-    content: KeyedSubtree(
-      key: const ValueKey('role-management-table-section'),
-      child: _buildRoleTable(),
-    ),
-    pagination: _buildPagination(),
-  );
-}
+// build 内至少收敛为：
+return MesCrudPageScaffold(
+  header: RoleManagementPageHeader(
+    loading: _loading,
+    onRefresh: _loadRoles,
+  ),
+  content: KeyedSubtree(
+    key: const ValueKey('role-management-table-section'),
+    child: _buildRoleTable(),
+  ),
+  pagination: _buildPagination(),
+);
 ```
 
 ```dart
 // frontend/lib/features/user/presentation/audit_log_page.dart
-import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/features/user/presentation/widgets/audit_log_page_header.dart';
 import 'package:mes_client/features/user/presentation/widgets/shared/user_module_filter_panel.dart';
 
-@override
-Widget build(BuildContext context) {
-  return MesCrudPageScaffold(
-    header: AuditLogPageHeader(
-      loading: _loading,
-      onRefresh: _loadAuditLogs,
-    ),
-    filters: UserModuleFilterPanel(
-      sectionKey: const ValueKey('audit-log-filter-section'),
-      child: _buildFilterContent(),
-    ),
-    content: KeyedSubtree(
-      key: const ValueKey('audit-log-table-section'),
-      child: _buildAuditTable(),
-    ),
-    pagination: _buildPagination(),
-  );
-}
+// build 内至少收敛为：
+return MesCrudPageScaffold(
+  header: AuditLogPageHeader(
+    loading: _loading,
+    onRefresh: _loadAuditLogs,
+  ),
+  filters: UserModuleFilterPanel(
+    sectionKey: const ValueKey('audit-log-filter-section'),
+    child: _buildFilterContent(),
+  ),
+  content: KeyedSubtree(
+    key: const ValueKey('audit-log-table-section'),
+    child: _buildAuditTable(),
+  ),
+  pagination: _buildPagination(),
+);
 ```
 
 - [ ] **Step 4: 重新运行 support 页测试**
@@ -440,7 +415,7 @@ git commit -m "收口用户模块组织与审计页"
 - Modify: `frontend/test/widgets/user_module_support_pages_test.dart`
 - Modify: `frontend/integration_test/user_module_flow_test.dart`
 
-- [ ] **Step 1: 先写失败测试，固定支持页签稳定接入与统一反馈出口**
+- [ ] **Step 1: 先写失败测试，固定支持页签稳定接入与统一页头锚点**
 
 ```dart
 // frontend/test/widgets/user_module_support_pages_test.dart
