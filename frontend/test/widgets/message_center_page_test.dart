@@ -287,6 +287,7 @@ class _FakeMessageService extends MessageService {
     _listRequestInFlight = true;
     _listRequestCompleted = false;
     if (listError != null) {
+      _listRequestInFlight = false;
       throw listError!;
     }
     lastTodoOnly = todoOnly;
@@ -362,6 +363,7 @@ class _FakeMessageService extends MessageService {
       page: page,
       pageSize: pageSize,
     );
+    await Future<void>.delayed(Duration.zero);
     _listRequestInFlight = false;
     _listRequestCompleted = true;
     return result;
@@ -685,6 +687,49 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(service.listMessagesCallCount, 2);
+  });
+
+  testWidgets('message center 同帧停用轮询并刷新 tick 变化时不额外触发列表刷新', (
+    tester,
+  ) async {
+    final service = _FakeMessageService();
+
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      _buildMessageCenterPageApp(service: service, pollingEnabled: true),
+    );
+    await tester.pumpAndSettle();
+    expect(service.listMessagesCallCount, 1);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 1280,
+            child: MessageCenterPage(
+              session: AppSession(baseUrl: '', accessToken: ''),
+              onLogout: () {},
+              canPublishAnnouncement: true,
+              canViewDetail: true,
+              canUseJump: true,
+              pollingEnabled: false,
+              refreshTick: 1,
+              service: service,
+              userService: _FakeUserService(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(service.listMessagesCallCount, 1);
   });
 
   testWidgets('message center 列表加载后不会再额外触发摘要请求', (tester) async {

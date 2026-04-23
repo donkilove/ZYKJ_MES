@@ -240,6 +240,7 @@ class MainShellPageRegistry {
           session: session,
           service: messageService,
           onLogout: onLogout,
+          pollingEnabled: moduleActiveFor('message'),
           canPublishAnnouncement: messageCapabilityCodes.contains(
             'feature.message.announcement.publish',
           ),

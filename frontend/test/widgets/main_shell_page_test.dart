@@ -6,6 +6,7 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/models/authz_models.dart';
 import 'package:mes_client/core/models/current_user.dart';
 import 'package:mes_client/features/message/models/message_models.dart';
+import 'package:mes_client/features/message/presentation/message_center_page.dart';
 import 'package:mes_client/core/services/effective_clock.dart';
 import 'package:mes_client/core/models/page_catalog_models.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_page.dart';
@@ -669,6 +670,80 @@ void main() {
     expect(
       tester
           .widget<ProductionOrderQueryPage>(find.byType(ProductionOrderQueryPage))
+          .pollingEnabled,
+      isFalse,
+      );
+    });
+
+  testWidgets('主壳会把消息模块活跃态真实传到消息中心页面', (tester) async {
+    final registry = MainShellPageRegistry();
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final baseState = MainShellViewState(
+      loading: false,
+      currentUser: _buildCurrentUser(),
+      authzSnapshot: _buildSnapshot(
+        visibleSidebarCodes: const ['user', 'message'],
+        tabCodesByParent: const {
+          'user': ['account_settings'],
+          'message': ['message_center'],
+        },
+        moduleItems: [
+          _buildModuleItem('user'),
+          _buildModuleItem('message'),
+        ],
+      ),
+      catalog: _buildCatalog(),
+      tabCodesByParent: const {
+        'user': ['account_settings'],
+        'message': ['message_center'],
+      },
+    );
+
+    Future<void> pumpMessagePage({required String selectedPageCode}) async {
+      final settingsController = SoftwareSettingsController.memory();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox.expand(
+              child: registry.build(
+                pageCode: 'message',
+                session: _session,
+                state: baseState.copyWith(selectedPageCode: selectedPageCode),
+                onLogout: () {},
+                onRefreshShellData: ({loadCatalog = false}) async {},
+                onNavigateToPageTarget:
+                    ({
+                      required pageCode,
+                      String? tabCode,
+                      String? routePayloadJson,
+                    }) {},
+                onVisibilityConfigSaved: () {},
+                messageService: _TestShellMessageService(),
+                softwareSettingsController: settingsController,
+                timeSyncController: _buildTimeSyncController(settingsController),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await pumpMessagePage(selectedPageCode: 'message');
+    expect(
+      tester.widget<MessageCenterPage>(find.byType(MessageCenterPage))
+          .pollingEnabled,
+      isTrue,
+    );
+
+    await pumpMessagePage(selectedPageCode: 'user');
+    expect(
+      tester.widget<MessageCenterPage>(find.byType(MessageCenterPage))
           .pollingEnabled,
       isFalse,
     );

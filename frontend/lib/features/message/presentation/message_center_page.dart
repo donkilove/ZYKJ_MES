@@ -123,14 +123,21 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   @override
   void didUpdateWidget(covariant MessageCenterPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final pollingBecameEnabled =
+        !oldWidget.pollingEnabled && widget.pollingEnabled;
+    final pollingBecameDisabled =
+        oldWidget.pollingEnabled && !widget.pollingEnabled;
+    if (pollingBecameDisabled) {
+      _stopPolling();
+    }
     if (widget.routePayloadJson != oldWidget.routePayloadJson) {
       _consumeRoutePayload(widget.routePayloadJson);
     }
-    if (widget.refreshTick != oldWidget.refreshTick) {
+    if (pollingBecameEnabled) {
+      _updatePollingState(triggerImmediateLoad: true);
+    } else if (widget.refreshTick != oldWidget.refreshTick &&
+        widget.pollingEnabled) {
       _load(reset: false);
-    }
-    if (widget.pollingEnabled != oldWidget.pollingEnabled) {
-      _updatePollingState(triggerImmediateLoad: widget.pollingEnabled);
     }
   }
 
@@ -177,26 +184,31 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
       if (reset) _page = 1;
     });
     try {
-      final summaryFuture = _service.getSummary();
-      final result = await _service.listMessages(
-        page: _page,
-        pageSize: _pageSize,
-        keyword: _keywordCtrl.text.trim().isEmpty
-            ? null
-            : _keywordCtrl.text.trim(),
-        status: _statusFilter.isEmpty ? null : _statusFilter,
-        messageType: _typeFilter.isEmpty ? null : _typeFilter,
-        priority: _priorityFilter.isEmpty ? null : _priorityFilter,
-        sourceModule: _sourceModuleFilter.isEmpty ? null : _sourceModuleFilter,
-        startTime: _dateRange?.start,
-        endTime: _dateRange?.end,
-        todoOnly: _todoOnly,
-        activeOnly: !_includeInactive,
-      );
-      MessageSummaryResult? summary;
-      try {
-        summary = await summaryFuture;
-      } catch (_) {}
+      final results = await Future.wait<Object?>([
+        _service.listMessages(
+          page: _page,
+          pageSize: _pageSize,
+          keyword: _keywordCtrl.text.trim().isEmpty
+              ? null
+              : _keywordCtrl.text.trim(),
+          status: _statusFilter.isEmpty ? null : _statusFilter,
+          messageType: _typeFilter.isEmpty ? null : _typeFilter,
+          priority: _priorityFilter.isEmpty ? null : _priorityFilter,
+          sourceModule: _sourceModuleFilter.isEmpty
+              ? null
+              : _sourceModuleFilter,
+          startTime: _dateRange?.start,
+          endTime: _dateRange?.end,
+          todoOnly: _todoOnly,
+          activeOnly: !_includeInactive,
+        ),
+        _service
+            .getSummary()
+            .then<Object?>((summary) => summary)
+            .catchError((_) => null),
+      ]);
+      final result = results[0] as MessageListResult;
+      final summary = results[1] as MessageSummaryResult?;
       if (!mounted) return;
       setState(() {
         _items = result.items;
