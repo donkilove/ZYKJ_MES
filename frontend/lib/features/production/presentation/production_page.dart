@@ -203,35 +203,32 @@ class _ProductionPageState extends State<ProductionPage>
           ProductionFeaturePermissionCodes.pipelineModeManage,
         ),
       ),
-      productionOrderQueryTabCode => ProductionModuleTabActivation(
-        moduleActive: widget.moduleActive,
-        tabActive: isTabActive,
-        child: ProductionOrderQueryPage(
-          session: widget.session,
-          onLogout: widget.onLogout,
-          canFirstArticle: _hasPermission(
-            ProductionFeaturePermissionCodes.orderQueryExecute,
-          ),
-          canEndProduction: _hasPermission(
-            ProductionFeaturePermissionCodes.orderQueryExecute,
-          ),
-          canCreateManualRepairOrder: _hasPermission(
-            ProductionFeaturePermissionCodes.repairOrdersCreateManual,
-          ),
-          canCreateAssistAuthorization: _hasPermission(
-            ProductionFeaturePermissionCodes.assistLaunch,
-          ),
-          canProxyView: _hasPermission(
-            ProductionFeaturePermissionCodes.orderQueryProxy,
-          ),
-          canExportCsv: _hasPermission(
-            ProductionFeaturePermissionCodes.orderQueryExport,
-          ),
-          routePayloadJson:
-              widget.preferredTabCode == productionOrderQueryTabCode
-              ? widget.routePayloadJson
-              : null,
+      productionOrderQueryTabCode => ProductionOrderQueryPage(
+        session: widget.session,
+        onLogout: widget.onLogout,
+        canFirstArticle: _hasPermission(
+          ProductionFeaturePermissionCodes.orderQueryExecute,
         ),
+        canEndProduction: _hasPermission(
+          ProductionFeaturePermissionCodes.orderQueryExecute,
+        ),
+        canCreateManualRepairOrder: _hasPermission(
+          ProductionFeaturePermissionCodes.repairOrdersCreateManual,
+        ),
+        canCreateAssistAuthorization: _hasPermission(
+          ProductionFeaturePermissionCodes.assistLaunch,
+        ),
+        canProxyView: _hasPermission(
+          ProductionFeaturePermissionCodes.orderQueryProxy,
+        ),
+        canExportCsv: _hasPermission(
+          ProductionFeaturePermissionCodes.orderQueryExport,
+        ),
+        pollingEnabled: isTabActive,
+        routePayloadJson:
+            widget.preferredTabCode == productionOrderQueryTabCode
+            ? widget.routePayloadJson
+            : null,
       ),
       productionAssistRecordsTabCode => ProductionAssistRecordsPage(
         session: widget.session,
@@ -310,28 +307,5 @@ class _ProductionPageState extends State<ProductionPage>
         children: _orderedVisibleTabCodes.map(_buildTabContent).toList(),
       ),
     );
-  }
-}
-
-class ProductionModuleTabActivation extends InheritedWidget {
-  const ProductionModuleTabActivation({
-    super.key,
-    required this.moduleActive,
-    required this.tabActive,
-    required super.child,
-  });
-
-  final bool moduleActive;
-  final bool tabActive;
-
-  static ProductionModuleTabActivation? maybeOf(BuildContext context) {
-    return context
-        .dependOnInheritedWidgetOfExactType<ProductionModuleTabActivation>();
-  }
-
-  @override
-  bool updateShouldNotify(ProductionModuleTabActivation oldWidget) {
-    return moduleActive != oldWidget.moduleActive ||
-        tabActive != oldWidget.tabActive;
   }
 }

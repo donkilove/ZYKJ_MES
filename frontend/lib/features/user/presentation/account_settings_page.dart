@@ -17,6 +17,7 @@ class AccountSettingsPage extends StatefulWidget {
     required this.onLogout,
     required this.canChangePassword,
     required this.canViewSession,
+    this.pollingEnabled = true,
     this.routePayloadJson,
     this.userService,
     this.authService,
@@ -26,6 +27,7 @@ class AccountSettingsPage extends StatefulWidget {
   final VoidCallback onLogout;
   final bool canChangePassword;
   final bool canViewSession;
+  final bool pollingEnabled;
   final String? routePayloadJson;
   final UserService? userService;
   final AuthService? authService;

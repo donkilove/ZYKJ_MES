@@ -72,6 +72,7 @@ class ProductionOrderQueryPage extends StatefulWidget {
     required this.canCreateAssistAuthorization,
     required this.canProxyView,
     required this.canExportCsv,
+    this.pollingEnabled = true,
     this.service,
     this.craftService,
     this.saveExportFile,
@@ -87,6 +88,7 @@ class ProductionOrderQueryPage extends StatefulWidget {
   final bool canCreateAssistAuthorization;
   final bool canProxyView;
   final bool canExportCsv;
+  final bool pollingEnabled;
   final ProductionService? service;
   final CraftService? craftService;
   final ProductionOrderQueryExportSaver? saveExportFile;

@@ -19,12 +19,14 @@ import 'package:mes_client/features/settings/presentation/software_settings_cont
 import 'package:mes_client/features/shell/models/home_dashboard_models.dart';
 import 'package:mes_client/features/shell/services/home_dashboard_service.dart';
 import 'package:mes_client/core/services/page_catalog_service.dart';
+import 'package:mes_client/features/production/presentation/production_order_query_page.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_page_registry.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_state.dart';
 import 'package:mes_client/features/time_sync/models/time_sync_models.dart';
 import 'package:mes_client/features/time_sync/presentation/time_sync_controller.dart';
 import 'package:mes_client/features/time_sync/services/server_time_service.dart';
 import 'package:mes_client/features/time_sync/services/windows_time_sync_service.dart';
+import 'package:mes_client/features/user/presentation/account_settings_page.dart';
 
 final AppSession _session = AppSession(
   baseUrl: 'http://example.test/api/v1',
@@ -538,9 +540,8 @@ class _FakeServerTimeService extends ServerTimeService {
 class _FakeWindowsTimeSyncService extends WindowsTimeSyncService {}
 
 void main() {
-  testWidgets('主壳仅向当前模块传递活跃态，切换模块后会同步切换', (tester) async {
+  testWidgets('主壳会把用户模块活跃态真实传到个人中心页面', (tester) async {
     final registry = MainShellPageRegistry();
-    final capturedActiveStates = <String, bool>{};
     final baseState = MainShellViewState(
       loading: false,
       currentUser: _buildCurrentUser(),
@@ -562,197 +563,115 @@ void main() {
       },
     );
 
-    registry.build(
-      pageCode: 'user',
-      session: _session,
-      state: baseState.copyWith(selectedPageCode: 'user'),
-      onLogout: () {},
-      onRefreshShellData: ({loadCatalog = false}) async {},
-      onNavigateToPageTarget:
-          ({
-            required pageCode,
-            String? tabCode,
-            String? routePayloadJson,
-          }) {},
-      onVisibilityConfigSaved: () {},
-      messageService: _TestShellMessageService(),
-      softwareSettingsController: SoftwareSettingsController.memory(),
-      timeSyncController: _buildTimeSyncController(
-        SoftwareSettingsController.memory(),
-      ),
-      userPageBuilder:
-          ({
-            required session,
-            required onLogout,
-            required visibleTabCodes,
-            required capabilityCodes,
-            required moduleActive,
-            String? preferredTabCode,
-            String? routePayloadJson,
-            VoidCallback? onVisibilityConfigSaved,
-          }) {
-            capturedActiveStates['user'] = moduleActive;
-            return const SizedBox.shrink();
-          },
-      productionPageBuilder:
-          ({
-            required session,
-            required onLogout,
-            required visibleTabCodes,
-            required capabilityCodes,
-            required moduleActive,
-            String? preferredTabCode,
-            String? routePayloadJson,
-          }) {
-            capturedActiveStates['production'] = moduleActive;
-            return const SizedBox.shrink();
-          },
+    Future<void> pumpUserPage({required String selectedPageCode}) async {
+      final settingsController = SoftwareSettingsController.memory();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: registry.build(
+              pageCode: 'user',
+              session: _session,
+              state: baseState.copyWith(selectedPageCode: selectedPageCode),
+              onLogout: () {},
+              onRefreshShellData: ({loadCatalog = false}) async {},
+              onNavigateToPageTarget:
+                  ({
+                    required pageCode,
+                    String? tabCode,
+                    String? routePayloadJson,
+                  }) {},
+              onVisibilityConfigSaved: () {},
+              messageService: _TestShellMessageService(),
+              softwareSettingsController: settingsController,
+              timeSyncController: _buildTimeSyncController(settingsController),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await pumpUserPage(selectedPageCode: 'user');
+    expect(
+      tester.widget<AccountSettingsPage>(find.byType(AccountSettingsPage))
+          .pollingEnabled,
+      isTrue,
     );
 
-    registry.build(
-      pageCode: 'production',
-      session: _session,
-      state: baseState.copyWith(selectedPageCode: 'user'),
-      onLogout: () {},
-      onRefreshShellData: ({loadCatalog = false}) async {},
-      onNavigateToPageTarget:
-          ({
-            required pageCode,
-            String? tabCode,
-            String? routePayloadJson,
-          }) {},
-      onVisibilityConfigSaved: () {},
-      messageService: _TestShellMessageService(),
-      softwareSettingsController: SoftwareSettingsController.memory(),
-      timeSyncController: _buildTimeSyncController(
-        SoftwareSettingsController.memory(),
+    await pumpUserPage(selectedPageCode: 'production');
+    expect(
+      tester.widget<AccountSettingsPage>(find.byType(AccountSettingsPage))
+          .pollingEnabled,
+      isFalse,
+    );
+  });
+
+  testWidgets('主壳会把生产模块活跃态真实传到订单查询页面', (tester) async {
+    final registry = MainShellPageRegistry();
+    final baseState = MainShellViewState(
+      loading: false,
+      currentUser: _buildCurrentUser(),
+      authzSnapshot: _buildSnapshot(
+        visibleSidebarCodes: const ['user', 'production'],
+        tabCodesByParent: const {
+          'user': ['account_settings'],
+          'production': ['production_order_query'],
+        },
+        moduleItems: [
+          _buildModuleItem('user'),
+          _buildModuleItem('production'),
+        ],
       ),
-      userPageBuilder:
-          ({
-            required session,
-            required onLogout,
-            required visibleTabCodes,
-            required capabilityCodes,
-            required moduleActive,
-            String? preferredTabCode,
-            String? routePayloadJson,
-            VoidCallback? onVisibilityConfigSaved,
-          }) {
-            capturedActiveStates['user'] = moduleActive;
-            return const SizedBox.shrink();
-          },
-      productionPageBuilder:
-          ({
-            required session,
-            required onLogout,
-            required visibleTabCodes,
-            required capabilityCodes,
-            required moduleActive,
-            String? preferredTabCode,
-            String? routePayloadJson,
-          }) {
-            capturedActiveStates['production'] = moduleActive;
-            return const SizedBox.shrink();
-          },
+      catalog: _buildCatalog(),
+      tabCodesByParent: const {
+        'user': ['account_settings'],
+        'production': ['production_order_query'],
+      },
     );
 
-    expect(capturedActiveStates, {'user': true, 'production': false});
+    Future<void> pumpProductionPage({required String selectedPageCode}) async {
+      final settingsController = SoftwareSettingsController.memory();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: registry.build(
+              pageCode: 'production',
+              session: _session,
+              state: baseState.copyWith(selectedPageCode: selectedPageCode),
+              onLogout: () {},
+              onRefreshShellData: ({loadCatalog = false}) async {},
+              onNavigateToPageTarget:
+                  ({
+                    required pageCode,
+                    String? tabCode,
+                    String? routePayloadJson,
+                  }) {},
+              onVisibilityConfigSaved: () {},
+              messageService: _TestShellMessageService(),
+              softwareSettingsController: settingsController,
+              timeSyncController: _buildTimeSyncController(settingsController),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
 
-    registry.build(
-      pageCode: 'user',
-      session: _session,
-      state: baseState.copyWith(selectedPageCode: 'production'),
-      onLogout: () {},
-      onRefreshShellData: ({loadCatalog = false}) async {},
-      onNavigateToPageTarget:
-          ({
-            required pageCode,
-            String? tabCode,
-            String? routePayloadJson,
-          }) {},
-      onVisibilityConfigSaved: () {},
-      messageService: _TestShellMessageService(),
-      softwareSettingsController: SoftwareSettingsController.memory(),
-      timeSyncController: _buildTimeSyncController(
-        SoftwareSettingsController.memory(),
-      ),
-      userPageBuilder:
-          ({
-            required session,
-            required onLogout,
-            required visibleTabCodes,
-            required capabilityCodes,
-            required moduleActive,
-            String? preferredTabCode,
-            String? routePayloadJson,
-            VoidCallback? onVisibilityConfigSaved,
-          }) {
-            capturedActiveStates['user'] = moduleActive;
-            return const SizedBox.shrink();
-          },
-      productionPageBuilder:
-          ({
-            required session,
-            required onLogout,
-            required visibleTabCodes,
-            required capabilityCodes,
-            required moduleActive,
-            String? preferredTabCode,
-            String? routePayloadJson,
-          }) {
-            capturedActiveStates['production'] = moduleActive;
-            return const SizedBox.shrink();
-          },
+    await pumpProductionPage(selectedPageCode: 'production');
+    expect(
+      tester
+          .widget<ProductionOrderQueryPage>(find.byType(ProductionOrderQueryPage))
+          .pollingEnabled,
+      isTrue,
     );
 
-    registry.build(
-      pageCode: 'production',
-      session: _session,
-      state: baseState.copyWith(selectedPageCode: 'production'),
-      onLogout: () {},
-      onRefreshShellData: ({loadCatalog = false}) async {},
-      onNavigateToPageTarget:
-          ({
-            required pageCode,
-            String? tabCode,
-            String? routePayloadJson,
-          }) {},
-      onVisibilityConfigSaved: () {},
-      messageService: _TestShellMessageService(),
-      softwareSettingsController: SoftwareSettingsController.memory(),
-      timeSyncController: _buildTimeSyncController(
-        SoftwareSettingsController.memory(),
-      ),
-      userPageBuilder:
-          ({
-            required session,
-            required onLogout,
-            required visibleTabCodes,
-            required capabilityCodes,
-            required moduleActive,
-            String? preferredTabCode,
-            String? routePayloadJson,
-            VoidCallback? onVisibilityConfigSaved,
-          }) {
-            capturedActiveStates['user'] = moduleActive;
-            return const SizedBox.shrink();
-          },
-      productionPageBuilder:
-          ({
-            required session,
-            required onLogout,
-            required visibleTabCodes,
-            required capabilityCodes,
-            required moduleActive,
-            String? preferredTabCode,
-            String? routePayloadJson,
-          }) {
-            capturedActiveStates['production'] = moduleActive;
-            return const SizedBox.shrink();
-          },
+    await pumpProductionPage(selectedPageCode: 'user');
+    expect(
+      tester
+          .widget<ProductionOrderQueryPage>(find.byType(ProductionOrderQueryPage))
+          .pollingEnabled,
+      isFalse,
     );
-
-    expect(capturedActiveStates, {'user': false, 'production': true});
   });
 
   testWidgets('点击软件设置入口后显示软件设置页面说明', (tester) async {
