@@ -19,6 +19,8 @@ import 'package:mes_client/features/settings/presentation/software_settings_cont
 import 'package:mes_client/features/shell/models/home_dashboard_models.dart';
 import 'package:mes_client/features/shell/services/home_dashboard_service.dart';
 import 'package:mes_client/core/services/page_catalog_service.dart';
+import 'package:mes_client/features/shell/presentation/main_shell_page_registry.dart';
+import 'package:mes_client/features/shell/presentation/main_shell_state.dart';
 import 'package:mes_client/features/time_sync/models/time_sync_models.dart';
 import 'package:mes_client/features/time_sync/presentation/time_sync_controller.dart';
 import 'package:mes_client/features/time_sync/services/server_time_service.dart';
@@ -82,6 +84,22 @@ List<PageCatalogItem> _buildCatalog() {
       parentCode: 'user',
       alwaysVisible: false,
       sortOrder: 25,
+    ),
+    PageCatalogItem(
+      code: 'production',
+      name: '生产',
+      pageType: 'sidebar',
+      parentCode: null,
+      alwaysVisible: false,
+      sortOrder: 30,
+    ),
+    PageCatalogItem(
+      code: 'production_order_query',
+      name: '订单查询',
+      pageType: 'tab',
+      parentCode: 'production',
+      alwaysVisible: false,
+      sortOrder: 31,
     ),
     PageCatalogItem(
       code: 'message',
@@ -442,11 +460,22 @@ Future<void> _pumpMainShellPage(
     required VoidCallback onLogout,
     required List<String> visibleTabCodes,
     required Set<String> capabilityCodes,
+    required bool moduleActive,
     String? preferredTabCode,
     String? routePayloadJson,
     VoidCallback? onVisibilityConfigSaved,
   })?
   userPageBuilder,
+  Widget Function({
+    required AppSession session,
+    required VoidCallback onLogout,
+    required List<String> visibleTabCodes,
+    required Set<String> capabilityCodes,
+    required bool moduleActive,
+    String? preferredTabCode,
+    String? routePayloadJson,
+  })?
+  productionPageBuilder,
   SoftwareSettingsController? softwareSettingsController,
   TimeSyncController? timeSyncController,
   required VoidCallback onLogout,
@@ -475,6 +504,7 @@ Future<void> _pumpMainShellPage(
         messageWsServiceFactory: messageWsServiceFactory,
         homeDashboardService: homeDashboardService,
         userPageBuilder: userPageBuilder,
+        productionPageBuilder: productionPageBuilder,
       ),
     ),
   );
@@ -508,6 +538,223 @@ class _FakeServerTimeService extends ServerTimeService {
 class _FakeWindowsTimeSyncService extends WindowsTimeSyncService {}
 
 void main() {
+  testWidgets('主壳仅向当前模块传递活跃态，切换模块后会同步切换', (tester) async {
+    final registry = MainShellPageRegistry();
+    final capturedActiveStates = <String, bool>{};
+    final baseState = MainShellViewState(
+      loading: false,
+      currentUser: _buildCurrentUser(),
+      authzSnapshot: _buildSnapshot(
+        visibleSidebarCodes: const ['user', 'production'],
+        tabCodesByParent: const {
+          'user': ['account_settings'],
+          'production': ['production_order_query'],
+        },
+        moduleItems: [
+          _buildModuleItem('user'),
+          _buildModuleItem('production'),
+        ],
+      ),
+      catalog: _buildCatalog(),
+      tabCodesByParent: const {
+        'user': ['account_settings'],
+        'production': ['production_order_query'],
+      },
+    );
+
+    registry.build(
+      pageCode: 'user',
+      session: _session,
+      state: baseState.copyWith(selectedPageCode: 'user'),
+      onLogout: () {},
+      onRefreshShellData: ({loadCatalog = false}) async {},
+      onNavigateToPageTarget:
+          ({
+            required pageCode,
+            String? tabCode,
+            String? routePayloadJson,
+          }) {},
+      onVisibilityConfigSaved: () {},
+      messageService: _TestShellMessageService(),
+      softwareSettingsController: SoftwareSettingsController.memory(),
+      timeSyncController: _buildTimeSyncController(
+        SoftwareSettingsController.memory(),
+      ),
+      userPageBuilder:
+          ({
+            required session,
+            required onLogout,
+            required visibleTabCodes,
+            required capabilityCodes,
+            required moduleActive,
+            String? preferredTabCode,
+            String? routePayloadJson,
+            VoidCallback? onVisibilityConfigSaved,
+          }) {
+            capturedActiveStates['user'] = moduleActive;
+            return const SizedBox.shrink();
+          },
+      productionPageBuilder:
+          ({
+            required session,
+            required onLogout,
+            required visibleTabCodes,
+            required capabilityCodes,
+            required moduleActive,
+            String? preferredTabCode,
+            String? routePayloadJson,
+          }) {
+            capturedActiveStates['production'] = moduleActive;
+            return const SizedBox.shrink();
+          },
+    );
+
+    registry.build(
+      pageCode: 'production',
+      session: _session,
+      state: baseState.copyWith(selectedPageCode: 'user'),
+      onLogout: () {},
+      onRefreshShellData: ({loadCatalog = false}) async {},
+      onNavigateToPageTarget:
+          ({
+            required pageCode,
+            String? tabCode,
+            String? routePayloadJson,
+          }) {},
+      onVisibilityConfigSaved: () {},
+      messageService: _TestShellMessageService(),
+      softwareSettingsController: SoftwareSettingsController.memory(),
+      timeSyncController: _buildTimeSyncController(
+        SoftwareSettingsController.memory(),
+      ),
+      userPageBuilder:
+          ({
+            required session,
+            required onLogout,
+            required visibleTabCodes,
+            required capabilityCodes,
+            required moduleActive,
+            String? preferredTabCode,
+            String? routePayloadJson,
+            VoidCallback? onVisibilityConfigSaved,
+          }) {
+            capturedActiveStates['user'] = moduleActive;
+            return const SizedBox.shrink();
+          },
+      productionPageBuilder:
+          ({
+            required session,
+            required onLogout,
+            required visibleTabCodes,
+            required capabilityCodes,
+            required moduleActive,
+            String? preferredTabCode,
+            String? routePayloadJson,
+          }) {
+            capturedActiveStates['production'] = moduleActive;
+            return const SizedBox.shrink();
+          },
+    );
+
+    expect(capturedActiveStates, {'user': true, 'production': false});
+
+    registry.build(
+      pageCode: 'user',
+      session: _session,
+      state: baseState.copyWith(selectedPageCode: 'production'),
+      onLogout: () {},
+      onRefreshShellData: ({loadCatalog = false}) async {},
+      onNavigateToPageTarget:
+          ({
+            required pageCode,
+            String? tabCode,
+            String? routePayloadJson,
+          }) {},
+      onVisibilityConfigSaved: () {},
+      messageService: _TestShellMessageService(),
+      softwareSettingsController: SoftwareSettingsController.memory(),
+      timeSyncController: _buildTimeSyncController(
+        SoftwareSettingsController.memory(),
+      ),
+      userPageBuilder:
+          ({
+            required session,
+            required onLogout,
+            required visibleTabCodes,
+            required capabilityCodes,
+            required moduleActive,
+            String? preferredTabCode,
+            String? routePayloadJson,
+            VoidCallback? onVisibilityConfigSaved,
+          }) {
+            capturedActiveStates['user'] = moduleActive;
+            return const SizedBox.shrink();
+          },
+      productionPageBuilder:
+          ({
+            required session,
+            required onLogout,
+            required visibleTabCodes,
+            required capabilityCodes,
+            required moduleActive,
+            String? preferredTabCode,
+            String? routePayloadJson,
+          }) {
+            capturedActiveStates['production'] = moduleActive;
+            return const SizedBox.shrink();
+          },
+    );
+
+    registry.build(
+      pageCode: 'production',
+      session: _session,
+      state: baseState.copyWith(selectedPageCode: 'production'),
+      onLogout: () {},
+      onRefreshShellData: ({loadCatalog = false}) async {},
+      onNavigateToPageTarget:
+          ({
+            required pageCode,
+            String? tabCode,
+            String? routePayloadJson,
+          }) {},
+      onVisibilityConfigSaved: () {},
+      messageService: _TestShellMessageService(),
+      softwareSettingsController: SoftwareSettingsController.memory(),
+      timeSyncController: _buildTimeSyncController(
+        SoftwareSettingsController.memory(),
+      ),
+      userPageBuilder:
+          ({
+            required session,
+            required onLogout,
+            required visibleTabCodes,
+            required capabilityCodes,
+            required moduleActive,
+            String? preferredTabCode,
+            String? routePayloadJson,
+            VoidCallback? onVisibilityConfigSaved,
+          }) {
+            capturedActiveStates['user'] = moduleActive;
+            return const SizedBox.shrink();
+          },
+      productionPageBuilder:
+          ({
+            required session,
+            required onLogout,
+            required visibleTabCodes,
+            required capabilityCodes,
+            required moduleActive,
+            String? preferredTabCode,
+            String? routePayloadJson,
+          }) {
+            capturedActiveStates['production'] = moduleActive;
+            return const SizedBox.shrink();
+          },
+    );
+
+    expect(capturedActiveStates, {'user': false, 'production': true});
+  });
+
   testWidgets('点击软件设置入口后显示软件设置页面说明', (tester) async {
     await _pumpMainShellPage(
       tester,
@@ -706,6 +953,7 @@ void main() {
             required onLogout,
             required visibleTabCodes,
             required capabilityCodes,
+            required bool moduleActive,
             String? preferredTabCode,
             String? routePayloadJson,
             VoidCallback? onVisibilityConfigSaved,
@@ -762,6 +1010,7 @@ void main() {
             required onLogout,
             required visibleTabCodes,
             required capabilityCodes,
+            required bool moduleActive,
             String? preferredTabCode,
             String? routePayloadJson,
             VoidCallback? onVisibilityConfigSaved,
@@ -836,6 +1085,7 @@ void main() {
             required onLogout,
             required visibleTabCodes,
             required capabilityCodes,
+            required bool moduleActive,
             String? preferredTabCode,
             String? routePayloadJson,
             VoidCallback? onVisibilityConfigSaved,
@@ -1404,6 +1654,7 @@ void main() {
             required onLogout,
             required visibleTabCodes,
             required capabilityCodes,
+            required bool moduleActive,
             String? preferredTabCode,
             String? routePayloadJson,
             VoidCallback? onVisibilityConfigSaved,

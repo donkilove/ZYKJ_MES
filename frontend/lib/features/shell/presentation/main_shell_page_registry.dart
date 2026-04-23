@@ -22,6 +22,7 @@ typedef MainShellUserPageBuilder =
       required VoidCallback onLogout,
       required List<String> visibleTabCodes,
       required Set<String> capabilityCodes,
+      required bool moduleActive,
       String? preferredTabCode,
       String? routePayloadJson,
       VoidCallback? onVisibilityConfigSaved,
@@ -33,6 +34,7 @@ typedef MainShellModulePageBuilder =
       required VoidCallback onLogout,
       required List<String> visibleTabCodes,
       required Set<String> capabilityCodes,
+      required bool moduleActive,
       String? preferredTabCode,
       String? routePayloadJson,
     });
@@ -78,6 +80,11 @@ class MainShellPageRegistry {
           const <String>{};
     }
 
+    bool moduleActiveFor(String moduleCode) {
+      return state.activeUtilityCode == null &&
+          state.selectedPageCode == moduleCode;
+    }
+
     switch (pageCode) {
       case 'home':
         return HomePage(
@@ -108,6 +115,7 @@ class MainShellPageRegistry {
                 onLogout: onLogout,
                 visibleTabCodes: tabCodesFor('user'),
                 capabilityCodes: capabilityCodesFor('user'),
+                moduleActive: moduleActiveFor('user'),
                 preferredTabCode: state.preferredTabCode,
                 routePayloadJson: state.preferredRoutePayloadJson,
                 onVisibilityConfigSaved: onVisibilityConfigSaved,
@@ -117,6 +125,7 @@ class MainShellPageRegistry {
                 onLogout: onLogout,
                 visibleTabCodes: tabCodesFor('user'),
                 capabilityCodes: capabilityCodesFor('user'),
+                moduleActive: moduleActiveFor('user'),
                 preferredTabCode: state.preferredTabCode,
                 routePayloadJson: state.preferredRoutePayloadJson,
                 onVisibilityConfigSaved: onVisibilityConfigSaved,
@@ -129,6 +138,7 @@ class MainShellPageRegistry {
                 onLogout: onLogout,
                 visibleTabCodes: tabCodesFor('product'),
                 capabilityCodes: capabilityCodesFor('product'),
+                moduleActive: moduleActiveFor('product'),
                 preferredTabCode: state.preferredTabCode,
                 routePayloadJson: state.preferredRoutePayloadJson,
               )
@@ -148,6 +158,7 @@ class MainShellPageRegistry {
                 onLogout: onLogout,
                 visibleTabCodes: tabCodesFor('equipment'),
                 capabilityCodes: capabilityCodesFor('equipment'),
+                moduleActive: moduleActiveFor('equipment'),
                 preferredTabCode: state.preferredTabCode,
                 routePayloadJson: state.preferredRoutePayloadJson,
               )
@@ -167,6 +178,7 @@ class MainShellPageRegistry {
                 onLogout: onLogout,
                 visibleTabCodes: tabCodesFor('production'),
                 capabilityCodes: capabilityCodesFor('production'),
+                moduleActive: moduleActiveFor('production'),
                 preferredTabCode: state.preferredTabCode,
                 routePayloadJson: state.preferredRoutePayloadJson,
               )
@@ -175,6 +187,7 @@ class MainShellPageRegistry {
                 onLogout: onLogout,
                 visibleTabCodes: tabCodesFor('production'),
                 capabilityCodes: capabilityCodesFor('production'),
+                moduleActive: moduleActiveFor('production'),
                 preferredTabCode: state.preferredTabCode,
                 routePayloadJson: state.preferredRoutePayloadJson,
               );
@@ -186,6 +199,7 @@ class MainShellPageRegistry {
                 onLogout: onLogout,
                 visibleTabCodes: tabCodesFor('quality'),
                 capabilityCodes: capabilityCodesFor('quality'),
+                moduleActive: moduleActiveFor('quality'),
                 preferredTabCode: state.preferredTabCode,
                 routePayloadJson: state.preferredRoutePayloadJson,
               )
@@ -205,6 +219,7 @@ class MainShellPageRegistry {
                 onLogout: onLogout,
                 visibleTabCodes: tabCodesFor('craft'),
                 capabilityCodes: capabilityCodesFor('craft'),
+                moduleActive: moduleActiveFor('craft'),
                 preferredTabCode: state.preferredTabCode,
                 routePayloadJson: state.preferredRoutePayloadJson,
               )
