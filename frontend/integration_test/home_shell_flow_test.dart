@@ -564,7 +564,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('工序管理'), findsWidgets);
-    expect(find.textContaining('已定位工序 #71 装配检验'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('process-management-feedback-banner')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('process-focus-panel')), findsOneWidget);
+    expect(find.textContaining('已定位工序 #71 装配检验'), findsWidgets);
   });
 
   testWidgets('登录后经主壳和消息中心跳转到设备保养执行详情', (tester) async {

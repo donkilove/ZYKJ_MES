@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/craft/presentation/process_management_page.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
-import 'package:mes_client/core/widgets/crud_page_header.dart';
 
 class _FakeCraftService extends CraftService {
   _FakeCraftService() : super(AppSession(baseUrl: '', accessToken: ''));
@@ -146,20 +147,33 @@ Future<void> _pumpProcessManagementPage(
 }
 
 void main() {
-  testWidgets('中等桌面宽度下恢复左右双栏并接入公共页头', (tester) async {
-    await _pumpProcessManagementPage(tester, size: const Size(1200, 1200));
+  testWidgets('中等桌面宽度下使用统一页头和三栏工作台', (tester) async {
+    await _pumpProcessManagementPage(tester, size: const Size(1400, 1200));
 
     expect(tester.takeException(), isNull);
-    expect(find.byType(CrudPageHeader), findsOneWidget);
+    expect(find.byType(MesPageHeader), findsOneWidget);
+    expect(find.byKey(const ValueKey('process-management-feedback-banner')), findsOneWidget);
+    expect(find.byKey(const ValueKey('process-stage-panel')), findsOneWidget);
+    expect(find.byKey(const ValueKey('process-item-panel')), findsOneWidget);
+    expect(find.byKey(const ValueKey('process-focus-panel')), findsOneWidget);
+    expect(find.byType(MesSectionCard), findsAtLeastNWidgets(3));
     expect(find.text('全部状态'), findsNothing);
     expect(find.byTooltip('导出工段'), findsNothing);
     expect(find.byTooltip('导出工序'), findsNothing);
 
-    final stageListTopLeft = tester.getTopLeft(find.text('工段列表'));
-    final processListTopLeft = tester.getTopLeft(find.text('工序列表'));
+    final stageListTopLeft = tester.getTopLeft(
+      find.byKey(const ValueKey('process-stage-panel')),
+    );
+    final processListTopLeft = tester.getTopLeft(
+      find.byKey(const ValueKey('process-item-panel')),
+    );
+    final focusPanelTopLeft = tester.getTopLeft(
+      find.byKey(const ValueKey('process-focus-panel')),
+    );
 
     expect(processListTopLeft.dy, lessThan(stageListTopLeft.dy + 80));
     expect(processListTopLeft.dx, greaterThan(stageListTopLeft.dx + 80));
+    expect(focusPanelTopLeft.dx, greaterThan(processListTopLeft.dx + 80));
   });
 
   testWidgets('窄屏宽度下仍保持上下单栏兜底', (tester) async {
@@ -167,8 +181,12 @@ void main() {
 
     expect(tester.takeException(), isNull);
 
-    final stageListTopLeft = tester.getTopLeft(find.text('工段列表'));
-    final processListTopLeft = tester.getTopLeft(find.text('工序列表'));
+    final stageListTopLeft = tester.getTopLeft(
+      find.byKey(const ValueKey('process-stage-panel')),
+    );
+    final processListTopLeft = tester.getTopLeft(
+      find.byKey(const ValueKey('process-item-panel')),
+    );
 
     expect(processListTopLeft.dy, greaterThan(stageListTopLeft.dy + 80));
   });
@@ -211,7 +229,12 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.textContaining('已定位工序 #11 激光切割'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('process-management-feedback-banner')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('已定位工序 #11 激光切割'), findsWidgets);
+    expect(find.byKey(const ValueKey('process-focus-panel')), findsOneWidget);
     expect(find.textContaining('编码：CUT-01'), findsOneWidget);
   });
 
@@ -239,7 +262,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    await tester.tap(find.widgetWithText(FilledButton, '新增工序'));
+    await tester.tap(
+      find.byKey(const ValueKey('process-management-create-process-button')),
+    );
     await tester.pumpAndSettle();
     await tester.enterText(
       find.widgetWithText(TextFormField, '工序编码序号（两位）'),

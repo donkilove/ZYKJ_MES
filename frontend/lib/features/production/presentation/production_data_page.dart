@@ -134,7 +134,7 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
     }
   }
 
-  Future<void> _reloadOverview({bool clearMessage = true}) async {
+  Future<void> _reloadOverview() async {
     setState(() {
       _loadingOverview = true;
     });
