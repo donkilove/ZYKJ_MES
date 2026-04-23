@@ -37,11 +37,10 @@
 
 | 验证工具 | 验证对象 | 验证动作 | 结果 | 结论 |
 | --- | --- | --- | --- | --- |
-| `flutter test` | `process_management_page_test.dart` | `flutter test test/widgets/process_management_page_test.dart -r expanded` | 通过 | 工序管理页 widget 回归通过 |
+| `flutter test` | `process_management_page_test.dart` | `flutter test test/widgets/process_management_page_test.dart -r expanded` | 通过 | 紧凑工作台 widget 回归通过 |
 | `flutter test` | `craft_page_test.dart` | `flutter test test/widgets/craft_page_test.dart -r expanded` | 通过 | craft 页签入口未回归 |
-| `flutter test` | 组合 widget 回归 | `flutter test test/widgets/process_management_page_test.dart test/widgets/craft_page_test.dart -r expanded` | 通过 | 关键 widget 组合回归通过 |
 | `flutter test -d windows` | `home_shell_flow_test.dart` 指定用例 | `flutter test integration_test/home_shell_flow_test.dart -d windows --plain-name "登录后经主壳和消息中心跳转到工艺工序管理页" -r expanded` | 通过 | 主壳消息跳转到工序管理页回归通过 |
-| `flutter analyze` | 工序管理页相关改动文件 | `flutter analyze lib/features/craft/presentation/process_management_page.dart ...` | 通过 | 目标文件零告警 |
+| `flutter analyze` | 工序管理页相关改动文件 | `flutter analyze lib/features/craft/presentation/process_management_page.dart ... process_management_view_switch.dart ...` | 通过 | 目标文件零告警 |
 
 ## 6. 失败重试
 
@@ -49,7 +48,7 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | 失败测试 | `process-management-feedback-banner`、`process-focus-panel` 等锚点不存在 | 旧页面结构未完成三栏骨架和反馈区拆分 | 进入页面结构重构 | `flutter test process_management_page_test.dart` | 通过 |
 | 2 | 编译验证 | `process_item_panel.dart` import 路径错误、`stageId` 可空类型不匹配 | 新拆分文件接线错误 | 修复 import 与可空参数 | `flutter analyze` | 通过 |
-| 3 | 集成验证 | jump 定位文案在反馈区和右栏重复出现，旧断言假设只出现一次 | 新结构使定位信息在两处承接，断言过旧 | 将集成断言改为锚点 + `findsWidgets` | `flutter test -d windows` | 通过 |
+| 3 | 方案修正 | 用户确认改为“默认工序主视图 + 工段辅助入口”，旧实现仍沿用三栏详情方案 | 已实现与最新 spec 偏离 | 新增 `activeView`、视图切换区，移除主页面对 `process_focus_panel.dart` 的装配 | `flutter test`、`flutter analyze`、`flutter test -d windows` | 通过 |
 
 ## 7. 迁移说明
 

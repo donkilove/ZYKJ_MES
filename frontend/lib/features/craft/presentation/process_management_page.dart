@@ -4,13 +4,13 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/craft/presentation/widgets/process_delete_dialogs.dart';
-import 'package:mes_client/features/craft/presentation/widgets/process_focus_panel.dart';
 import 'package:mes_client/features/craft/presentation/widgets/process_item_dialog.dart';
 import 'package:mes_client/features/craft/presentation/widgets/process_item_panel.dart';
 import 'package:mes_client/features/craft/presentation/widgets/process_management_feedback_banner.dart';
 import 'package:mes_client/features/craft/presentation/widgets/process_management_models.dart';
 import 'package:mes_client/features/craft/presentation/widgets/process_management_page_header.dart';
 import 'package:mes_client/features/craft/presentation/widgets/process_management_state.dart';
+import 'package:mes_client/features/craft/presentation/widgets/process_management_view_switch.dart';
 import 'package:mes_client/features/craft/presentation/widgets/process_stage_dialog.dart';
 import 'package:mes_client/features/craft/presentation/widgets/process_stage_panel.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
@@ -38,8 +38,6 @@ class ProcessManagementPage extends StatefulWidget {
 }
 
 class _ProcessManagementPageState extends State<ProcessManagementPage> {
-  static const double _twoPaneBreakpoint = 1100;
-
   late final CraftService _service;
   late final ProcessManagementState _pageState;
   final _stageSearchController = TextEditingController();
@@ -49,7 +47,6 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
   List<CraftStageItem> get _stages => _viewState.stages;
   List<CraftStageItem> get _filteredStages => _pageState.filteredStages;
   List<CraftProcessItem> get _filteredProcesses => _pageState.filteredProcesses;
-  CraftProcessItem? get _focusedProcess => _pageState.focusedProcess;
 
   @override
   void initState() {
@@ -196,6 +193,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
       ).showSnackBar(const SnackBar(content: Text('请先新增工段')));
       return;
     }
+    _pageState.setActiveView(ProcessManagementPrimaryView.processList);
 
     final saved = await showDialog<bool>(
       context: context,
@@ -477,99 +475,27 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isNarrow = MediaQuery.sizeOf(context).width < _twoPaneBreakpoint;
-
-    final workspace = isNarrow
-        ? Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                height: 320,
-                child: ProcessStagePanel(
-                  searchController: _stageSearchController,
-                  items: _filteredStages,
-                  canWrite: widget.canWrite,
-                  onKeywordChanged: _pageState.setStageKeyword,
-                  onActionSelected: _handleStageAction,
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 360,
-                child: ProcessItemPanel(
-                  searchController: _processSearchController,
-                  stageFilter: _viewState.processStageFilter,
-                  stageOptions: _stages,
-                  items: _filteredProcesses,
-                  focusedProcessId: _viewState.focusedProcessId,
-                  canWrite: widget.canWrite,
-                  onKeywordChanged: _pageState.setProcessKeyword,
-                  onStageFilterChanged: _pageState.setProcessStageFilter,
-                  onFocusProcess: _pageState.focusProcess,
-                  onActionSelected: _handleProcessAction,
-                ),
-              ),
-              const SizedBox(height: 12),
-              ProcessFocusPanel(
-                item: _focusedProcess,
-                jumpNotice: _viewState.jumpNotice,
-                onViewReference: _focusedProcess == null
-                    ? null
-                    : () => _showProcessReferenceDialog(_focusedProcess!),
-              ),
-            ],
-          )
-        : Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                flex: 8,
-                child: SizedBox(
-                  height: 720,
-                  child: ProcessStagePanel(
-                    searchController: _stageSearchController,
-                    items: _filteredStages,
-                    canWrite: widget.canWrite,
-                    onKeywordChanged: _pageState.setStageKeyword,
-                    onActionSelected: _handleStageAction,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 12,
-                child: SizedBox(
-                  height: 720,
-                  child: ProcessItemPanel(
-                    searchController: _processSearchController,
-                    stageFilter: _viewState.processStageFilter,
-                    stageOptions: _stages,
-                    items: _filteredProcesses,
-                    focusedProcessId: _viewState.focusedProcessId,
-                    canWrite: widget.canWrite,
-                    onKeywordChanged: _pageState.setProcessKeyword,
-                    onStageFilterChanged: _pageState.setProcessStageFilter,
-                    onFocusProcess: _pageState.focusProcess,
-                    onActionSelected: _handleProcessAction,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 10,
-                child: SizedBox(
-                  height: 720,
-                  child: ProcessFocusPanel(
-                    item: _focusedProcess,
-                    jumpNotice: _viewState.jumpNotice,
-                    onViewReference: _focusedProcess == null
-                        ? null
-                        : () => _showProcessReferenceDialog(_focusedProcess!),
-                  ),
-                ),
-              ),
-            ],
-          );
+    final workspace = switch (_viewState.activeView) {
+      ProcessManagementPrimaryView.processList => ProcessItemPanel(
+          searchController: _processSearchController,
+          stageFilter: _viewState.processStageFilter,
+          stageOptions: _stages,
+          items: _filteredProcesses,
+          focusedProcessId: _viewState.focusedProcessId,
+          canWrite: widget.canWrite,
+          onKeywordChanged: _pageState.setProcessKeyword,
+          onStageFilterChanged: _pageState.setProcessStageFilter,
+          onFocusProcess: _pageState.focusProcess,
+          onActionSelected: _handleProcessAction,
+        ),
+      ProcessManagementPrimaryView.stageList => ProcessStagePanel(
+          searchController: _stageSearchController,
+          items: _filteredStages,
+          canWrite: widget.canWrite,
+          onKeywordChanged: _pageState.setStageKeyword,
+          onActionSelected: _handleStageAction,
+        ),
+    };
 
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -587,6 +513,11 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
           ProcessManagementFeedbackBanner(
             message: _viewState.message,
             jumpNotice: _viewState.jumpNotice,
+          ),
+          const SizedBox(height: 12),
+          ProcessManagementViewSwitch(
+            activeView: _viewState.activeView,
+            onChanged: _pageState.setActiveView,
           ),
           const SizedBox(height: 12),
           Expanded(

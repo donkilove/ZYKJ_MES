@@ -134,6 +134,11 @@ class ProcessManagementState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setActiveView(ProcessManagementPrimaryView view) {
+    _viewState = _viewState.copyWith(activeView: view);
+    notifyListeners();
+  }
+
   void focusProcess(int? processId) {
     _viewState = _viewState.copyWith(focusedProcessId: processId);
     notifyListeners();
@@ -163,6 +168,7 @@ class ProcessManagementState extends ChangeNotifier {
         jumpNotice: '未找到目标工序记录 #$processId',
         clearFocusedProcessId: true,
         lastHandledJumpRequestId: jumpRequestId,
+        activeView: ProcessManagementPrimaryView.processList,
       );
       notifyListeners();
       return;
@@ -173,6 +179,7 @@ class ProcessManagementState extends ChangeNotifier {
       focusedProcessId: matched.id,
       jumpNotice: '已定位工序 #${matched.id} ${matched.name}',
       lastHandledJumpRequestId: jumpRequestId,
+      activeView: ProcessManagementPrimaryView.processList,
     );
     notifyListeners();
   }

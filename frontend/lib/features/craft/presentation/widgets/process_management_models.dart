@@ -4,6 +4,8 @@ enum StageAction { edit, toggle, viewReference, delete }
 
 enum ProcessAction { edit, toggle, viewReference, delete }
 
+enum ProcessManagementPrimaryView { processList, stageList }
+
 class ProcessManagementViewState {
   const ProcessManagementViewState({
     required this.loading,
@@ -16,6 +18,7 @@ class ProcessManagementViewState {
     required this.processStageFilter,
     required this.focusedProcessId,
     required this.lastHandledJumpRequestId,
+    required this.activeView,
   });
 
   final bool loading;
@@ -28,6 +31,7 @@ class ProcessManagementViewState {
   final int? processStageFilter;
   final int? focusedProcessId;
   final int lastHandledJumpRequestId;
+  final ProcessManagementPrimaryView activeView;
 
   ProcessManagementViewState copyWith({
     bool? loading,
@@ -41,6 +45,7 @@ class ProcessManagementViewState {
     int? focusedProcessId,
     bool clearFocusedProcessId = false,
     int? lastHandledJumpRequestId,
+    ProcessManagementPrimaryView? activeView,
   }) {
     return ProcessManagementViewState(
       loading: loading ?? this.loading,
@@ -56,6 +61,7 @@ class ProcessManagementViewState {
           : focusedProcessId ?? this.focusedProcessId,
       lastHandledJumpRequestId:
           lastHandledJumpRequestId ?? this.lastHandledJumpRequestId,
+      activeView: activeView ?? this.activeView,
     );
   }
 
@@ -70,6 +76,7 @@ class ProcessManagementViewState {
     processStageFilter: null,
     focusedProcessId: null,
     lastHandledJumpRequestId: -1,
+    activeView: ProcessManagementPrimaryView.processList,
   );
 }
 

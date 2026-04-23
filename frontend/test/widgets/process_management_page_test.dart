@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
-import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/craft/presentation/process_management_page.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
@@ -147,48 +146,37 @@ Future<void> _pumpProcessManagementPage(
 }
 
 void main() {
-  testWidgets('中等桌面宽度下使用统一页头和三栏工作台', (tester) async {
+  testWidgets('默认进入工序主视图并显示视图切换按钮', (tester) async {
     await _pumpProcessManagementPage(tester, size: const Size(1400, 1200));
 
     expect(tester.takeException(), isNull);
     expect(find.byType(MesPageHeader), findsOneWidget);
     expect(find.byKey(const ValueKey('process-management-feedback-banner')), findsOneWidget);
-    expect(find.byKey(const ValueKey('process-stage-panel')), findsOneWidget);
+    expect(find.byKey(const ValueKey('process-management-view-switch')), findsOneWidget);
     expect(find.byKey(const ValueKey('process-item-panel')), findsOneWidget);
-    expect(find.byKey(const ValueKey('process-focus-panel')), findsOneWidget);
-    expect(find.byType(MesSectionCard), findsAtLeastNWidgets(3));
+    expect(find.byKey(const ValueKey('process-stage-panel')), findsNothing);
+    expect(find.byKey(const ValueKey('process-focus-panel')), findsNothing);
     expect(find.text('全部状态'), findsNothing);
     expect(find.byTooltip('导出工段'), findsNothing);
     expect(find.byTooltip('导出工序'), findsNothing);
-
-    final stageListTopLeft = tester.getTopLeft(
-      find.byKey(const ValueKey('process-stage-panel')),
-    );
-    final processListTopLeft = tester.getTopLeft(
-      find.byKey(const ValueKey('process-item-panel')),
-    );
-    final focusPanelTopLeft = tester.getTopLeft(
-      find.byKey(const ValueKey('process-focus-panel')),
-    );
-
-    expect(processListTopLeft.dy, lessThan(stageListTopLeft.dy + 80));
-    expect(processListTopLeft.dx, greaterThan(stageListTopLeft.dx + 80));
-    expect(focusPanelTopLeft.dx, greaterThan(processListTopLeft.dx + 80));
   });
 
-  testWidgets('窄屏宽度下仍保持上下单栏兜底', (tester) async {
-    await _pumpProcessManagementPage(tester, size: const Size(900, 1200));
+  testWidgets('点击工段列表按钮后切换到工段视图', (tester) async {
+    await _pumpProcessManagementPage(tester, size: const Size(1400, 1200));
 
     expect(tester.takeException(), isNull);
 
-    final stageListTopLeft = tester.getTopLeft(
-      find.byKey(const ValueKey('process-stage-panel')),
-    );
-    final processListTopLeft = tester.getTopLeft(
-      find.byKey(const ValueKey('process-item-panel')),
-    );
+    await tester.tap(find.byKey(const ValueKey('process-view-switch-stage')));
+    await tester.pumpAndSettle();
 
-    expect(processListTopLeft.dy, greaterThan(stageListTopLeft.dy + 80));
+    expect(
+      find.byKey(const ValueKey('process-stage-panel')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('process-item-panel')),
+      findsNothing,
+    );
   });
 
   testWidgets('工序管理引用弹窗展示编码字段', (tester) async {
@@ -204,8 +192,8 @@ void main() {
     expect(find.textContaining('编码/编号：TPL-21'), findsOneWidget);
   });
 
-  testWidgets('工序管理支持 jump 定位并展示横幅', (tester) async {
-    tester.view.physicalSize = const Size(1600, 1200);
+  testWidgets('jump 命中工序时自动停留在工序视图并展示反馈横幅', (tester) async {
+    tester.view.physicalSize = const Size(1400, 1200);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
       tester.view.resetPhysicalSize();
@@ -233,9 +221,11 @@ void main() {
       find.byKey(const ValueKey('process-management-feedback-banner')),
       findsOneWidget,
     );
-    expect(find.textContaining('已定位工序 #11 激光切割'), findsWidgets);
-    expect(find.byKey(const ValueKey('process-focus-panel')), findsOneWidget);
-    expect(find.textContaining('编码：CUT-01'), findsOneWidget);
+    expect(find.byKey(const ValueKey('process-management-view-switch')), findsOneWidget);
+    expect(find.byKey(const ValueKey('process-item-panel')), findsOneWidget);
+    expect(find.byKey(const ValueKey('process-stage-panel')), findsNothing);
+    expect(find.textContaining('已定位工序 #11 激光切割'), findsOneWidget);
+    expect(find.text('CUT-01'), findsOneWidget);
   });
 
   testWidgets('工序管理支持新增与删除工序', (tester) async {
