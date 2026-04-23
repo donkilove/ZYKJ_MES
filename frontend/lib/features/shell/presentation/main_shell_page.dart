@@ -130,9 +130,7 @@ class _MainShellPageState extends State<MainShellPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      unawaited(_controller.handleAppResumed());
-    }
+    unawaited(_controller.handleAppLifecycleStateChanged(state));
   }
 
   Future<void> _handleRetry() async {

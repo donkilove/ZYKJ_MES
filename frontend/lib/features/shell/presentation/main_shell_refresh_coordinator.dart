@@ -30,16 +30,22 @@ class MainShellRefreshCoordinator {
   Timer? _visibilityTimer;
   Timer? _unreadTimer;
   Timer? _debounceTimer;
+  bool _globalPollingEnabled = false;
 
   void startPolling() {
-    _visibilityTimer?.cancel();
-    _unreadTimer?.cancel();
-    _visibilityTimer = Timer.periodic(visibilityPollInterval, (_) {
-      refreshVisibility(silent: true);
-    });
-    _unreadTimer = Timer.periodic(unreadPollInterval, (_) {
-      refreshUnreadCount();
-    });
+    setGlobalPollingEnabled(true);
+  }
+
+  void setGlobalPollingEnabled(bool enabled) {
+    if (_globalPollingEnabled == enabled) {
+      return;
+    }
+    _globalPollingEnabled = enabled;
+    if (enabled) {
+      _startGlobalPolling();
+      return;
+    }
+    _cancelGlobalPolling();
   }
 
   void scheduleHomeDashboardRefresh() {
@@ -57,9 +63,25 @@ class MainShellRefreshCoordinator {
     await refreshUnreadCount();
   }
 
-  void dispose() {
+  void _startGlobalPolling() {
+    _cancelGlobalPolling();
+    _visibilityTimer = Timer.periodic(visibilityPollInterval, (_) {
+      refreshVisibility(silent: true);
+    });
+    _unreadTimer = Timer.periodic(unreadPollInterval, (_) {
+      refreshUnreadCount();
+    });
+  }
+
+  void _cancelGlobalPolling() {
     _visibilityTimer?.cancel();
+    _visibilityTimer = null;
     _unreadTimer?.cancel();
+    _unreadTimer = null;
+  }
+
+  void dispose() {
+    _cancelGlobalPolling();
     _debounceTimer?.cancel();
   }
 }

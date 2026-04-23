@@ -44,4 +44,38 @@ void main() {
     expect(refreshCount, 0);
     coordinator.dispose();
   });
+
+  test('停用主壳全局轮询后不再触发权限与未读刷新', () async {
+    var visibilityRefreshCount = 0;
+    var unreadRefreshCount = 0;
+    final coordinator = MainShellRefreshCoordinator(
+      isHomePageVisible: () => true,
+      refreshUnreadCount: () async {
+        unreadRefreshCount += 1;
+      },
+      refreshVisibility: ({bool loadCatalog = false, bool silent = false}) async {
+        visibilityRefreshCount += 1;
+      },
+      refreshHomeDashboard: ({bool silent = false}) async {},
+      debounceDuration: const Duration(milliseconds: 50),
+      unreadPollInterval: const Duration(milliseconds: 80),
+      visibilityPollInterval: const Duration(milliseconds: 60),
+    );
+
+    coordinator.startPolling();
+    await Future<void>.delayed(const Duration(milliseconds: 90));
+
+    expect(visibilityRefreshCount, greaterThanOrEqualTo(1));
+    expect(unreadRefreshCount, greaterThanOrEqualTo(1));
+
+    final visibilityRefreshCountBeforePause = visibilityRefreshCount;
+    final unreadRefreshCountBeforePause = unreadRefreshCount;
+
+    coordinator.setGlobalPollingEnabled(false);
+    await Future<void>.delayed(const Duration(milliseconds: 160));
+
+    expect(visibilityRefreshCount, visibilityRefreshCountBeforePause);
+    expect(unreadRefreshCount, unreadRefreshCountBeforePause);
+    coordinator.dispose();
+  });
 }

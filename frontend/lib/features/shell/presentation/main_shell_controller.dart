@@ -99,6 +99,21 @@ class MainShellController extends ChangeNotifier {
     _wsService?.reconnect();
   }
 
+  Future<void> handleAppLifecycleStateChanged(AppLifecycleState state) async {
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _refreshCoordinator?.setGlobalPollingEnabled(true);
+        await handleAppResumed();
+        return;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.detached:
+        _refreshCoordinator?.setGlobalPollingEnabled(false);
+        return;
+    }
+  }
+
   Future<void> initialize() async {
     _setState(_state.copyWith(loading: true, message: ''));
 

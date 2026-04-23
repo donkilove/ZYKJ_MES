@@ -164,21 +164,24 @@ MessageItem _buildMessageItem() {
   );
 }
 
-HomeDashboardData _buildDashboardData() {
-  return const HomeDashboardData(
+HomeDashboardData _buildDashboardData({
+  HomeDashboardTodoSummary todoSummary = const HomeDashboardTodoSummary(
+    totalCount: 0,
+    pendingApprovalCount: 0,
+    highPriorityCount: 0,
+    exceptionCount: 0,
+    overdueCount: 0,
+  ),
+  List<HomeDashboardTodoItem> todoItems = const [],
+}) {
+  return HomeDashboardData(
     generatedAt: null,
     noticeCount: 0,
-    todoSummary: HomeDashboardTodoSummary(
-      totalCount: 0,
-      pendingApprovalCount: 0,
-      highPriorityCount: 0,
-      exceptionCount: 0,
-      overdueCount: 0,
-    ),
-    todoItems: [],
-    riskItems: [],
-    kpiItems: [],
-    degradedBlocks: [],
+    todoSummary: todoSummary,
+    todoItems: todoItems,
+    riskItems: const [],
+    kpiItems: const [],
+    degradedBlocks: const [],
   );
 }
 
@@ -226,6 +229,18 @@ class _TestShellAuthzService extends AuthzService {
       throw error!;
     }
     return snapshot ?? _buildSnapshot();
+  }
+}
+
+class _CountingShellAuthzService extends _TestShellAuthzService {
+  _CountingShellAuthzService({super.snapshot, super.error});
+
+  int callCount = 0;
+
+  @override
+  Future<AuthzSnapshotResult> loadAuthzSnapshot() async {
+    callCount += 1;
+    return super.loadAuthzSnapshot();
   }
 }
 
@@ -352,6 +367,22 @@ class _FakeMessageWsService extends MessageWsService {
   void reconnect() {}
 }
 
+class _CountingReconnectMessageWsService extends _FakeMessageWsService {
+  _CountingReconnectMessageWsService({
+    required super.baseUrl,
+    required super.accessToken,
+    required super.onEvent,
+    required super.onDisconnected,
+  });
+
+  int reconnectCount = 0;
+
+  @override
+  void reconnect() {
+    reconnectCount += 1;
+  }
+}
+
 class _CountingHomeDashboardService extends HomeDashboardService {
   _CountingHomeDashboardService() : super(_session);
 
@@ -361,6 +392,17 @@ class _CountingHomeDashboardService extends HomeDashboardService {
   Future<HomeDashboardData> load() async {
     loadCount += 1;
     return _buildDashboardData();
+  }
+}
+
+class _TestHomeDashboardService extends HomeDashboardService {
+  _TestHomeDashboardService(this.data) : super(_session);
+
+  final HomeDashboardData data;
+
+  @override
+  Future<HomeDashboardData> load() async {
+    return data;
   }
 }
 
@@ -494,7 +536,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('控制本机软件的外观和布局偏好。'), findsOneWidget);
+    expect(find.text('主题、密度与预览'), findsOneWidget);
+    expect(find.text('跟随系统'), findsOneWidget);
   });
 
   testWidgets('软件设置页展示启动后默认进入选项并可更新 controller', (tester) async {
@@ -737,6 +780,30 @@ void main() {
   });
 
   testWidgets('首页快捷跳转按可见菜单动态展示并优先携带首个可见页签', (tester) async {
+    final homeDashboardService = _TestHomeDashboardService(
+      _buildDashboardData(
+        todoSummary: const HomeDashboardTodoSummary(
+          totalCount: 1,
+          pendingApprovalCount: 1,
+          highPriorityCount: 0,
+          exceptionCount: 0,
+          overdueCount: 0,
+        ),
+        todoItems: const [
+          HomeDashboardTodoItem(
+            id: 1,
+            title: '待办跳转到用户管理',
+            categoryLabel: '用户模块',
+            priorityLabel: '待审批',
+            sourceModule: 'user',
+            targetPageCode: 'user',
+            targetTabCode: 'user_management',
+            targetRoutePayloadJson: '{"target_tab_code":"user_management"}',
+          ),
+        ],
+      ),
+    );
+
     await _pumpMainShellPage(
       tester,
       authService: _TestShellAuthService(),
@@ -750,6 +817,7 @@ void main() {
       ),
       pageCatalogService: _TestShellPageCatalogService(),
       messageService: _TestShellMessageService(),
+      homeDashboardService: homeDashboardService,
       messageWsServiceFactory:
           ({
             required baseUrl,
@@ -781,20 +849,11 @@ void main() {
       onLogout: () {},
     );
 
-    final todoCard = find.ancestor(
-      of: find.text('我的待办队列'),
-      matching: find.byType(Card),
-    );
-    expect(
-      find.descendant(of: todoCard, matching: find.text('用户')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: todoCard, matching: find.text('产品')),
-      findsNothing,
-    );
+    expect(find.text('我的待办队列'), findsOneWidget);
+    expect(find.text('待办跳转到用户管理'), findsOneWidget);
+    expect(find.text('产品'), findsNothing);
 
-    await tester.tap(find.descendant(of: todoCard, matching: find.text('用户')));
+    await tester.tap(find.text('待办跳转到用户管理'));
     await tester.pumpAndSettle();
 
     expect(
@@ -883,6 +942,55 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(homeDashboardService.loadCount, 2);
+  });
+
+  testWidgets('主壳进入后台时停止全局轮询，恢复前台后立即补拉并重连 WS', (tester) async {
+    _CountingReconnectMessageWsService? wsService;
+    final authzService = _CountingShellAuthzService();
+    final messageService = _CountingShellMessageService();
+
+    await _pumpMainShellPage(
+      tester,
+      authService: _TestShellAuthService(),
+      authzService: authzService,
+      pageCatalogService: _TestShellPageCatalogService(),
+      messageService: messageService,
+      messageWsServiceFactory:
+          ({
+            required baseUrl,
+            required accessToken,
+            required onEvent,
+            required onDisconnected,
+          }) {
+            wsService = _CountingReconnectMessageWsService(
+              baseUrl: baseUrl,
+              accessToken: accessToken,
+              onEvent: onEvent,
+              onDisconnected: onDisconnected,
+            );
+            return wsService!;
+          },
+      onLogout: () {},
+    );
+
+    expect(authzService.callCount, 1);
+    expect(messageService.unreadCountCallCount, 0);
+    expect(wsService!.reconnectCount, 0);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 31));
+
+    expect(authzService.callCount, 1);
+    expect(messageService.unreadCountCallCount, 0);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(authzService.callCount, 2);
+    expect(messageService.unreadCountCallCount, 1);
+    expect(wsService!.reconnectCount, 1);
   });
 
   testWidgets('防抖窗口内多次消息事件会合并为一次工作台刷新', (tester) async {
