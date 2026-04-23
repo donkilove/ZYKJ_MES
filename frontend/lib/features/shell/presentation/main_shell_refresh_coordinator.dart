@@ -78,6 +78,8 @@ class MainShellRefreshCoordinator {
     _visibilityTimer = null;
     _unreadTimer?.cancel();
     _unreadTimer = null;
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
   }
 
   void dispose() {
