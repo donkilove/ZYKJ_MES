@@ -21,6 +21,9 @@
 | 5 | 验证 | `flutter test test/widgets/message_center_page_test.dart -r expanded` | 默认 | Task 1 / Task 2 / Task 3 / Task 4 相关重做回归验证 | 23/23 通过 | 2026-04-24 |
 | 6 | 验证 | `flutter test test/widgets/main_shell_page_test.dart --plain-name "主壳会把消息模块活跃态真实传到消息中心页面" -r expanded` | 默认 | 验证主壳到消息中心活跃态透传 | 1/1 通过 | 2026-04-24 |
 | 7 | 验证 | `flutter analyze` | 默认 | 验证静态质量基线 | 通过 | 2026-04-24 |
+| 8 | 执行 | 宿主安全命令 | 默认 | 按用户新要求移除筛选区与消息概览区 | 页面收口完成 | 2026-04-24 |
+| 9 | 验证 | `flutter test test/widgets/message_center_page_test.dart -r expanded` | 默认 | 验证移除两个区块后的消息中心主路径 | 22/22 通过 | 2026-04-24 |
+| 10 | 验证 | `flutter analyze` | 默认 | 验证移除两个区块后的静态质量 | 通过 | 2026-04-24 |
 
 ## 3. 验证留痕
 

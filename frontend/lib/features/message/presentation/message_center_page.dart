@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
@@ -8,12 +7,10 @@ import 'package:mes_client/features/message/models/message_models.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
-import 'package:mes_client/features/message/presentation/widgets/message_center_filter_section.dart';
 import 'package:mes_client/features/message/presentation/widgets/message_center_header.dart';
 import 'package:mes_client/features/message/presentation/widgets/message_center_detail_sections.dart';
 import 'package:mes_client/features/message/presentation/widgets/message_center_list_section.dart';
 import 'package:mes_client/features/message/presentation/widgets/message_center_message_card.dart';
-import 'package:mes_client/features/message/presentation/widgets/message_center_overview_section.dart';
 import 'package:mes_client/features/message/presentation/widgets/message_center_preview_panel.dart';
 import 'package:mes_client/features/message/services/message_service.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
@@ -91,35 +88,18 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   List<MessageItem> _items = [];
   MessageItem? _selectedItem;
   int _total = 0;
-  int _allMessageCount = 0;
   int _page = 1;
   int _pageSize = 20;
   bool _detailLoading = false;
   MessageDetailResult? _selectedDetail;
 
-  // 概览统计
-  int _unreadCount = 0;
-  int _todoCount = 0;
-  int _urgentCount = 0;
   final Set<int> _selectedIds = <int>{};
-
-  // 筛选条件
-  final _keywordCtrl = TextEditingController();
-  String _statusFilter = '';
-  String _typeFilter = '';
-  String _priorityFilter = '';
-  String _sourceModuleFilter = '';
-  DateTimeRange? _dateRange;
-  bool _todoOnly = false;
-  bool _includeInactive = false;
-  String? _lastHandledRoutePayloadJson;
 
   @override
   void initState() {
     super.initState();
     _service = widget.service ?? MessageService(widget.session);
     _userService = widget.userService ?? UserService(widget.session);
-    _consumeRoutePayload(widget.routePayloadJson, triggerLoad: false);
     _load();
     _updatePollingState();
   }
@@ -134,9 +114,6 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     if (pollingBecameDisabled) {
       _stopPolling();
     }
-    if (widget.routePayloadJson != oldWidget.routePayloadJson) {
-      _consumeRoutePayload(widget.routePayloadJson);
-    }
     if (pollingBecameEnabled) {
       _updatePollingState(triggerImmediateLoad: true);
     } else if (widget.refreshTick != oldWidget.refreshTick &&
@@ -145,51 +122,13 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     }
   }
 
-  void _consumeRoutePayload(String? rawPayload, {bool triggerLoad = true}) {
-    if (rawPayload == null ||
-        rawPayload.trim().isEmpty ||
-        rawPayload == _lastHandledRoutePayloadJson) {
-      return;
-    }
-    try {
-      final payload = jsonDecode(rawPayload) as Map<String, dynamic>;
-      final preset = (payload['preset'] as String? ?? '').trim();
-      if (preset != 'todo_only') {
-        return;
-      }
-      _lastHandledRoutePayloadJson = rawPayload;
-      if (triggerLoad) {
-        setState(() {
-          _todoOnly = true;
-          _page = 1;
-          _selectedIds.clear();
-        });
-        _load();
-      } else {
-        _todoOnly = true;
-        _page = 1;
-        _selectedIds.clear();
-      }
-    } catch (_) {}
-  }
-
   @override
   void dispose() {
     _pollTimer?.cancel();
-    _keywordCtrl.dispose();
     super.dispose();
   }
 
   void _applySummary(MessageSummaryResult summary) {
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _allMessageCount = summary.totalCount;
-      _unreadCount = summary.unreadCount;
-      _todoCount = summary.todoUnreadCount;
-      _urgentCount = summary.urgentUnreadCount;
-    });
     widget.onUnreadCountChanged?.call(summary.unreadCount);
   }
 
@@ -221,17 +160,15 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
       final result = await _service.listMessages(
         page: _page,
         pageSize: _pageSize,
-        keyword: _keywordCtrl.text.trim().isEmpty
-            ? null
-            : _keywordCtrl.text.trim(),
-        status: _statusFilter.isEmpty ? null : _statusFilter,
-        messageType: _typeFilter.isEmpty ? null : _typeFilter,
-        priority: _priorityFilter.isEmpty ? null : _priorityFilter,
-        sourceModule: _sourceModuleFilter.isEmpty ? null : _sourceModuleFilter,
-        startTime: _dateRange?.start,
-        endTime: _dateRange?.end,
-        todoOnly: _todoOnly,
-        activeOnly: !_includeInactive,
+        keyword: null,
+        status: null,
+        messageType: null,
+        priority: null,
+        sourceModule: null,
+        startTime: null,
+        endTime: null,
+        todoOnly: false,
+        activeOnly: true,
       );
       if (!mounted) return;
       setState(() {
@@ -435,21 +372,6 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     }
   }
 
-  void _resetFilters() {
-    setState(() {
-      _keywordCtrl.clear();
-      _statusFilter = '';
-      _typeFilter = '';
-      _priorityFilter = '';
-      _sourceModuleFilter = '';
-      _dateRange = null;
-      _todoOnly = false;
-      _includeInactive = false;
-      _selectedIds.clear();
-    });
-    _load();
-  }
-
   void _toggleSelected(int messageId, bool selected) {
     setState(() {
       if (selected) {
@@ -458,30 +380,6 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         _selectedIds.remove(messageId);
       }
     });
-  }
-
-  Future<void> _pickDateRange() async {
-    if (!mounted) {
-      return;
-    }
-    final picker = widget.onPickDateRange;
-    final DateTimeRange? picked;
-    if (picker != null) {
-      picked = await picker(_dateRange);
-    } else {
-      final now = widget.nowProvider();
-      picked = await showDateRangePicker(
-        context: context,
-        firstDate: DateTime(now.year - 2, now.month, now.day),
-        lastDate: DateTime(now.year, now.month, now.day),
-        initialDateRange: _dateRange,
-      );
-    }
-    if (!mounted || picked == null) {
-      return;
-    }
-    setState(() => _dateRange = picked);
-    _load();
   }
 
   Future<void> _selectItem(MessageItem item, {bool silent = true}) async {
@@ -554,7 +452,6 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         errorText: _error,
         loading: _loading,
         canPublishAnnouncement: widget.canPublishAnnouncement,
-        onReset: _resetFilters,
         onRefresh: () => _load(),
         onMaintenance: () => _runMaintenance(),
         onPublishAnnouncement: () => _publishAnnouncement(),
@@ -562,175 +459,9 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         onMarkBatchRead: () => _markBatchRead(),
         batchReadCount: _selectedIds.length,
       ),
-      filters: MessageCenterFilterSection(child: _buildFilterBar(theme)),
-      banner: MessageCenterOverviewSection(
-        unreadCount: _unreadCount,
-        todoCount: _todoCount,
-        urgentCount: _urgentCount,
-        allCount: _allMessageCount,
-      ),
       content: _buildBody(theme),
     );
   }
-
-  Widget _buildFilterBar(ThemeData theme) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        SizedBox(
-          width: 200,
-          height: 36,
-          child: TextField(
-            key: const ValueKey('message-center-keyword-field'),
-            controller: _keywordCtrl,
-            decoration: const InputDecoration(
-              hintText: '搜索标题/摘要',
-              prefixIcon: Icon(Icons.search, size: 18),
-              isDense: true,
-              contentPadding: EdgeInsets.symmetric(vertical: 8),
-              border: OutlineInputBorder(),
-            ),
-            onSubmitted: (_) => _load(),
-          ),
-        ),
-        _filterDropdown(
-          '状态',
-          _statusFilter,
-          {'': '全部', 'unread': '未读', 'read': '已读'},
-          (v) => setState(() {
-            _statusFilter = v;
-            _load();
-          }),
-        ),
-        _filterDropdown(
-          '分类',
-          _typeFilter,
-          {
-            '': '全部',
-            'todo': '待处理',
-            'notice': '通知',
-            'announcement': '公告',
-            'warning': '预警',
-          },
-          (v) => setState(() {
-            _typeFilter = v;
-            _load();
-          }),
-        ),
-        _filterDropdown(
-          '优先级',
-          _priorityFilter,
-          {'': '全部', 'urgent': '紧急', 'important': '重要', 'normal': '普通'},
-          (v) => setState(() {
-            _priorityFilter = v;
-            _load();
-          }),
-        ),
-        _filterDropdown(
-          '来源模块',
-          _sourceModuleFilter,
-          {
-            '': '全部',
-            'user': '用户',
-            'production': '生产',
-            'quality': '品质',
-            'equipment': '设备',
-            'product': '产品',
-            'craft': '工艺',
-          },
-          (v) => setState(() {
-            _sourceModuleFilter = v;
-            _load();
-          }),
-        ),
-        FilterChip(
-          label: const Text('仅看待处理'),
-          selected: _todoOnly,
-          onSelected: (value) {
-            setState(() => _todoOnly = value);
-            _load();
-          },
-        ),
-        FilterChip(
-          label: const Text('包含历史消息'),
-          selected: _includeInactive,
-          onSelected: (value) {
-            setState(() => _includeInactive = value);
-            _load();
-          },
-        ),
-        _dateRangeButton(theme),
-        _filterDropdown(
-          '每页条数',
-          '$_pageSize',
-          const {'10': '10条', '20': '20条', '50': '50条', '100': '100条'},
-          (v) {
-            setState(() {
-              _pageSize = int.tryParse(v) ?? 20;
-              _page = 1;
-            });
-            _load(reset: false);
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _filterDropdown(
-    String label,
-    String current,
-    Map<String, String> options,
-    void Function(String) onChanged,
-  ) {
-    return DropdownButton<String>(
-      key: ValueKey('message-center-filter-$label'),
-      value: current,
-      isDense: true,
-      underline: const SizedBox(),
-      hint: Text(label),
-      items: options.entries
-          .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
-          .toList(),
-      onChanged: (v) {
-        if (v != null) onChanged(v);
-      },
-    );
-  }
-
-  Widget _dateRangeButton(ThemeData theme) {
-    final hasRange = _dateRange != null;
-    return OutlinedButton.icon(
-      key: const ValueKey('message-center-date-range-button'),
-      onPressed: _pickDateRange,
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        side: BorderSide(
-          color: hasRange
-              ? theme.colorScheme.primary
-              : theme.colorScheme.outline,
-        ),
-      ),
-      icon: Icon(
-        Icons.date_range,
-        size: 16,
-        color: hasRange ? theme.colorScheme.primary : null,
-      ),
-      label: Text(
-        hasRange
-            ? '${_fmtDate(_dateRange!.start)} ~ ${_fmtDate(_dateRange!.end)}'
-            : '推送时间',
-        style: TextStyle(
-          fontSize: 13,
-          color: hasRange ? theme.colorScheme.primary : null,
-        ),
-      ),
-    );
-  }
-
-  String _fmtDate(DateTime dt) =>
-      '${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
 
   Widget _buildBody(ThemeData theme) {
     return LayoutBuilder(
