@@ -841,7 +841,18 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
           },
         );
         if (constraints.maxWidth < 1100) {
-          return list;
+          return Column(
+            key: const ValueKey('message-center-stacked-layout'),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(flex: 11, child: list),
+              const SizedBox(height: 16),
+              Expanded(
+                flex: 10,
+                child: MessageCenterPreviewPanel(child: _buildPreview(theme)),
+              ),
+            ],
+          );
         }
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1005,7 +1016,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
               onPressed: widget.canViewDetail
                   ? () => _loadSelectedDetail(item.id)
                   : null,
-              child: const Text('查看详情'),
+              child: const Text('刷新详情'),
             ),
             const Spacer(),
             if (!item.isRead)

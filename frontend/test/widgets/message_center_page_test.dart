@@ -1043,6 +1043,28 @@ void main() {
     expect(find.text('您的账号已创建，请进入个人中心修改密码。'), findsOneWidget);
   });
 
+  testWidgets('message center 窄布局下点击消息后仍能看到详情内容', (tester) async {
+    final service = _FakeMessageService();
+
+    tester.view.physicalSize = const Size(1000, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(_buildMessageCenterPageApp(service: service));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('message-center-tile-3')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('message-center-stacked-layout')), findsOneWidget);
+    expect(find.text('消息详情预览'), findsOneWidget);
+    expect(find.text('您的账号已创建，请进入个人中心修改密码。'), findsOneWidget);
+    expect(find.byKey(const ValueKey('message-center-preview-detail-3')), findsOneWidget);
+  });
+
   testWidgets('message center 详情面板在小高度下仍可独立滚动到低位动作区', (tester) async {
     final service = _FakeMessageService();
 
@@ -1123,7 +1145,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('正文内容'), findsOneWidget);
       expect(find.text('投递失败'), findsWidgets);
-      expect(find.text('查看详情'), findsOneWidget);
+      expect(find.text('刷新详情'), findsOneWidget);
 
       await tester.ensureVisible(
         find.byKey(const ValueKey('message-center-preview-read-1')),
