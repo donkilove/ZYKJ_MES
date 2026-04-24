@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/ui/patterns/mes_detail_panel.dart';
 import 'package:mes_client/core/ui/patterns/mes_filter_bar.dart';
-import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
 import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
@@ -47,6 +46,8 @@ class _FakeMessageService extends MessageService {
   Completer<MessageSummaryResult>? summaryCompleter;
   final List<Completer<MessageSummaryResult>> summaryCompleters =
       <Completer<MessageSummaryResult>>[];
+  final List<Completer<MessageDetailResult>> detailCompleters =
+      <Completer<MessageDetailResult>>[];
   final Map<int, Object> detailErrors = <int, Object>{};
   final Map<int, Object> jumpErrors = <int, Object>{};
   final Map<int, Object> markReadErrors = <int, Object>{};
@@ -472,11 +473,16 @@ class _FakeMessageService extends MessageService {
       throw detailErrors[messageId]!;
     }
     final item = _items.firstWhere((entry) => entry.id == messageId);
-    return MessageDetailResult(
+    final result = MessageDetailResult(
       item: item,
       sourceId: messageId == 1 ? '101' : null,
       failureReasonHint: messageId == 1 ? '实时推送失败，系统将按计划继续重试。' : null,
     );
+    if (detailCompleters.isNotEmpty) {
+      final completer = detailCompleters.removeAt(0);
+      return completer.future;
+    }
+    return result;
   }
 
   @override
@@ -663,18 +669,14 @@ Future<void> _pumpMessageCenterPage(
 }
 
 Finder _metricValueFinder(String label, String value) {
-  final labelFinder = find.text(label);
-  final metricCardFinder = find.ancestor(
-    of: labelFinder,
-    matching: find.byType(MesMetricCard),
+  final cardFinder = find.byKey(
+    ValueKey('message-center-overview-card-$label'),
   );
-  return find.descendant(of: metricCardFinder, matching: find.text(value));
+  return find.descendant(of: cardFinder, matching: find.text(value));
 }
 
 void main() {
-  testWidgets('message center 在 pollingEnabled=false 时不会启动轮询', (
-    tester,
-  ) async {
+  testWidgets('message center 在 pollingEnabled=false 时不会启动轮询', (tester) async {
     final service = _FakeMessageService();
 
     await _pumpMessageCenterPage(
@@ -715,9 +717,7 @@ void main() {
     expect(service.listMessagesCallCount, 2);
   });
 
-  testWidgets('message center 同帧停用轮询并刷新 tick 变化时不额外触发列表刷新', (
-    tester,
-  ) async {
+  testWidgets('message center 同帧停用轮询并刷新 tick 变化时不额外触发列表刷新', (tester) async {
     final service = _FakeMessageService();
 
     tester.view.physicalSize = const Size(1600, 1200);
@@ -768,9 +768,7 @@ void main() {
     expect(service.summaryAfterListCompletionCount, 0);
   });
 
-  testWidgets('message center 摘要已启动但延迟完成时列表仍先渲染并解除 loading', (
-    tester,
-  ) async {
+  testWidgets('message center 摘要已启动但延迟完成时列表仍先渲染并解除 loading', (tester) async {
     final service = _FakeMessageService()
       ..summaryCompleter = Completer<MessageSummaryResult>();
 
@@ -836,7 +834,10 @@ void main() {
     expect(service.listMessagesCallCount, 1);
     expect(service.summaryCallCount, 1);
     expect(find.text('待办消息'), findsWidgets);
-    expect(find.byKey(const ValueKey('message-center-select-1')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('message-center-select-1')),
+      findsOneWidget,
+    );
     expect(find.text('摘要接口失败'), findsNothing);
     expect(find.byType(LinearProgressIndicator), findsNothing);
 
@@ -925,9 +926,7 @@ void main() {
     expect(unreadCounts, [5]);
   });
 
-  testWidgets('message center 列表同步失败时不会被摘要链路拖慢或额外发起摘要', (
-    tester,
-  ) async {
+  testWidgets('message center 列表同步失败时不会被摘要链路拖慢或额外发起摘要', (tester) async {
     final service = _FakeMessageService()
       ..listError = ApiException('无权限访问消息接口', 401)
       ..summaryCompleter = Completer<MessageSummaryResult>();
@@ -991,6 +990,279 @@ void main() {
     expect(find.byType(MesPaginationBar), findsOneWidget);
   });
 
+  testWidgets('message center 重组顶部操作区、次级筛选层与紧凑概览区', (tester) async {
+    final service = _FakeMessageService();
+
+    await _pumpMessageCenterPage(tester, service: service);
+
+    expect(
+      find.byKey(const ValueKey('message-center-primary-actions')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('message-center-secondary-filters')),
+      findsOneWidget,
+    );
+
+    final overviewCards = <String>['未读消息', '待处理', '高优先级', '全部消息'].map(
+      (label) => find.byKey(ValueKey('message-center-overview-card-$label')),
+    );
+    for (final card in overviewCards) {
+      expect(card, findsOneWidget);
+    }
+    expect(_metricValueFinder('未读消息', '12'), findsOneWidget);
+    expect(_metricValueFinder('待处理', '1'), findsOneWidget);
+    expect(_metricValueFinder('高优先级', '2'), findsOneWidget);
+    expect(_metricValueFinder('全部消息', '14'), findsOneWidget);
+
+    final firstOverviewCardSize = tester.getSize(
+      find.byKey(const ValueKey('message-center-overview-card-未读消息')),
+    );
+    expect(firstOverviewCardSize.height, lessThan(84));
+  });
+
+  testWidgets('message center 点击左侧消息项后右侧详情预览切换到目标消息', (tester) async {
+    final service = _FakeMessageService();
+
+    await _pumpMessageCenterPage(tester, service: service);
+
+    expect(
+      find.byKey(const ValueKey('message-center-preview-detail-1')),
+      findsOneWidget,
+    );
+    expect(find.text('正文内容'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('message-center-tile-3')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('message-center-preview-detail-3')),
+      findsOneWidget,
+    );
+    expect(find.text('您的账号已创建，请进入个人中心修改密码。'), findsOneWidget);
+    expect(find.text('排障提示'), findsNothing);
+  });
+
+  testWidgets('message center 列表详情操作改为页内切换而不是弹窗主路径', (tester) async {
+    final service = _FakeMessageService();
+
+    await _pumpMessageCenterPage(tester, service: service);
+
+    await tester.tap(find.byKey(const ValueKey('message-center-detail-3')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('消息详情'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('message-center-preview-detail-3')),
+      findsOneWidget,
+    );
+    expect(find.text('您的账号已创建，请进入个人中心修改密码。'), findsOneWidget);
+  });
+
+  testWidgets('message center 窄布局下点击消息后仍能看到详情内容', (tester) async {
+    final service = _FakeMessageService();
+
+    tester.view.physicalSize = const Size(1000, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(_buildMessageCenterPageApp(service: service));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('message-center-tile-3')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('message-center-stacked-layout')),
+      findsOneWidget,
+    );
+    expect(find.text('消息详情预览'), findsOneWidget);
+    expect(find.text('您的账号已创建，请进入个人中心修改密码。'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('message-center-preview-detail-3')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('message center 宽布局下使用显式双列分支 key', (tester) async {
+    final service = _FakeMessageService();
+
+    tester.view.physicalSize = const Size(1440, 960);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(_buildMessageCenterPageApp(service: service));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('message-center-split-layout')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('message-center-stacked-layout')),
+      findsNothing,
+    );
+    expect(find.text('消息详情预览'), findsOneWidget);
+  });
+
+  testWidgets('message center 详情面板在小高度下仍可独立滚动到低位动作区', (tester) async {
+    final service = _FakeMessageService();
+
+    tester.view.physicalSize = const Size(1600, 620);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(_buildMessageCenterPageApp(service: service));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('message-center-preview-scroll')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('message-center-preview-read-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('message-center-preview-jump-1')),
+      findsOneWidget,
+    );
+    expect(find.text('排障提示'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    final viewportHeight =
+        tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    final beforeScrollRect = tester.getRect(
+      find.byKey(const ValueKey('message-center-preview-read-1')),
+    );
+    expect(beforeScrollRect.bottom, greaterThan(viewportHeight));
+
+    await tester.dragUntilVisible(
+      find.byKey(const ValueKey('message-center-preview-read-1')),
+      find.byKey(const ValueKey('message-center-preview-scroll')),
+      const Offset(0, -120),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('message-center-preview-read-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('message-center-preview-jump-1')),
+      findsOneWidget,
+    );
+    expect(find.text('排障提示'), findsOneWidget);
+    final afterScrollRect = tester.getRect(
+      find.byKey(const ValueKey('message-center-preview-read-1')),
+    );
+    expect(afterScrollRect.bottom, lessThanOrEqualTo(viewportHeight));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('message center 更小高度下详情区不出现 overflow 异常', (tester) async {
+    final service = _FakeMessageService();
+
+    tester.view.physicalSize = const Size(1280, 540);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(_buildMessageCenterPageApp(service: service));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('message-center-preview-scroll')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('message-center-preview-jump-1')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('RenderFlex overflowed'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('message center 会丢弃旧详情请求返回结果', (tester) async {
+    final initialDetailCompleter = Completer<MessageDetailResult>()
+      ..complete(
+        MessageDetailResult(
+          item: _FakeMessageService()._items.firstWhere((entry) => entry.id == 1),
+          sourceId: '101',
+          failureReasonHint: '实时推送失败，系统将按计划继续重试。',
+        ),
+      );
+    final firstDetailCompleter = Completer<MessageDetailResult>();
+    final secondDetailCompleter = Completer<MessageDetailResult>();
+    final service = _FakeMessageService()
+      ..detailCompleters.addAll([
+        initialDetailCompleter,
+        firstDetailCompleter,
+        secondDetailCompleter,
+      ]);
+
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(_buildMessageCenterPageApp(service: service));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('message-center-tile-1')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('message-center-tile-3')));
+    await tester.pump();
+
+    final secondItem = service._items.firstWhere((entry) => entry.id == 3);
+    secondDetailCompleter.complete(
+      MessageDetailResult(
+        item: secondItem,
+        sourceId: null,
+        failureReasonHint: null,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('message-center-preview-detail-3')),
+      findsOneWidget,
+    );
+    expect(find.text('您的账号已创建，请进入个人中心修改密码。'), findsOneWidget);
+
+    final firstItem = service._items.firstWhere((entry) => entry.id == 1);
+    firstDetailCompleter.complete(
+      MessageDetailResult(
+        item: firstItem,
+        sourceId: '101',
+        failureReasonHint: '实时推送失败，系统将按计划继续重试。',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('message-center-preview-detail-3')),
+      findsOneWidget,
+    );
+    expect(find.text('您的账号已创建，请进入个人中心修改密码。'), findsOneWidget);
+    expect(find.text('实时推送失败，系统将按计划继续重试。'), findsNothing);
+  });
+
   testWidgets(
     'message center supports filters, preview, read actions and jumps',
     (tester) async {
@@ -1029,8 +1301,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('正文内容'), findsOneWidget);
       expect(find.text('投递失败'), findsWidgets);
-      expect(find.text('查看详情'), findsOneWidget);
+      expect(find.text('刷新详情'), findsOneWidget);
 
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('message-center-preview-read-1')),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(
         find.byKey(const ValueKey('message-center-preview-read-1')),
       );
@@ -1146,6 +1422,14 @@ void main() {
       await tester.tap(find.text('包含历史消息'));
       await tester.pumpAndSettle();
       expect(service.lastActiveOnly, isFalse);
+      await tester.scrollUntilVisible(
+        find.text('历史公告'),
+        180,
+        scrollable: find.descendant(
+          of: find.byKey(const ValueKey('message-center-list-scroll')),
+          matching: find.byType(Scrollable),
+        ),
+      );
       expect(find.text('历史公告'), findsWidgets);
 
       await tester.tap(
@@ -1175,14 +1459,24 @@ void main() {
       await tester.pumpAndSettle();
       expect(service.publishCount, 1);
 
-      await tester.tap(find.text('待办消息').first);
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('message-center-tile-1')),
+        -180,
+        scrollable: find.descendant(
+          of: find.byKey(const ValueKey('message-center-list-scroll')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('message-center-tile-1')),
+      );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('详情').first);
+      await tester.tap(find.byKey(const ValueKey('message-center-tile-1')));
       await tester.pumpAndSettle();
-      expect(find.text('消息详情'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('message-center-detail-1')));
+      await tester.pumpAndSettle();
+      expect(find.text('消息详情'), findsNothing);
       expect(find.text('阅读状态'), findsWidgets);
-      await tester.tap(find.text('关闭'));
-      await tester.pumpAndSettle();
       await tester.tap(find.text('跳转').first);
       await tester.pumpAndSettle();
       expect(navigatedPage, 'production');
@@ -1192,7 +1486,11 @@ void main() {
         '{"action":"detail","authorization_id":101}',
       );
 
-      await tester.tap(find.text('注册审批通过').first);
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('message-center-tile-3')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('message-center-tile-3')));
       await tester.pumpAndSettle();
       final userRow = find.ancestor(
         of: find.text('注册审批通过').first,
@@ -1204,7 +1502,11 @@ void main() {
       expect(navigatedTab, 'account_settings');
       expect(navigatedRoutePayloadJson, '{"action":"change_password"}');
 
-      await tester.tap(find.text('产品版本已发布').first);
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('message-center-tile-4')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('message-center-tile-4')));
       await tester.pumpAndSettle();
       final productRow = find.ancestor(
         of: find.text('产品版本已发布').first,
@@ -1221,7 +1523,11 @@ void main() {
         '{"action":"view_version","product_id":66,"product_name":"产品A","target_version":3}',
       );
 
-      await tester.tap(find.text('工艺模板已发布').first);
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('message-center-tile-5')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('message-center-tile-5')));
       await tester.pumpAndSettle();
       final craftRow = find.ancestor(
         of: find.text('工艺模板已发布').first,

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
-import 'package:mes_client/core/ui/patterns/mes_toolbar.dart';
+import 'package:mes_client/features/message/presentation/widgets/message_center_action_bar.dart';
 
 class MessageCenterHeader extends StatelessWidget {
   const MessageCenterHeader({
@@ -37,57 +37,32 @@ class MessageCenterHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         MesPageHeader(title: '消息中心', subtitle: nowText),
-        const SizedBox(height: 8),
-        MesToolbar(
-          leading: errorText.isEmpty
-              ? const SizedBox.shrink()
-              : Text(
-                  errorText,
-                  style: TextStyle(
-                    color: theme.colorScheme.error,
-                    fontSize: 12,
-                  ),
-                ),
-          trailing: [
-            OutlinedButton.icon(
-              onPressed: loading ? null : onReset,
-              icon: const Icon(Icons.filter_alt_off, size: 16),
-              label: const Text('重置'),
+        if (errorText.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.errorContainer.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: theme.colorScheme.errorContainer),
             ),
-            OutlinedButton.icon(
-              onPressed: loading ? null : onRefresh,
-              icon: const Icon(Icons.refresh, size: 16),
-              label: const Text('刷新'),
+            child: Text(
+              errorText,
+              style: TextStyle(color: theme.colorScheme.error, fontSize: 12),
             ),
-            if (canPublishAnnouncement)
-              OutlinedButton.icon(
-                onPressed: loading ? null : onMaintenance,
-                icon: const Icon(Icons.build_circle_outlined, size: 16),
-                label: const Text('执行维护'),
-              ),
-            if (canPublishAnnouncement)
-              FilledButton.icon(
-                onPressed: loading ? null : onPublishAnnouncement,
-                icon: const Icon(Icons.campaign_outlined, size: 16),
-                label: const Text('发布公告'),
-              ),
-            FilledButton.icon(
-              key: const ValueKey('message-center-mark-all-read-button'),
-              onPressed: loading ? null : onMarkAllRead,
-              icon: const Icon(Icons.done_all, size: 16),
-              label: const Text('全部已读'),
-            ),
-            FilledButton.tonalIcon(
-              key: const ValueKey('message-center-mark-batch-read-button'),
-              onPressed: loading || batchReadCount == 0
-                  ? null
-                  : onMarkBatchRead,
-              icon: const Icon(Icons.playlist_add_check, size: 16),
-              label: Text(
-                '批量已读${batchReadCount == 0 ? '' : '($batchReadCount)'}',
-              ),
-            ),
-          ],
+          ),
+        ],
+        MessageCenterActionBar(
+          loading: loading,
+          canPublishAnnouncement: canPublishAnnouncement,
+          onReset: onReset,
+          onRefresh: onRefresh,
+          onMaintenance: onMaintenance,
+          onPublishAnnouncement: onPublishAnnouncement,
+          onMarkAllRead: onMarkAllRead,
+          onMarkBatchRead: onMarkBatchRead,
+          batchReadCount: batchReadCount,
         ),
       ],
     );

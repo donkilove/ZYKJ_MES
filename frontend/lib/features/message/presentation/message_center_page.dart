@@ -10,7 +10,9 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/features/message/presentation/widgets/message_center_filter_section.dart';
 import 'package:mes_client/features/message/presentation/widgets/message_center_header.dart';
+import 'package:mes_client/features/message/presentation/widgets/message_center_detail_sections.dart';
 import 'package:mes_client/features/message/presentation/widgets/message_center_list_section.dart';
+import 'package:mes_client/features/message/presentation/widgets/message_center_message_card.dart';
 import 'package:mes_client/features/message/presentation/widgets/message_center_overview_section.dart';
 import 'package:mes_client/features/message/presentation/widgets/message_center_preview_panel.dart';
 import 'package:mes_client/features/message/services/message_service.dart';
@@ -82,6 +84,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   late final UserService _userService;
   Timer? _pollTimer;
   int _loadRequestToken = 0;
+  int _detailRequestToken = 0;
 
   bool _loading = false;
   String _error = '';
@@ -206,9 +209,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         .then((summary) {
           summaryResolved = true;
           summaryResult = summary;
-          if (!listSucceeded ||
-              !mounted ||
-              requestToken != _loadRequestToken) {
+          if (!listSucceeded || !mounted || requestToken != _loadRequestToken) {
             return;
           }
           _applySummary(summary);
@@ -226,9 +227,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         status: _statusFilter.isEmpty ? null : _statusFilter,
         messageType: _typeFilter.isEmpty ? null : _typeFilter,
         priority: _priorityFilter.isEmpty ? null : _priorityFilter,
-        sourceModule: _sourceModuleFilter.isEmpty
-            ? null
-            : _sourceModuleFilter,
+        sourceModule: _sourceModuleFilter.isEmpty ? null : _sourceModuleFilter,
         startTime: _dateRange?.start,
         endTime: _dateRange?.end,
         todoOnly: _todoOnly,
@@ -306,12 +305,13 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     if (!widget.canViewDetail) {
       return;
     }
+    final requestToken = ++_detailRequestToken;
     if (!silent && mounted) {
       setState(() => _detailLoading = true);
     }
     try {
       final detail = await _service.getMessageDetail(messageId);
-      if (!mounted) {
+      if (!mounted || requestToken != _detailRequestToken) {
         return;
       }
       setState(() {
@@ -334,7 +334,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
       }
       setState(() => _error = e.toString());
     } finally {
-      if (mounted && !silent) {
+      if (mounted && !silent && requestToken == _detailRequestToken) {
         setState(() => _detailLoading = false);
       }
     }
@@ -484,6 +484,18 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     _load();
   }
 
+  Future<void> _selectItem(MessageItem item, {bool silent = true}) async {
+    setState(() {
+      _selectedItem = item;
+      if (_selectedDetail?.item.id != item.id) {
+        _selectedDetail = null;
+      }
+    });
+    if (widget.canViewDetail) {
+      await _loadSelectedDetail(item.id, silent: silent);
+    }
+  }
+
   Future<void> _navigateToPage(MessageItem item) async {
     if (!widget.canUseJump || widget.onNavigateToPage == null) {
       return;
@@ -530,87 +542,6 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     final l = dt.toLocal();
     return '${l.year}-${l.month.toString().padLeft(2, '0')}-${l.day.toString().padLeft(2, '0')} '
         '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
-  }
-
-  void _showDetailDialog(MessageItem item) {
-    final detail = _selectedDetail?.item.id == item.id ? _selectedDetail : null;
-    showDialog(
-      context: context,
-      builder: (_) {
-        final theme = Theme.of(context);
-        final rows = <Widget>[
-          _detailRow('标题', item.title, theme),
-          _detailRow('类型', item.messageTypeName, theme),
-          _detailRow('优先级', item.priorityName, theme),
-          if (item.summary != null && item.summary!.isNotEmpty)
-            _detailRow('摘要', item.summary!, theme),
-          if (widget.canViewDetail &&
-              detail?.item.content != null &&
-              detail!.item.content!.isNotEmpty)
-            _detailRow('内容', detail.item.content!, theme),
-          if (item.sourceModuleName.isNotEmpty)
-            _detailRow('来源模块', item.sourceModuleName, theme),
-          if (detail?.sourceId != null && detail!.sourceId!.isNotEmpty)
-            _detailRow('来源ID', detail.sourceId!, theme),
-          if (item.sourceCode != null && item.sourceCode!.isNotEmpty)
-            _detailRow('来源编号', item.sourceCode!, theme),
-          if (item.publishedAt != null)
-            _detailRow('发布时间', _formatDateTime(item.publishedAt!), theme),
-          _detailRow('消息状态', item.statusName, theme),
-          _detailRow('阅读状态', item.readStatusName, theme),
-          _detailRow('投递状态', item.deliveryStatusName, theme),
-          _detailRow('投递次数', '${item.deliveryAttemptCount}', theme),
-          if (item.lastPushAt != null)
-            _detailRow('最近投递', _formatDateTime(item.lastPushAt!), theme),
-          if (item.nextRetryAt != null)
-            _detailRow('下次重试', _formatDateTime(item.nextRetryAt!), theme),
-          if (item.readAt != null)
-            _detailRow('阅读时间', _formatDateTime(item.readAt!), theme),
-          if (detail?.failureReasonHint != null &&
-              detail!.failureReasonHint!.isNotEmpty)
-            _detailRow('排障提示', detail.failureReasonHint!, theme),
-        ];
-        return AlertDialog(
-          title: const Text('消息详情'),
-          content: SizedBox(
-            width: 480,
-            child: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, children: rows),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('关闭'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _detailRow(String label, String value, ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(
-              label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.outline,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: SelectableText(value, style: theme.textTheme.bodyMedium),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -804,7 +735,9 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   Widget _buildBody(ThemeData theme) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        const stackedLayoutBreakpoint = 1100.0;
         final totalPages = _total == 0 ? 1 : (_total / _pageSize).ceil();
+        final useStackedLayout = constraints.maxWidth < stackedLayoutBreakpoint;
         final list = MessageCenterListSection(
           loading: _loading,
           error: _error,
@@ -823,15 +756,28 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
             _load(reset: false);
           },
         );
-        if (constraints.maxWidth < 1100) {
-          return list;
+        if (useStackedLayout) {
+          return Column(
+            key: const ValueKey('message-center-stacked-layout'),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(flex: 11, child: list),
+              const SizedBox(height: 16),
+              Expanded(
+                flex: 10,
+                child: MessageCenterPreviewPanel(child: _buildPreview(theme)),
+              ),
+            ],
+          );
         }
         return Row(
+          key: const ValueKey('message-center-split-layout'),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(flex: 16, child: list),
-            const SizedBox(width: 12),
+            Expanded(flex: 15, child: list),
+            const SizedBox(width: 16),
             Expanded(
-              flex: 9,
+              flex: 11,
               child: MessageCenterPreviewPanel(child: _buildPreview(theme)),
             ),
           ],
@@ -841,15 +787,12 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   }
 
   Widget _buildMessageList(ThemeData theme) {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          for (var index = 0; index < _items.length; index++) ...[
-            _buildMessageTile(_items[index], theme),
-            if (index != _items.length - 1) const Divider(height: 1),
-          ],
-        ],
-      ),
+    return ListView.separated(
+      key: const ValueKey('message-center-list-scroll'),
+      padding: const EdgeInsets.only(right: 4),
+      itemCount: _items.length,
+      itemBuilder: (context, index) => _buildMessageTile(_items[index], theme),
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
     );
   }
 
@@ -869,57 +812,128 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
       );
     }
     final disabledReason = item.isActive ? null : item.inactiveReasonName;
+    final fields = <MessageCenterDetailField>[
+      MessageCenterDetailField(label: '标题', value: item.title),
+      MessageCenterDetailField(label: '分类', value: item.messageTypeName),
+      MessageCenterDetailField(label: '优先级', value: item.priorityName),
+      if (item.summary != null && item.summary!.isNotEmpty)
+        MessageCenterDetailField(label: '摘要', value: item.summary!),
+      if (widget.canViewDetail &&
+          detail?.item.content != null &&
+          detail!.item.content!.isNotEmpty)
+        MessageCenterDetailField(label: '正文', value: detail.item.content!),
+      if (item.sourceModuleName.isNotEmpty)
+        MessageCenterDetailField(label: '来源模块', value: item.sourceModuleName),
+      if (detail?.sourceId != null && detail!.sourceId!.isNotEmpty)
+        MessageCenterDetailField(label: '来源ID', value: detail.sourceId!),
+      if (item.sourceCode != null && item.sourceCode!.isNotEmpty)
+        MessageCenterDetailField(label: '来源对象', value: item.sourceCode!),
+      if (item.publishedAt != null)
+        MessageCenterDetailField(
+          label: '推送时间',
+          value: _formatDateTime(item.publishedAt!),
+        ),
+      MessageCenterDetailField(label: '消息状态', value: item.statusName),
+      MessageCenterDetailField(label: '阅读状态', value: item.readStatusName),
+      MessageCenterDetailField(label: '投递状态', value: item.deliveryStatusName),
+      MessageCenterDetailField(
+        label: '投递次数',
+        value: '${item.deliveryAttemptCount}',
+      ),
+      if (item.lastPushAt != null)
+        MessageCenterDetailField(
+          label: '最近投递',
+          value: _formatDateTime(item.lastPushAt!),
+        ),
+      if (item.nextRetryAt != null)
+        MessageCenterDetailField(
+          label: '下次重试',
+          value: _formatDateTime(item.nextRetryAt!),
+        ),
+      if (item.readAt != null)
+        MessageCenterDetailField(
+          label: '已读时间',
+          value: _formatDateTime(item.readAt!),
+        ),
+      if (detail?.failureReasonHint != null &&
+          detail!.failureReasonHint!.isNotEmpty)
+        MessageCenterDetailField(
+          label: '排障提示',
+          value: detail.failureReasonHint!,
+        ),
+      if (disabledReason != null)
+        MessageCenterDetailField(label: '跳转状态', value: disabledReason),
+      if (!widget.canViewDetail)
+        const MessageCenterDetailField(label: '详情权限', value: '当前账号未开通消息详情查看权限'),
+      if (!widget.canUseJump || widget.onNavigateToPage == null)
+        const MessageCenterDetailField(label: '跳转权限', value: '当前账号未开通业务跳转权限'),
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _detailRow('标题', item.title, theme),
-        _detailRow('分类', item.messageTypeName, theme),
-        _detailRow('优先级', item.priorityName, theme),
-        if (item.summary != null && item.summary!.isNotEmpty)
-          _detailRow('摘要', item.summary!, theme),
-        if (widget.canViewDetail &&
-            detail?.item.content != null &&
-            detail!.item.content!.isNotEmpty)
-          _detailRow('正文', detail.item.content!, theme),
-        if (item.sourceModuleName.isNotEmpty)
-          _detailRow('来源模块', item.sourceModuleName, theme),
-        if (detail?.sourceId != null && detail!.sourceId!.isNotEmpty)
-          _detailRow('来源ID', detail.sourceId!, theme),
-        if (item.sourceCode != null && item.sourceCode!.isNotEmpty)
-          _detailRow('来源对象', item.sourceCode!, theme),
-        if (item.publishedAt != null)
-          _detailRow('推送时间', _formatDateTime(item.publishedAt!), theme),
-        _detailRow('消息状态', item.statusName, theme),
-        _detailRow('阅读状态', item.readStatusName, theme),
-        _detailRow('投递状态', item.deliveryStatusName, theme),
-        _detailRow('投递次数', '${item.deliveryAttemptCount}', theme),
-        if (item.lastPushAt != null)
-          _detailRow('最近投递', _formatDateTime(item.lastPushAt!), theme),
-        if (item.nextRetryAt != null)
-          _detailRow('下次重试', _formatDateTime(item.nextRetryAt!), theme),
-        if (item.readAt != null)
-          _detailRow('已读时间', _formatDateTime(item.readAt!), theme),
-        if (detail?.failureReasonHint != null &&
-            detail!.failureReasonHint!.isNotEmpty)
-          _detailRow('排障提示', detail.failureReasonHint!, theme),
-        if (disabledReason != null) _detailRow('跳转状态', disabledReason, theme),
-        if (!widget.canViewDetail) _detailRow('详情权限', '当前账号未开通消息详情查看权限', theme),
-        if (!widget.canUseJump || widget.onNavigateToPage == null)
-          _detailRow('跳转权限', '当前账号未开通业务跳转权限', theme),
+        Text(
+          item.title,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _buildInfoChip(
+              theme,
+              item.priorityName,
+              backgroundColor: item.priority == 'urgent'
+                  ? theme.colorScheme.errorContainer
+                  : item.priority == 'important'
+                  ? Colors.orange.withAlpha(32)
+                  : theme.colorScheme.surfaceContainerHighest,
+              foregroundColor: item.priority == 'urgent'
+                  ? theme.colorScheme.onErrorContainer
+                  : item.priority == 'important'
+                  ? Colors.orange.shade900
+                  : theme.colorScheme.onSurfaceVariant,
+            ),
+            _buildInfoChip(
+              theme,
+              item.statusName,
+              backgroundColor: item.isActive
+                  ? theme.colorScheme.primaryContainer
+                  : theme.colorScheme.surfaceContainerHighest,
+              foregroundColor: item.isActive
+                  ? theme.colorScheme.onPrimaryContainer
+                  : theme.colorScheme.onSurfaceVariant,
+            ),
+            _buildInfoChip(
+              theme,
+              item.readStatusName,
+              backgroundColor: item.isRead
+                  ? theme.colorScheme.surfaceContainerHighest
+                  : theme.colorScheme.primaryContainer,
+              foregroundColor: item.isRead
+                  ? theme.colorScheme.onSurfaceVariant
+                  : theme.colorScheme.onPrimaryContainer,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        MessageCenterDetailSections(fields: fields),
+        const SizedBox(height: 16),
         if (_detailLoading)
           const Padding(
             padding: EdgeInsets.only(top: 8),
             child: LinearProgressIndicator(minHeight: 2),
           ),
-        const Spacer(),
         Row(
           children: [
             TextButton(
               key: ValueKey('message-center-preview-detail-${item.id}'),
               onPressed: widget.canViewDetail
-                  ? () => _showDetailDialog(item)
+                  ? () => _loadSelectedDetail(item.id)
                   : null,
-              child: const Text('查看详情'),
+              child: const Text('刷新详情'),
             ),
             const Spacer(),
             if (!item.isRead)
@@ -949,276 +963,38 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   }
 
   Widget _buildMessageTile(MessageItem item, ThemeData theme) {
-    final isUnread = !item.isRead;
-    final priorityColor = item.priority == 'urgent'
-        ? theme.colorScheme.error
-        : item.priority == 'important'
-        ? Colors.orange
-        : null;
     final hasTarget =
         item.isActive &&
         item.targetPageCode != null &&
         item.targetPageCode!.isNotEmpty;
-    final inactiveReason = item.isActive ? null : item.inactiveReasonName;
     final readTimeText = item.readAt == null
         ? '未读'
         : '已读于 ${_formatDateTime(item.readAt!)}';
-
-    return InkWell(
-      key: ValueKey('message-center-tile-${item.id}'),
-      onTap: () {
-        setState(() {
-          _selectedItem = item;
-          if (_selectedDetail?.item.id != item.id) {
-            _selectedDetail = null;
-          }
-        });
-        if (widget.canViewDetail) {
-          _loadSelectedDetail(item.id, silent: true);
-        }
+    final sourceText = item.sourceModuleName.isNotEmpty
+        ? '来源：${item.sourceModuleName}'
+        : item.sourceCode != null && item.sourceCode!.isNotEmpty
+        ? '来源对象：${item.sourceCode!}'
+        : '来源：系统消息';
+    return MessageCenterMessageCard(
+      item: item,
+      selected: _selectedItem?.id == item.id,
+      selectedForBatch: _selectedIds.contains(item.id),
+      onTap: () => _selectItem(item),
+      onToggleSelected: (selected) => _toggleSelected(item.id, selected),
+      onShowDetail: () => _selectItem(item, silent: false),
+      onMarkRead: () => _markRead(item),
+      sourceText: sourceText,
+      pushTimeText: item.publishedAt == null
+          ? null
+          : _formatDateTime(item.publishedAt!),
+      readStatusText: readTimeText,
+      canShowDetail: widget.canViewDetail,
+      canJump:
+          hasTarget && widget.canUseJump && widget.onNavigateToPage != null,
+      onJump: () async {
+        _markRead(item);
+        await _navigateToPage(item);
       },
-      child: Container(
-        color: isUnread
-            ? theme.colorScheme.primaryContainer.withAlpha(38)
-            : null,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 未读指示点
-            Padding(
-              padding: const EdgeInsets.only(top: 6, right: 8),
-              child: Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isUnread
-                      ? theme.colorScheme.primary
-                      : Colors.transparent,
-                ),
-              ),
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      if (priorityColor != null)
-                        Container(
-                          margin: const EdgeInsets.only(right: 6),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: priorityColor.withAlpha(38),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            item.priorityName,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: priorityColor,
-                            ),
-                          ),
-                        ),
-                      Container(
-                        margin: const EdgeInsets.only(right: 6),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.secondaryContainer,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          item.messageTypeName,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: theme.colorScheme.onSecondaryContainer,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Text(
-                          item.title,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: isUnread
-                                ? FontWeight.w600
-                                : FontWeight.normal,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      _buildInfoChip(
-                        theme,
-                        item.statusName,
-                        backgroundColor: item.isActive
-                            ? theme.colorScheme.primaryContainer
-                            : theme.colorScheme.surfaceContainerHighest,
-                        foregroundColor: item.isActive
-                            ? theme.colorScheme.onPrimaryContainer
-                            : theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ],
-                  ),
-                  if (item.summary != null && item.summary!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      item.summary!,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: [
-                      if (item.sourceModuleName.isNotEmpty)
-                        _buildMetaText(theme, '来源：${item.sourceModuleName}'),
-                      if (item.sourceCode != null &&
-                          item.sourceCode!.isNotEmpty)
-                        _buildMetaText(theme, '来源对象：${item.sourceCode!}'),
-                      _buildMetaText(theme, '阅读：$readTimeText'),
-                      if (item.publishedAt != null)
-                        _buildMetaText(
-                          theme,
-                          '推送：${_formatDateTime(item.publishedAt!)}',
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: [
-                      _buildInfoChip(
-                        theme,
-                        item.readStatusName,
-                        backgroundColor: isUnread
-                            ? theme.colorScheme.primaryContainer
-                            : theme.colorScheme.surfaceContainerHighest,
-                        foregroundColor: isUnread
-                            ? theme.colorScheme.onPrimaryContainer
-                            : theme.colorScheme.onSurfaceVariant,
-                      ),
-                      _buildInfoChip(
-                        theme,
-                        item.deliveryStatusName,
-                        backgroundColor: theme.colorScheme.secondaryContainer,
-                        foregroundColor: theme.colorScheme.onSecondaryContainer,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            // 操作按钮区
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Checkbox(
-                  key: ValueKey('message-center-select-${item.id}'),
-                  value: _selectedIds.contains(item.id),
-                  onChanged: (value) =>
-                      _toggleSelected(item.id, value ?? false),
-                  visualDensity: VisualDensity.compact,
-                ),
-                if (!item.isActive)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(
-                      inactiveReason!,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: theme.colorScheme.outline,
-                      ),
-                    ),
-                  ),
-                TextButton(
-                  key: ValueKey('message-center-detail-${item.id}'),
-                  onPressed: widget.canViewDetail
-                      ? () async {
-                          setState(() {
-                            _selectedItem = item;
-                            if (_selectedDetail?.item.id != item.id) {
-                              _selectedDetail = null;
-                            }
-                          });
-                          await _loadSelectedDetail(item.id);
-                          if (!mounted) {
-                            return;
-                          }
-                          _showDetailDialog(item);
-                        }
-                      : null,
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: const Text('详情', style: TextStyle(fontSize: 12)),
-                ),
-                if (hasTarget &&
-                    widget.canUseJump &&
-                    widget.onNavigateToPage != null)
-                  TextButton(
-                    key: ValueKey('message-center-jump-${item.id}'),
-                    onPressed: () async {
-                      _markRead(item);
-                      await _navigateToPage(item);
-                    },
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: const Text('跳转', style: TextStyle(fontSize: 12)),
-                  ),
-                if (!item.isRead)
-                  TextButton(
-                    key: ValueKey('message-center-read-${item.id}'),
-                    onPressed: () => _markRead(item),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: const Text('已读', style: TextStyle(fontSize: 12)),
-                  ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMetaText(ThemeData theme, String text) {
-    return Text(
-      text,
-      style: theme.textTheme.labelSmall?.copyWith(
-        color: theme.colorScheme.outline,
-      ),
     );
   }
 
