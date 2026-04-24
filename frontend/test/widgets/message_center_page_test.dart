@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
@@ -24,6 +26,7 @@ class _FakeMessageService extends MessageService {
   int listMessagesCallCount = 0;
   int summaryCallCount = 0;
   int summaryAfterListCompletionCount = 0;
+  int summaryCompletionCount = 0;
   int batchReadCount = 0;
   int publishCount = 0;
   int maintenanceRunCount = 0;
@@ -40,6 +43,7 @@ class _FakeMessageService extends MessageService {
   List<int> lastBatchReadIds = <int>[];
   Object? listError;
   Object? markAllReadError;
+  Completer<MessageSummaryResult>? summaryCompleter;
   final Map<int, Object> detailErrors = <int, Object>{};
   final Map<int, Object> jumpErrors = <int, Object>{};
   final Map<int, Object> markReadErrors = <int, Object>{};
@@ -261,12 +265,20 @@ class _FakeMessageService extends MessageService {
         .where((item) => item.priority == 'urgent' && !item.isRead)
         .length;
     unreadCount = unreadItems;
-    return MessageSummaryResult(
+    final result = MessageSummaryResult(
       totalCount: _items.length,
       unreadCount: unreadItems,
       todoUnreadCount: todoUnreadItems,
       urgentUnreadCount: urgentUnreadItems,
     );
+    final completer = summaryCompleter;
+    if (completer != null) {
+      return completer.future.whenComplete(() {
+        summaryCompletionCount += 1;
+      });
+    }
+    summaryCompletionCount += 1;
+    return result;
   }
 
   @override
@@ -740,6 +752,36 @@ void main() {
     expect(service.listMessagesCallCount, 1);
     expect(service.summaryCallCount, 1);
     expect(service.summaryAfterListCompletionCount, 0);
+  });
+
+  testWidgets('message center 列表同步失败时不会被摘要链路拖慢或额外发起摘要', (
+    tester,
+  ) async {
+    final service = _FakeMessageService()
+      ..listError = ApiException('无权限访问消息接口', 401)
+      ..summaryCompleter = Completer<MessageSummaryResult>();
+    var logoutCount = 0;
+
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      _buildMessageCenterPageApp(
+        service: service,
+        onLogout: () {
+          logoutCount += 1;
+        },
+      ),
+    );
+    await tester.pump();
+
+    expect(logoutCount, 1);
+    expect(service.summaryCallCount, 0);
+    expect(service.summaryCompletionCount, 0);
   });
 
   testWidgets('message center 支持 route payload 进入待办过滤态', (tester) async {

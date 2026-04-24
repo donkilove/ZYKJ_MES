@@ -183,32 +183,40 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
       _error = '';
       if (reset) _page = 1;
     });
+    var listSettled = false;
+    final summaryCompleter = Completer<MessageSummaryResult?>();
+    final summaryTimer = Timer(Duration.zero, () async {
+      if (listSettled) {
+        summaryCompleter.complete(null);
+        return;
+      }
+      try {
+        summaryCompleter.complete(await _service.getSummary());
+      } catch (_) {
+        summaryCompleter.complete(null);
+      }
+    });
+    final summaryFuture = summaryCompleter.future;
     try {
-      final results = await Future.wait<Object?>([
-        _service.listMessages(
-          page: _page,
-          pageSize: _pageSize,
-          keyword: _keywordCtrl.text.trim().isEmpty
-              ? null
-              : _keywordCtrl.text.trim(),
-          status: _statusFilter.isEmpty ? null : _statusFilter,
-          messageType: _typeFilter.isEmpty ? null : _typeFilter,
-          priority: _priorityFilter.isEmpty ? null : _priorityFilter,
-          sourceModule: _sourceModuleFilter.isEmpty
-              ? null
-              : _sourceModuleFilter,
-          startTime: _dateRange?.start,
-          endTime: _dateRange?.end,
-          todoOnly: _todoOnly,
-          activeOnly: !_includeInactive,
-        ),
-        _service
-            .getSummary()
-            .then<Object?>((summary) => summary)
-            .catchError((_) => null),
-      ]);
-      final result = results[0] as MessageListResult;
-      final summary = results[1] as MessageSummaryResult?;
+      final result = await _service.listMessages(
+        page: _page,
+        pageSize: _pageSize,
+        keyword: _keywordCtrl.text.trim().isEmpty
+            ? null
+            : _keywordCtrl.text.trim(),
+        status: _statusFilter.isEmpty ? null : _statusFilter,
+        messageType: _typeFilter.isEmpty ? null : _typeFilter,
+        priority: _priorityFilter.isEmpty ? null : _priorityFilter,
+        sourceModule: _sourceModuleFilter.isEmpty
+            ? null
+            : _sourceModuleFilter,
+        startTime: _dateRange?.start,
+        endTime: _dateRange?.end,
+        todoOnly: _todoOnly,
+        activeOnly: !_includeInactive,
+      );
+      listSettled = true;
+      final summary = await summaryFuture;
       if (!mounted) return;
       setState(() {
         _items = result.items;
@@ -240,6 +248,13 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         await _loadSelectedDetail(_selectedItem!.id, silent: true);
       }
     } on ApiException catch (e) {
+      listSettled = true;
+      if (summaryTimer.isActive) {
+        summaryTimer.cancel();
+        if (!summaryCompleter.isCompleted) {
+          summaryCompleter.complete(null);
+        }
+      }
       if (!mounted) return;
       if (e.statusCode == 401) {
         widget.onLogout();
@@ -247,6 +262,13 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
       }
       setState(() => _error = e.message);
     } catch (e) {
+      listSettled = true;
+      if (summaryTimer.isActive) {
+        summaryTimer.cancel();
+        if (!summaryCompleter.isCompleted) {
+          summaryCompleter.complete(null);
+        }
+      }
       if (!mounted) return;
       setState(() => _error = e.toString());
     } finally {
