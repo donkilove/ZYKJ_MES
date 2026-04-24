@@ -8,6 +8,7 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/models/authz_models.dart';
 import 'package:mes_client/features/production/presentation/production_assist_records_page.dart';
 import 'package:mes_client/features/production/presentation/production_page.dart';
+import 'package:mes_client/features/production/presentation/production_order_query_page.dart';
 import 'package:mes_client/features/production/presentation/production_repair_orders_page.dart';
 
 class _PayloadProbe extends StatelessWidget {
@@ -508,5 +509,46 @@ void main() {
     expect(find.text('订单查询'), findsOneWidget);
     expect(find.text('并行实例追踪'), findsOneWidget);
     expect(find.text('tab:$productionOrderQueryTabCode'), findsOneWidget);
+  });
+
+  testWidgets('production page 会在页签切换时联动订单查询轮询活跃态', (
+    tester,
+  ) async {
+    bool? latestPollingEnabled;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionPage(
+            session: buildSession(),
+            onLogout: () {},
+            visibleTabCodes: const <String>[
+              productionOrderQueryTabCode,
+              productionPipelineInstancesTabCode,
+            ],
+            capabilityCodes: const <String>{},
+            preferredTabCode: productionOrderQueryTabCode,
+            tabPageBuilder: (tabCode, child) {
+              if (child is ProductionOrderQueryPage) {
+                latestPollingEnabled = child.pollingEnabled;
+                return const SizedBox.shrink();
+              }
+              return Center(child: Text('tab:$tabCode'));
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    expect(latestPollingEnabled, isTrue);
+
+    await tester.tap(find.text('并行实例追踪'));
+    await tester.pumpAndSettle();
+    expect(latestPollingEnabled, isFalse);
+
+    await tester.tap(find.text('订单查询'));
+    await tester.pumpAndSettle();
+    expect(latestPollingEnabled, isTrue);
   });
 }

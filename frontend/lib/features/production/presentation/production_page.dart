@@ -67,6 +67,7 @@ class _ProductionPageState extends State<ProductionPage>
     with TickerProviderStateMixin {
   late List<String> _orderedVisibleTabCodes;
   TabController? _tabController;
+  int _currentTabIndex = 0;
 
   @override
   void initState() {
@@ -128,6 +129,7 @@ class _ProductionPageState extends State<ProductionPage>
     _tabController?.dispose();
     if (_orderedVisibleTabCodes.isEmpty) {
       _tabController = null;
+      _currentTabIndex = 0;
       return;
     }
     var initialIndex = 0;
@@ -142,6 +144,21 @@ class _ProductionPageState extends State<ProductionPage>
       vsync: this,
       initialIndex: initialIndex,
     );
+    _currentTabIndex = initialIndex;
+    _tabController!.addListener(_handleTabIndexChanged);
+  }
+
+  void _handleTabIndexChanged() {
+    final controller = _tabController;
+    if (controller == null) {
+      return;
+    }
+    if (_currentTabIndex == controller.index) {
+      return;
+    }
+    setState(() {
+      _currentTabIndex = controller.index;
+    });
   }
 
   String _tabTitle(String code) {
@@ -182,7 +199,7 @@ class _ProductionPageState extends State<ProductionPage>
     final isTabActive =
         currentIndex >= 0 &&
         widget.moduleActive &&
-        _tabController?.index == currentIndex;
+        _currentTabIndex == currentIndex;
     final child = switch (code) {
       productionOrderManagementTabCode => ProductionOrderManagementPage(
         session: widget.session,
