@@ -27,6 +27,8 @@ class PluginHostSidebar extends StatelessWidget {
           Expanded(
             child: controller.loading
                 ? const Center(child: CircularProgressIndicator())
+                : controller.plugins.isEmpty
+                ? const Center(child: Text('未发现插件，请检查插件目录。'))
                 : ListView.builder(
                     itemCount: controller.plugins.length,
                     itemBuilder: (context, index) {

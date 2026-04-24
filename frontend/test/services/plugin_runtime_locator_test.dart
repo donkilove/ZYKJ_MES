@@ -20,11 +20,29 @@ void main() {
     final locator = PluginRuntimeLocator(
       executablePath: r'C:\ZYKJ_MES\mes_client.exe',
       environment: const {},
+      currentDirectory: r'C:\ZYKJ_MES',
+      directoryExists: (path) => path == r'C:\ZYKJ_MES\plugins',
     );
 
     expect(
       locator.resolvePluginRoot(),
       r'C:\ZYKJ_MES\plugins',
+    );
+  });
+
+  test('resolvePluginRoot 会从 frontend 与构建目录向上回退到仓库根 plugins', () {
+    final locator = PluginRuntimeLocator(
+      executablePath:
+          r'C:\Users\Donki\Desktop\ZYKJ_MES\frontend\build\windows\x64\runner\Debug\mes_client.exe',
+      environment: const {},
+      currentDirectory: r'C:\Users\Donki\Desktop\ZYKJ_MES\frontend',
+      directoryExists: (path) =>
+          path == r'C:\Users\Donki\Desktop\ZYKJ_MES\plugins',
+    );
+
+    expect(
+      locator.resolvePluginRoot(),
+      r'C:\Users\Donki\Desktop\ZYKJ_MES\plugins',
     );
   });
 }

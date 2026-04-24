@@ -29,6 +29,21 @@ void main() {
     expect(find.text('选择一个插件以打开工作区'), findsOneWidget);
   });
 
+  testWidgets('插件列表为空时会提示检查插件目录', (tester) async {
+    final controller = PluginHostController(
+      catalogService: _EmptyCatalogService(),
+      processService: _StubProcessService(),
+      runtimeLocator: _StubRuntimeLocator(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: PluginHostPage(controller: controller))),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('未发现插件，请检查插件目录。'), findsOneWidget);
+  });
+
   testWidgets('工作区在存在活动会话时会显示内嵌区域与宿主工具条', (tester) async {
     final controller = PluginHostController(
       catalogService: _StubCatalogService(),
@@ -86,6 +101,15 @@ class _StubCatalogService extends PluginCatalogService {
         status: PluginCatalogItemStatus.ready,
       ),
     ];
+  }
+}
+
+class _EmptyCatalogService extends PluginCatalogService {
+  _EmptyCatalogService() : super(pluginRootResolver: () async => '');
+
+  @override
+  Future<List<PluginCatalogItem>> scan() async {
+    return const <PluginCatalogItem>[];
   }
 }
 
