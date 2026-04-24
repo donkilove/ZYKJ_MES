@@ -6,9 +6,14 @@ import 'package:mes_client/features/plugin_host/presentation/widgets/plugin_host
 import 'package:mes_client/features/plugin_host/presentation/widgets/plugin_host_workspace.dart';
 
 class PluginHostPage extends StatefulWidget {
-  const PluginHostPage({super.key, required this.controller});
+  const PluginHostPage({
+    super.key,
+    required this.controller,
+    this.webviewBuilder,
+  });
 
   final PluginHostController controller;
+  final Widget Function(Uri entryUrl)? webviewBuilder;
 
   @override
   State<PluginHostPage> createState() => _PluginHostPageState();
@@ -34,7 +39,10 @@ class _PluginHostPageState extends State<PluginHostPage> {
             ),
             const VerticalDivider(width: 1),
             Expanded(
-              child: PluginHostWorkspace(controller: widget.controller),
+              child: PluginHostWorkspace(
+                controller: widget.controller,
+                webviewBuilder: widget.webviewBuilder,
+              ),
             ),
           ],
         );

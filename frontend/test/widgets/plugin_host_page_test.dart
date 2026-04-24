@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/features/plugin_host/models/plugin_catalog_item.dart';
 import 'package:mes_client/features/plugin_host/models/plugin_manifest.dart';
+import 'package:mes_client/features/plugin_host/models/plugin_session.dart';
 import 'package:mes_client/features/plugin_host/presentation/plugin_host_controller.dart';
 import 'package:mes_client/features/plugin_host/presentation/plugin_host_page.dart';
 import 'package:mes_client/features/plugin_host/services/plugin_catalog_service.dart';
@@ -26,6 +27,39 @@ void main() {
     expect(find.text('插件中心'), findsOneWidget);
     expect(find.text('串口助手'), findsOneWidget);
     expect(find.text('选择一个插件以打开工作区'), findsOneWidget);
+  });
+
+  testWidgets('工作区在存在活动会话时会显示内嵌区域与宿主工具条', (tester) async {
+    final controller = PluginHostController(
+      catalogService: _StubCatalogService(),
+      processService: _StubProcessService(),
+      runtimeLocator: _StubRuntimeLocator(),
+    );
+    controller.debugInjectSession(
+      PluginSession(
+        pluginId: 'serial_assistant',
+        process: null,
+        pid: 456,
+        entryUrl: Uri.parse('http://127.0.0.1:43125/'),
+        heartbeatUrl: Uri.parse('http://127.0.0.1:43125/__heartbeat__'),
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PluginHostPage(
+            controller: controller,
+            webviewBuilder: (entryUrl) => Text('WEBVIEW:$entryUrl'),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('WEBVIEW:http://127.0.0.1:43125/'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '关闭插件'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '重启插件'), findsOneWidget);
   });
 }
 
