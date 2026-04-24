@@ -6,6 +6,7 @@
 
 - `backend/`：Python 后端，负责 API、数据库迁移、权限与业务服务。
 - `frontend/`：Flutter 前端，默认以 Windows 桌面应用方式运行。
+- `plugins/`：插件根目录；固定 Python 解释器位于 `plugins/runtime/python312/python.exe`。
 - `docs/superpowers/specs/` 与 `docs/superpowers/plans/`：近期功能设计与实施计划。
 - `evidence/`：任务日志、验证日志、只读复核与交付留痕。
 
@@ -18,6 +19,12 @@
 5. `docs/AGENTS/30-工具治理与验证门禁.md`
 6. `docs/AGENTS/40-质量交付与留痕.md`
 7. `docs/AGENTS/50-模板与索引.md`
+
+## 插件运行时口径
+
+- 插件统一放在 `plugins/` 根目录下组织。
+- 仓库固定解释器路径为 `plugins/runtime/python312/python.exe`。
+- 需要调用仓库内置 Python 时，优先直接使用上述解释器，避免依赖系统全局 Python。
 
 ## 默认启动命令
 
