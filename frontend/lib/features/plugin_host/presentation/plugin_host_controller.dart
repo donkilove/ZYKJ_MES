@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mes_client/features/plugin_host/models/plugin_catalog_item.dart';
+import 'package:mes_client/features/plugin_host/models/plugin_host_view_state.dart';
 import 'package:mes_client/features/plugin_host/models/plugin_session.dart';
 import 'package:mes_client/features/plugin_host/services/plugin_catalog_service.dart';
 import 'package:mes_client/features/plugin_host/services/plugin_process_service.dart';
@@ -22,10 +23,12 @@ class PluginHostController extends ChangeNotifier {
   bool _loading = false;
   String? _selectedPluginId;
   final Map<String, PluginSession> _sessions = <String, PluginSession>{};
+  PluginHostViewState _viewState = const PluginHostViewState();
 
   List<PluginCatalogItem> get plugins => _plugins;
   bool get loading => _loading;
   String? get selectedPluginId => _selectedPluginId;
+  PluginHostViewState get viewState => _viewState;
   PluginSession? get activeSession => _selectedPluginId == null
       ? null
       : _sessions[_selectedPluginId];
@@ -58,6 +61,87 @@ class PluginHostController extends ChangeNotifier {
   void debugInjectSession(PluginSession session) {
     _sessions[session.pluginId] = session;
     _selectedPluginId = session.pluginId;
+    _viewState = _viewState.copyWith(
+      phase: PluginHostPhase.running,
+      focusedPluginId: session.pluginId,
+      statusTitle: '${session.pluginId}运行中',
+      statusMessage: '插件页面已就绪。',
+      errorMessage: null,
+    );
+    notifyListeners();
+  }
+
+  void debugInjectRunningSession(PluginSession session) {
+    debugInjectSession(session);
+  }
+
+  Future<void> openPlugin(String pluginId) async {
+    final running = _sessions[pluginId];
+    if (running != null) {
+      _selectedPluginId = pluginId;
+      _viewState = _viewState.copyWith(
+        phase: PluginHostPhase.running,
+        focusedPluginId: pluginId,
+        statusTitle: '${running.pluginId}运行中',
+        statusMessage: '插件页面已就绪。',
+        errorMessage: null,
+      );
+      notifyListeners();
+      return;
+    }
+
+    _selectedPluginId = pluginId;
+    _viewState = _viewState.copyWith(
+      phase: PluginHostPhase.starting,
+      focusedPluginId: pluginId,
+      statusTitle: '正在启动串口助手',
+      statusMessage: '宿主正在拉起插件进程并等待页面就绪。',
+      errorMessage: null,
+    );
+    notifyListeners();
+
+    final plugin = _plugins.where((item) => item.manifest?.id == pluginId).firstOrNull;
+    if (plugin == null || plugin.manifest == null) {
+      _viewState = _viewState.copyWith(
+        phase: PluginHostPhase.failed,
+        focusedPluginId: pluginId,
+        statusTitle: '串口助手启动失败',
+        statusMessage: '宿主未找到可用插件清单。',
+        errorMessage: 'plugin manifest missing',
+      );
+      notifyListeners();
+      return;
+    }
+
+    final pythonExecutable = _runtimeLocator.resolvePythonExecutable();
+    final runtimeRoot = pythonExecutable.substring(
+      0,
+      pythonExecutable.length - r'\python.exe'.length,
+    );
+
+    try {
+      final started = await _processService.start(
+        plugin: plugin,
+        pythonExecutable: pythonExecutable,
+        runtimeRoot: runtimeRoot,
+      );
+      _sessions[pluginId] = started;
+      _viewState = _viewState.copyWith(
+        phase: PluginHostPhase.running,
+        focusedPluginId: pluginId,
+        statusTitle: '串口助手运行中',
+        statusMessage: '插件页面已就绪。',
+        errorMessage: null,
+      );
+    } catch (error) {
+      _viewState = _viewState.copyWith(
+        phase: PluginHostPhase.failed,
+        focusedPluginId: pluginId,
+        statusTitle: '串口助手启动失败',
+        statusMessage: '宿主未能完成插件启动。',
+        errorMessage: error.toString(),
+      );
+    }
     notifyListeners();
   }
 
