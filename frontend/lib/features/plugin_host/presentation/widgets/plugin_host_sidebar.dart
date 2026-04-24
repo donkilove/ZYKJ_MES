@@ -43,7 +43,9 @@ class PluginHostSidebar extends StatelessWidget {
                         subtitle: Text(manifest?.version ?? 'manifest 无效'),
                         onTap: pluginId == null
                             ? null
-                            : () => controller.selectPlugin(pluginId),
+                            : () {
+                                controller.openPlugin(pluginId);
+                              },
                       );
                     },
                   ),

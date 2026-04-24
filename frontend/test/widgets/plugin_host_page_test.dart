@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -42,6 +43,45 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('未发现插件，请检查插件目录。'), findsOneWidget);
+  });
+
+  testWidgets('点击左侧插件项后工作区显示启动面板', (tester) async {
+    final controller = PluginHostController(
+      catalogService: _StubCatalogService(),
+      processService: _BlockingProcessService(),
+      runtimeLocator: _StubRuntimeLocator(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: PluginHostPage(controller: controller))),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('串口助手'));
+    await tester.pump();
+
+    expect(find.text('正在启动串口助手'), findsOneWidget);
+    expect(find.textContaining('等待页面就绪'), findsOneWidget);
+  });
+
+  testWidgets('启动失败时工作区显示异常面板', (tester) async {
+    final controller = PluginHostController(
+      catalogService: _StubCatalogService(),
+      processService: _FailingProcessService(),
+      runtimeLocator: _StubRuntimeLocator(),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: Scaffold(body: PluginHostPage(controller: controller))),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('串口助手'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('串口助手启动失败'), findsOneWidget);
+    expect(find.textContaining('ready timeout'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '重试'), findsOneWidget);
   });
 
   testWidgets('工作区在存在活动会话时会显示内嵌区域与宿主工具条', (tester) async {
@@ -115,6 +155,32 @@ class _EmptyCatalogService extends PluginCatalogService {
 
 class _StubProcessService extends PluginProcessService {
   _StubProcessService();
+}
+
+class _BlockingProcessService extends PluginProcessService {
+  _BlockingProcessService();
+
+  @override
+  Future<PluginSession> start({
+    required PluginCatalogItem plugin,
+    required String pythonExecutable,
+    required String runtimeRoot,
+  }) async {
+    return Completer<PluginSession>().future;
+  }
+}
+
+class _FailingProcessService extends PluginProcessService {
+  _FailingProcessService();
+
+  @override
+  Future<PluginSession> start({
+    required PluginCatalogItem plugin,
+    required String pythonExecutable,
+    required String runtimeRoot,
+  }) {
+    throw TimeoutException('ready timeout');
+  }
 }
 
 class _StubRuntimeLocator extends PluginRuntimeLocator {

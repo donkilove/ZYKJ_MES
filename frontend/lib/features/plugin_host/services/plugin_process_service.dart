@@ -19,7 +19,7 @@ class PluginProcessService {
     ProcessStarter? processStarter,
     Future<bool> Function(Uri heartbeatUrl)? heartbeatClient,
     bool Function(Process process)? killProcess,
-    Duration readyTimeout = const Duration(seconds: 15),
+    this.readyTimeout = const Duration(seconds: 15),
   }) : processStarter = processStarter ?? Process.start,
        heartbeatClient =
            heartbeatClient ??
@@ -27,8 +27,7 @@ class PluginProcessService {
              final response = await http.get(heartbeatUrl);
              return response.statusCode == 200;
            }),
-       killProcess = killProcess ?? ((process) => process.kill()),
-       readyTimeout = readyTimeout;
+       killProcess = killProcess ?? ((process) => process.kill());
 
   final ProcessStarter processStarter;
   final Future<bool> Function(Uri heartbeatUrl) heartbeatClient;
