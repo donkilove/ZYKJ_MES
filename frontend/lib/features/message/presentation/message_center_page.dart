@@ -84,6 +84,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   late final UserService _userService;
   Timer? _pollTimer;
   int _loadRequestToken = 0;
+  int _detailRequestToken = 0;
 
   bool _loading = false;
   String _error = '';
@@ -304,12 +305,13 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     if (!widget.canViewDetail) {
       return;
     }
+    final requestToken = ++_detailRequestToken;
     if (!silent && mounted) {
       setState(() => _detailLoading = true);
     }
     try {
       final detail = await _service.getMessageDetail(messageId);
-      if (!mounted) {
+      if (!mounted || requestToken != _detailRequestToken) {
         return;
       }
       setState(() {
@@ -332,7 +334,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
       }
       setState(() => _error = e.toString());
     } finally {
-      if (mounted && !silent) {
+      if (mounted && !silent && requestToken == _detailRequestToken) {
         setState(() => _detailLoading = false);
       }
     }
@@ -540,87 +542,6 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     final l = dt.toLocal();
     return '${l.year}-${l.month.toString().padLeft(2, '0')}-${l.day.toString().padLeft(2, '0')} '
         '${l.hour.toString().padLeft(2, '0')}:${l.minute.toString().padLeft(2, '0')}';
-  }
-
-  void _showDetailDialog(MessageItem item) {
-    final detail = _selectedDetail?.item.id == item.id ? _selectedDetail : null;
-    showDialog(
-      context: context,
-      builder: (_) {
-        final theme = Theme.of(context);
-        final rows = <Widget>[
-          _detailRow('标题', item.title, theme),
-          _detailRow('类型', item.messageTypeName, theme),
-          _detailRow('优先级', item.priorityName, theme),
-          if (item.summary != null && item.summary!.isNotEmpty)
-            _detailRow('摘要', item.summary!, theme),
-          if (widget.canViewDetail &&
-              detail?.item.content != null &&
-              detail!.item.content!.isNotEmpty)
-            _detailRow('内容', detail.item.content!, theme),
-          if (item.sourceModuleName.isNotEmpty)
-            _detailRow('来源模块', item.sourceModuleName, theme),
-          if (detail?.sourceId != null && detail!.sourceId!.isNotEmpty)
-            _detailRow('来源ID', detail.sourceId!, theme),
-          if (item.sourceCode != null && item.sourceCode!.isNotEmpty)
-            _detailRow('来源编号', item.sourceCode!, theme),
-          if (item.publishedAt != null)
-            _detailRow('发布时间', _formatDateTime(item.publishedAt!), theme),
-          _detailRow('消息状态', item.statusName, theme),
-          _detailRow('阅读状态', item.readStatusName, theme),
-          _detailRow('投递状态', item.deliveryStatusName, theme),
-          _detailRow('投递次数', '${item.deliveryAttemptCount}', theme),
-          if (item.lastPushAt != null)
-            _detailRow('最近投递', _formatDateTime(item.lastPushAt!), theme),
-          if (item.nextRetryAt != null)
-            _detailRow('下次重试', _formatDateTime(item.nextRetryAt!), theme),
-          if (item.readAt != null)
-            _detailRow('阅读时间', _formatDateTime(item.readAt!), theme),
-          if (detail?.failureReasonHint != null &&
-              detail!.failureReasonHint!.isNotEmpty)
-            _detailRow('排障提示', detail.failureReasonHint!, theme),
-        ];
-        return AlertDialog(
-          title: const Text('消息详情'),
-          content: SizedBox(
-            width: 480,
-            child: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, children: rows),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('关闭'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _detailRow(String label, String value, ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(
-              label,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.outline,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: SelectableText(value, style: theme.textTheme.bodyMedium),
-          ),
-        ],
-      ),
-    );
   }
 
   @override

@@ -46,6 +46,8 @@ class _FakeMessageService extends MessageService {
   Completer<MessageSummaryResult>? summaryCompleter;
   final List<Completer<MessageSummaryResult>> summaryCompleters =
       <Completer<MessageSummaryResult>>[];
+  final List<Completer<MessageDetailResult>> detailCompleters =
+      <Completer<MessageDetailResult>>[];
   final Map<int, Object> detailErrors = <int, Object>{};
   final Map<int, Object> jumpErrors = <int, Object>{};
   final Map<int, Object> markReadErrors = <int, Object>{};
@@ -471,11 +473,16 @@ class _FakeMessageService extends MessageService {
       throw detailErrors[messageId]!;
     }
     final item = _items.firstWhere((entry) => entry.id == messageId);
-    return MessageDetailResult(
+    final result = MessageDetailResult(
       item: item,
       sourceId: messageId == 1 ? '101' : null,
       failureReasonHint: messageId == 1 ? '实时推送失败，系统将按计划继续重试。' : null,
     );
+    if (detailCompleters.isNotEmpty) {
+      final completer = detailCompleters.removeAt(0);
+      return completer.future;
+    }
+    return result;
   }
 
   @override
@@ -1185,6 +1192,75 @@ void main() {
     );
     expect(find.textContaining('RenderFlex overflowed'), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('message center 会丢弃旧详情请求返回结果', (tester) async {
+    final initialDetailCompleter = Completer<MessageDetailResult>()
+      ..complete(
+        MessageDetailResult(
+          item: _FakeMessageService()._items.firstWhere((entry) => entry.id == 1),
+          sourceId: '101',
+          failureReasonHint: '实时推送失败，系统将按计划继续重试。',
+        ),
+      );
+    final firstDetailCompleter = Completer<MessageDetailResult>();
+    final secondDetailCompleter = Completer<MessageDetailResult>();
+    final service = _FakeMessageService()
+      ..detailCompleters.addAll([
+        initialDetailCompleter,
+        firstDetailCompleter,
+        secondDetailCompleter,
+      ]);
+
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(_buildMessageCenterPageApp(service: service));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const ValueKey('message-center-tile-1')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('message-center-tile-3')));
+    await tester.pump();
+
+    final secondItem = service._items.firstWhere((entry) => entry.id == 3);
+    secondDetailCompleter.complete(
+      MessageDetailResult(
+        item: secondItem,
+        sourceId: null,
+        failureReasonHint: null,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('message-center-preview-detail-3')),
+      findsOneWidget,
+    );
+    expect(find.text('您的账号已创建，请进入个人中心修改密码。'), findsOneWidget);
+
+    final firstItem = service._items.firstWhere((entry) => entry.id == 1);
+    firstDetailCompleter.complete(
+      MessageDetailResult(
+        item: firstItem,
+        sourceId: '101',
+        failureReasonHint: '实时推送失败，系统将按计划继续重试。',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('message-center-preview-detail-3')),
+      findsOneWidget,
+    );
+    expect(find.text('您的账号已创建，请进入个人中心修改密码。'), findsOneWidget);
+    expect(find.text('实时推送失败，系统将按计划继续重试。'), findsNothing);
   });
 
   testWidgets(

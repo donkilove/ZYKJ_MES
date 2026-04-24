@@ -161,10 +161,10 @@ class MessageCenterMessageCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                if (!item.isActive && item.inactiveReasonName != null) ...[
+                if (!item.isActive) ...[
                   const SizedBox(height: 8),
                   Text(
-                    item.inactiveReasonName!,
+                    item.inactiveReasonName,
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: theme.colorScheme.outline,
                     ),
