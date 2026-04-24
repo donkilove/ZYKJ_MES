@@ -30,6 +30,7 @@ class UserPage extends StatefulWidget {
     required this.onLogout,
     required this.visibleTabCodes,
     required this.capabilityCodes,
+    this.moduleActive = true,
     this.preferredTabCode,
     this.routePayloadJson,
     this.onVisibilityConfigSaved,
@@ -41,6 +42,7 @@ class UserPage extends StatefulWidget {
   final VoidCallback onLogout;
   final List<String> visibleTabCodes;
   final Set<String> capabilityCodes;
+  final bool moduleActive;
   final String? preferredTabCode;
   final String? routePayloadJson;
   final VoidCallback? onVisibilityConfigSaved;
@@ -152,10 +154,11 @@ class _UserPageState extends State<UserPage> {
     final sortedCodes = _sortedVisibleTabCodes();
     for (final code in sortedCodes) {
       final currentIndex = tabs.length;
+      final isTabActive =
+          widget.moduleActive && _currentTabIndex == currentIndex;
       switch (code) {
         case 'user_management':
           final roleManagementIndex = sortedCodes.indexOf('role_management');
-          final isVisible = _currentTabIndex == currentIndex;
           tabs.add(
             _UserTabItem(
               code: code,
@@ -180,7 +183,7 @@ class _UserPageState extends State<UserPage> {
                           );
                         }
                       : null,
-                  isCurrentTabVisible: isVisible,
+                  isCurrentTabVisible: isTabActive,
                 ),
               ),
             ),
@@ -253,6 +256,7 @@ class _UserPageState extends State<UserPage> {
                   onLogout: widget.onLogout,
                   canChangePassword: _canChangeMyPassword,
                   canViewSession: _canViewMySession,
+                  pollingEnabled: isTabActive,
                   routePayloadJson:
                       widget.preferredTabCode == _accountSettingsTabCode
                       ? widget.routePayloadJson

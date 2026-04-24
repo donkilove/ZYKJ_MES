@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/ui/patterns/mes_detail_panel.dart';
 import 'package:mes_client/core/ui/patterns/mes_filter_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
 import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
@@ -21,6 +24,10 @@ class _FakeMessageService extends MessageService {
   bool lastTodoOnly = false;
   int lastPage = 1;
   int lastPageSize = 20;
+  int listMessagesCallCount = 0;
+  int summaryCallCount = 0;
+  int summaryAfterListCompletionCount = 0;
+  int summaryCompletionCount = 0;
   int batchReadCount = 0;
   int publishCount = 0;
   int maintenanceRunCount = 0;
@@ -37,10 +44,15 @@ class _FakeMessageService extends MessageService {
   List<int> lastBatchReadIds = <int>[];
   Object? listError;
   Object? markAllReadError;
+  Completer<MessageSummaryResult>? summaryCompleter;
+  final List<Completer<MessageSummaryResult>> summaryCompleters =
+      <Completer<MessageSummaryResult>>[];
   final Map<int, Object> detailErrors = <int, Object>{};
   final Map<int, Object> jumpErrors = <int, Object>{};
   final Map<int, Object> markReadErrors = <int, Object>{};
   final Map<int, MessageJumpResult> jumpOverrides = <int, MessageJumpResult>{};
+  bool _listRequestInFlight = false;
+  bool _listRequestCompleted = false;
 
   List<MessageItem> _items = <MessageItem>[
     MessageItem.fromJson({
@@ -244,6 +256,10 @@ class _FakeMessageService extends MessageService {
 
   @override
   Future<MessageSummaryResult> getSummary() async {
+    summaryCallCount += 1;
+    if (_listRequestCompleted && !_listRequestInFlight) {
+      summaryAfterListCompletionCount += 1;
+    }
     final unreadItems = _items.where((item) => !item.isRead).length;
     final todoUnreadItems = _items
         .where((item) => item.messageType == 'todo' && !item.isRead)
@@ -252,12 +268,22 @@ class _FakeMessageService extends MessageService {
         .where((item) => item.priority == 'urgent' && !item.isRead)
         .length;
     unreadCount = unreadItems;
-    return MessageSummaryResult(
+    final result = MessageSummaryResult(
       totalCount: _items.length,
       unreadCount: unreadItems,
       todoUnreadCount: todoUnreadItems,
       urgentUnreadCount: urgentUnreadItems,
     );
+    final completer = summaryCompleters.isNotEmpty
+        ? summaryCompleters.removeAt(0)
+        : summaryCompleter;
+    if (completer != null) {
+      return completer.future.whenComplete(() {
+        summaryCompletionCount += 1;
+      });
+    }
+    summaryCompletionCount += 1;
+    return result;
   }
 
   @override
@@ -274,7 +300,11 @@ class _FakeMessageService extends MessageService {
     bool todoOnly = false,
     bool activeOnly = true,
   }) async {
+    listMessagesCallCount += 1;
+    _listRequestInFlight = true;
+    _listRequestCompleted = false;
     if (listError != null) {
+      _listRequestInFlight = false;
       throw listError!;
     }
     lastTodoOnly = todoOnly;
@@ -344,12 +374,16 @@ class _FakeMessageService extends MessageService {
     final paged = start >= filtered.length
         ? const <MessageItem>[]
         : filtered.skip(start).take(pageSize).toList();
-    return MessageListResult(
+    final result = MessageListResult(
       items: paged,
       total: filtered.length,
       page: page,
       pageSize: pageSize,
     );
+    await Future<void>.delayed(Duration.zero);
+    _listRequestInFlight = false;
+    _listRequestCompleted = true;
+    return result;
   }
 
   @override
@@ -546,6 +580,46 @@ class _FakeUserService extends UserService {
   }
 }
 
+Widget _buildMessageCenterPageApp({
+  required _FakeMessageService service,
+  _FakeUserService? userService,
+  bool canPublishAnnouncement = true,
+  bool canViewDetail = true,
+  bool canUseJump = true,
+  bool pollingEnabled = true,
+  String? routePayloadJson,
+  void Function(int count)? onUnreadCountChanged,
+  VoidCallback? onLogout,
+  void Function(String pageCode, {String? tabCode, String? routePayloadJson})?
+  onNavigateToPage,
+  Future<DateTimeRange?> Function(DateTimeRange?)? onPickDateRange,
+  DateTime Function()? nowProvider,
+}) {
+  return MaterialApp(
+    home: Scaffold(
+      body: SizedBox(
+        width: 1280,
+        child: MessageCenterPage(
+          session: AppSession(baseUrl: '', accessToken: ''),
+          onLogout: onLogout ?? () {},
+          canPublishAnnouncement: canPublishAnnouncement,
+          canViewDetail: canViewDetail,
+          canUseJump: canUseJump,
+          pollingEnabled: pollingEnabled,
+          routePayloadJson: routePayloadJson,
+          service: service,
+          userService: userService ?? _FakeUserService(),
+          onUnreadCountChanged: onUnreadCountChanged,
+          onNavigateToPage:
+              onNavigateToPage ?? (pageCode, {tabCode, routePayloadJson}) {},
+          onPickDateRange: onPickDateRange,
+          nowProvider: nowProvider,
+        ),
+      ),
+    ),
+  );
+}
+
 Future<void> _pumpMessageCenterPage(
   WidgetTester tester, {
   required _FakeMessageService service,
@@ -553,6 +627,7 @@ Future<void> _pumpMessageCenterPage(
   bool canPublishAnnouncement = true,
   bool canViewDetail = true,
   bool canUseJump = true,
+  bool pollingEnabled = true,
   String? routePayloadJson,
   void Function(int count)? onUnreadCountChanged,
   VoidCallback? onLogout,
@@ -569,33 +644,318 @@ Future<void> _pumpMessageCenterPage(
   });
 
   await tester.pumpWidget(
-    MaterialApp(
-      home: Scaffold(
-        body: SizedBox(
-          width: 1280,
-          child: MessageCenterPage(
-            session: AppSession(baseUrl: '', accessToken: ''),
-            onLogout: onLogout ?? () {},
-            canPublishAnnouncement: canPublishAnnouncement,
-            canViewDetail: canViewDetail,
-            canUseJump: canUseJump,
-            routePayloadJson: routePayloadJson,
-            service: service,
-            userService: userService ?? _FakeUserService(),
-            onUnreadCountChanged: onUnreadCountChanged,
-            onNavigateToPage:
-                onNavigateToPage ?? (pageCode, {tabCode, routePayloadJson}) {},
-            onPickDateRange: onPickDateRange,
-            nowProvider: nowProvider,
-          ),
-        ),
-      ),
+    _buildMessageCenterPageApp(
+      service: service,
+      userService: userService,
+      canPublishAnnouncement: canPublishAnnouncement,
+      canViewDetail: canViewDetail,
+      canUseJump: canUseJump,
+      pollingEnabled: pollingEnabled,
+      routePayloadJson: routePayloadJson,
+      onUnreadCountChanged: onUnreadCountChanged,
+      onLogout: onLogout,
+      onNavigateToPage: onNavigateToPage,
+      onPickDateRange: onPickDateRange,
+      nowProvider: nowProvider,
     ),
   );
   await tester.pumpAndSettle();
 }
 
+Finder _metricValueFinder(String label, String value) {
+  final labelFinder = find.text(label);
+  final metricCardFinder = find.ancestor(
+    of: labelFinder,
+    matching: find.byType(MesMetricCard),
+  );
+  return find.descendant(of: metricCardFinder, matching: find.text(value));
+}
+
 void main() {
+  testWidgets('message center 在 pollingEnabled=false 时不会启动轮询', (
+    tester,
+  ) async {
+    final service = _FakeMessageService();
+
+    await _pumpMessageCenterPage(
+      tester,
+      service: service,
+      pollingEnabled: false,
+    );
+
+    expect(service.listMessagesCallCount, 1);
+
+    await tester.pump(const Duration(seconds: 31));
+    await tester.pumpAndSettle();
+
+    expect(service.listMessagesCallCount, 1);
+  });
+
+  testWidgets('message center 从 false 切到 true 时会立即补拉一次', (tester) async {
+    final service = _FakeMessageService();
+
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      _buildMessageCenterPageApp(service: service, pollingEnabled: false),
+    );
+    await tester.pumpAndSettle();
+    expect(service.listMessagesCallCount, 1);
+
+    await tester.pumpWidget(
+      _buildMessageCenterPageApp(service: service, pollingEnabled: true),
+    );
+    await tester.pumpAndSettle();
+
+    expect(service.listMessagesCallCount, 2);
+  });
+
+  testWidgets('message center 同帧停用轮询并刷新 tick 变化时不额外触发列表刷新', (
+    tester,
+  ) async {
+    final service = _FakeMessageService();
+
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      _buildMessageCenterPageApp(service: service, pollingEnabled: true),
+    );
+    await tester.pumpAndSettle();
+    expect(service.listMessagesCallCount, 1);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 1280,
+            child: MessageCenterPage(
+              session: AppSession(baseUrl: '', accessToken: ''),
+              onLogout: () {},
+              canPublishAnnouncement: true,
+              canViewDetail: true,
+              canUseJump: true,
+              pollingEnabled: false,
+              refreshTick: 1,
+              service: service,
+              userService: _FakeUserService(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(service.listMessagesCallCount, 1);
+  });
+
+  testWidgets('message center 列表加载后不会再额外触发摘要请求', (tester) async {
+    final service = _FakeMessageService();
+
+    await _pumpMessageCenterPage(tester, service: service);
+
+    expect(service.listMessagesCallCount, 1);
+    expect(service.summaryCallCount, 1);
+    expect(service.summaryAfterListCompletionCount, 0);
+  });
+
+  testWidgets('message center 摘要已启动但延迟完成时列表仍先渲染并解除 loading', (
+    tester,
+  ) async {
+    final service = _FakeMessageService()
+      ..summaryCompleter = Completer<MessageSummaryResult>();
+
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(_buildMessageCenterPageApp(service: service));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+
+    expect(service.listMessagesCallCount, 1);
+    expect(service.summaryCallCount, 1);
+    expect(find.text('待办消息'), findsWidgets);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+
+    final refreshButton = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, '刷新'),
+    );
+    expect(refreshButton.onPressed, isNotNull);
+
+    expect(find.text('全部消息'), findsOneWidget);
+
+    service.summaryCompleter!.complete(
+      const MessageSummaryResult(
+        totalCount: 14,
+        unreadCount: 12,
+        todoUnreadCount: 1,
+        urgentUnreadCount: 2,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('14'), findsOneWidget);
+    expect(find.text('12'), findsOneWidget);
+    expect(find.text('1'), findsOneWidget);
+    expect(find.text('2'), findsWidgets);
+  });
+
+  testWidgets('message center 摘要失败时不会破坏列表成功路径', (tester) async {
+    final service = _FakeMessageService()
+      ..summaryCompleter = Completer<MessageSummaryResult>();
+
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(_buildMessageCenterPageApp(service: service));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+
+    service.summaryCompleter!.completeError(ApiException('摘要接口失败', 500));
+    await tester.pumpAndSettle();
+
+    expect(service.listMessagesCallCount, 1);
+    expect(service.summaryCallCount, 1);
+    expect(find.text('待办消息'), findsWidgets);
+    expect(find.byKey(const ValueKey('message-center-select-1')), findsOneWidget);
+    expect(find.text('摘要接口失败'), findsNothing);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+
+    final refreshButton = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, '刷新'),
+    );
+    expect(refreshButton.onPressed, isNotNull);
+  });
+
+  testWidgets('message center 会丢弃旧轮次延迟返回的摘要结果', (tester) async {
+    final firstSummaryCompleter = Completer<MessageSummaryResult>();
+    final secondSummaryCompleter = Completer<MessageSummaryResult>();
+    final service = _FakeMessageService()
+      ..summaryCompleters.addAll([
+        firstSummaryCompleter,
+        secondSummaryCompleter,
+      ]);
+    final unreadCounts = <int>[];
+
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      _buildMessageCenterPageApp(
+        service: service,
+        canViewDetail: false,
+        canUseJump: false,
+        onUnreadCountChanged: unreadCounts.add,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+
+    expect(service.listMessagesCallCount, 1);
+    expect(service.summaryCallCount, 1);
+    expect(find.text('待办消息'), findsWidgets);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '刷新'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+
+    expect(service.listMessagesCallCount, 2);
+    expect(service.summaryCallCount, 2);
+
+    secondSummaryCompleter.complete(
+      const MessageSummaryResult(
+        totalCount: 22,
+        unreadCount: 5,
+        todoUnreadCount: 2,
+        urgentUnreadCount: 1,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(_metricValueFinder('全部消息', '22'), findsOneWidget);
+    expect(_metricValueFinder('未读消息', '5'), findsOneWidget);
+    expect(_metricValueFinder('待处理', '2'), findsOneWidget);
+    expect(_metricValueFinder('高优先级', '1'), findsOneWidget);
+    expect(unreadCounts, [5]);
+
+    firstSummaryCompleter.complete(
+      const MessageSummaryResult(
+        totalCount: 99,
+        unreadCount: 17,
+        todoUnreadCount: 8,
+        urgentUnreadCount: 6,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(_metricValueFinder('全部消息', '22'), findsOneWidget);
+    expect(_metricValueFinder('未读消息', '5'), findsOneWidget);
+    expect(_metricValueFinder('待处理', '2'), findsOneWidget);
+    expect(_metricValueFinder('高优先级', '1'), findsOneWidget);
+    expect(_metricValueFinder('全部消息', '99'), findsNothing);
+    expect(_metricValueFinder('未读消息', '17'), findsNothing);
+    expect(_metricValueFinder('待处理', '8'), findsNothing);
+    expect(_metricValueFinder('高优先级', '6'), findsNothing);
+    expect(unreadCounts, [5]);
+  });
+
+  testWidgets('message center 列表同步失败时不会被摘要链路拖慢或额外发起摘要', (
+    tester,
+  ) async {
+    final service = _FakeMessageService()
+      ..listError = ApiException('无权限访问消息接口', 401)
+      ..summaryCompleter = Completer<MessageSummaryResult>();
+    var logoutCount = 0;
+
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      _buildMessageCenterPageApp(
+        service: service,
+        onLogout: () {
+          logoutCount += 1;
+        },
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(logoutCount, 1);
+    expect(service.summaryCallCount, 1);
+    expect(service.summaryCompletionCount, 0);
+  });
+
   testWidgets('message center 支持 route payload 进入待办过滤态', (tester) async {
     final service = _FakeMessageService();
     await _pumpMessageCenterPage(
@@ -867,6 +1227,8 @@ void main() {
         of: find.text('工艺模板已发布').first,
         matching: find.byType(InkWell),
       );
+      await tester.ensureVisible(craftRow);
+      await tester.pumpAndSettle();
       await tester.tap(
         find.descendant(of: craftRow, matching: find.text('跳转')),
       );

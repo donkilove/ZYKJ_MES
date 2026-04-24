@@ -42,6 +42,7 @@ class ProductionPage extends StatefulWidget {
     required this.onLogout,
     required this.visibleTabCodes,
     required this.capabilityCodes,
+    this.moduleActive = true,
     this.preferredTabCode,
     this.routePayloadJson,
     this.tabChildBuilder,
@@ -52,6 +53,7 @@ class ProductionPage extends StatefulWidget {
   final VoidCallback onLogout;
   final List<String> visibleTabCodes;
   final Set<String> capabilityCodes;
+  final bool moduleActive;
   final String? preferredTabCode;
   final String? routePayloadJson;
   final Widget Function(String tabCode)? tabChildBuilder;
@@ -65,6 +67,7 @@ class _ProductionPageState extends State<ProductionPage>
     with TickerProviderStateMixin {
   late List<String> _orderedVisibleTabCodes;
   TabController? _tabController;
+  int _currentTabIndex = 0;
 
   @override
   void initState() {
@@ -126,6 +129,7 @@ class _ProductionPageState extends State<ProductionPage>
     _tabController?.dispose();
     if (_orderedVisibleTabCodes.isEmpty) {
       _tabController = null;
+      _currentTabIndex = 0;
       return;
     }
     var initialIndex = 0;
@@ -140,6 +144,21 @@ class _ProductionPageState extends State<ProductionPage>
       vsync: this,
       initialIndex: initialIndex,
     );
+    _currentTabIndex = initialIndex;
+    _tabController!.addListener(_handleTabIndexChanged);
+  }
+
+  void _handleTabIndexChanged() {
+    final controller = _tabController;
+    if (controller == null) {
+      return;
+    }
+    if (_currentTabIndex == controller.index) {
+      return;
+    }
+    setState(() {
+      _currentTabIndex = controller.index;
+    });
   }
 
   String _tabTitle(String code) {
@@ -176,6 +195,11 @@ class _ProductionPageState extends State<ProductionPage>
   }
 
   Widget _buildTabContent(String code) {
+    final currentIndex = _orderedVisibleTabCodes.indexOf(code);
+    final isTabActive =
+        currentIndex >= 0 &&
+        widget.moduleActive &&
+        _currentTabIndex == currentIndex;
     final child = switch (code) {
       productionOrderManagementTabCode => ProductionOrderManagementPage(
         session: widget.session,
@@ -217,6 +241,11 @@ class _ProductionPageState extends State<ProductionPage>
         canExportCsv: _hasPermission(
           ProductionFeaturePermissionCodes.orderQueryExport,
         ),
+        pollingEnabled: isTabActive,
+        routePayloadJson:
+            widget.preferredTabCode == productionOrderQueryTabCode
+            ? widget.routePayloadJson
+            : null,
       ),
       productionAssistRecordsTabCode => ProductionAssistRecordsPage(
         session: widget.session,

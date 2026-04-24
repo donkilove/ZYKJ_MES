@@ -6,6 +6,7 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/models/authz_models.dart';
 import 'package:mes_client/core/models/current_user.dart';
 import 'package:mes_client/features/message/models/message_models.dart';
+import 'package:mes_client/features/message/presentation/message_center_page.dart';
 import 'package:mes_client/core/services/effective_clock.dart';
 import 'package:mes_client/core/models/page_catalog_models.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_page.dart';
@@ -19,10 +20,14 @@ import 'package:mes_client/features/settings/presentation/software_settings_cont
 import 'package:mes_client/features/shell/models/home_dashboard_models.dart';
 import 'package:mes_client/features/shell/services/home_dashboard_service.dart';
 import 'package:mes_client/core/services/page_catalog_service.dart';
+import 'package:mes_client/features/production/presentation/production_order_query_page.dart';
+import 'package:mes_client/features/shell/presentation/main_shell_page_registry.dart';
+import 'package:mes_client/features/shell/presentation/main_shell_state.dart';
 import 'package:mes_client/features/time_sync/models/time_sync_models.dart';
 import 'package:mes_client/features/time_sync/presentation/time_sync_controller.dart';
 import 'package:mes_client/features/time_sync/services/server_time_service.dart';
 import 'package:mes_client/features/time_sync/services/windows_time_sync_service.dart';
+import 'package:mes_client/features/user/presentation/account_settings_page.dart';
 
 final AppSession _session = AppSession(
   baseUrl: 'http://example.test/api/v1',
@@ -82,6 +87,22 @@ List<PageCatalogItem> _buildCatalog() {
       parentCode: 'user',
       alwaysVisible: false,
       sortOrder: 25,
+    ),
+    PageCatalogItem(
+      code: 'production',
+      name: '生产',
+      pageType: 'sidebar',
+      parentCode: null,
+      alwaysVisible: false,
+      sortOrder: 30,
+    ),
+    PageCatalogItem(
+      code: 'production_order_query',
+      name: '订单查询',
+      pageType: 'tab',
+      parentCode: 'production',
+      alwaysVisible: false,
+      sortOrder: 31,
     ),
     PageCatalogItem(
       code: 'message',
@@ -164,21 +185,24 @@ MessageItem _buildMessageItem() {
   );
 }
 
-HomeDashboardData _buildDashboardData() {
-  return const HomeDashboardData(
+HomeDashboardData _buildDashboardData({
+  HomeDashboardTodoSummary todoSummary = const HomeDashboardTodoSummary(
+    totalCount: 0,
+    pendingApprovalCount: 0,
+    highPriorityCount: 0,
+    exceptionCount: 0,
+    overdueCount: 0,
+  ),
+  List<HomeDashboardTodoItem> todoItems = const [],
+}) {
+  return HomeDashboardData(
     generatedAt: null,
     noticeCount: 0,
-    todoSummary: HomeDashboardTodoSummary(
-      totalCount: 0,
-      pendingApprovalCount: 0,
-      highPriorityCount: 0,
-      exceptionCount: 0,
-      overdueCount: 0,
-    ),
-    todoItems: [],
-    riskItems: [],
-    kpiItems: [],
-    degradedBlocks: [],
+    todoSummary: todoSummary,
+    todoItems: todoItems,
+    riskItems: const [],
+    kpiItems: const [],
+    degradedBlocks: const [],
   );
 }
 
@@ -226,6 +250,18 @@ class _TestShellAuthzService extends AuthzService {
       throw error!;
     }
     return snapshot ?? _buildSnapshot();
+  }
+}
+
+class _CountingShellAuthzService extends _TestShellAuthzService {
+  _CountingShellAuthzService();
+
+  int callCount = 0;
+
+  @override
+  Future<AuthzSnapshotResult> loadAuthzSnapshot() async {
+    callCount += 1;
+    return super.loadAuthzSnapshot();
   }
 }
 
@@ -352,6 +388,22 @@ class _FakeMessageWsService extends MessageWsService {
   void reconnect() {}
 }
 
+class _CountingReconnectMessageWsService extends _FakeMessageWsService {
+  _CountingReconnectMessageWsService({
+    required super.baseUrl,
+    required super.accessToken,
+    required super.onEvent,
+    required super.onDisconnected,
+  });
+
+  int reconnectCount = 0;
+
+  @override
+  void reconnect() {
+    reconnectCount += 1;
+  }
+}
+
 class _CountingHomeDashboardService extends HomeDashboardService {
   _CountingHomeDashboardService() : super(_session);
 
@@ -361,6 +413,17 @@ class _CountingHomeDashboardService extends HomeDashboardService {
   Future<HomeDashboardData> load() async {
     loadCount += 1;
     return _buildDashboardData();
+  }
+}
+
+class _TestHomeDashboardService extends HomeDashboardService {
+  _TestHomeDashboardService(this.data) : super(_session);
+
+  final HomeDashboardData data;
+
+  @override
+  Future<HomeDashboardData> load() async {
+    return data;
   }
 }
 
@@ -400,11 +463,22 @@ Future<void> _pumpMainShellPage(
     required VoidCallback onLogout,
     required List<String> visibleTabCodes,
     required Set<String> capabilityCodes,
+    required bool moduleActive,
     String? preferredTabCode,
     String? routePayloadJson,
     VoidCallback? onVisibilityConfigSaved,
   })?
   userPageBuilder,
+  Widget Function({
+    required AppSession session,
+    required VoidCallback onLogout,
+    required List<String> visibleTabCodes,
+    required Set<String> capabilityCodes,
+    required bool moduleActive,
+    String? preferredTabCode,
+    String? routePayloadJson,
+  })?
+  productionPageBuilder,
   SoftwareSettingsController? softwareSettingsController,
   TimeSyncController? timeSyncController,
   required VoidCallback onLogout,
@@ -433,6 +507,7 @@ Future<void> _pumpMainShellPage(
         messageWsServiceFactory: messageWsServiceFactory,
         homeDashboardService: homeDashboardService,
         userPageBuilder: userPageBuilder,
+        productionPageBuilder: productionPageBuilder,
       ),
     ),
   );
@@ -466,6 +541,214 @@ class _FakeServerTimeService extends ServerTimeService {
 class _FakeWindowsTimeSyncService extends WindowsTimeSyncService {}
 
 void main() {
+  testWidgets('主壳会把用户模块活跃态真实传到个人中心页面', (tester) async {
+    final registry = MainShellPageRegistry();
+    final baseState = MainShellViewState(
+      loading: false,
+      currentUser: _buildCurrentUser(),
+      authzSnapshot: _buildSnapshot(
+        visibleSidebarCodes: const ['user', 'production'],
+        tabCodesByParent: const {
+          'user': ['account_settings'],
+          'production': ['production_order_query'],
+        },
+        moduleItems: [
+          _buildModuleItem('user'),
+          _buildModuleItem('production'),
+        ],
+      ),
+      catalog: _buildCatalog(),
+      tabCodesByParent: const {
+        'user': ['account_settings'],
+        'production': ['production_order_query'],
+      },
+    );
+
+    Future<void> pumpUserPage({required String selectedPageCode}) async {
+      final settingsController = SoftwareSettingsController.memory();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: registry.build(
+              pageCode: 'user',
+              session: _session,
+              state: baseState.copyWith(selectedPageCode: selectedPageCode),
+              onLogout: () {},
+              onRefreshShellData: ({loadCatalog = false}) async {},
+              onNavigateToPageTarget:
+                  ({
+                    required pageCode,
+                    String? tabCode,
+                    String? routePayloadJson,
+                  }) {},
+              onVisibilityConfigSaved: () {},
+              messageService: _TestShellMessageService(),
+              softwareSettingsController: settingsController,
+              timeSyncController: _buildTimeSyncController(settingsController),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await pumpUserPage(selectedPageCode: 'user');
+    expect(
+      tester.widget<AccountSettingsPage>(find.byType(AccountSettingsPage))
+          .pollingEnabled,
+      isTrue,
+    );
+
+    await pumpUserPage(selectedPageCode: 'production');
+    expect(
+      tester.widget<AccountSettingsPage>(find.byType(AccountSettingsPage))
+          .pollingEnabled,
+      isFalse,
+    );
+  });
+
+  testWidgets('主壳会把生产模块活跃态真实传到订单查询页面', (tester) async {
+    final registry = MainShellPageRegistry();
+    final baseState = MainShellViewState(
+      loading: false,
+      currentUser: _buildCurrentUser(),
+      authzSnapshot: _buildSnapshot(
+        visibleSidebarCodes: const ['user', 'production'],
+        tabCodesByParent: const {
+          'user': ['account_settings'],
+          'production': ['production_order_query'],
+        },
+        moduleItems: [
+          _buildModuleItem('user'),
+          _buildModuleItem('production'),
+        ],
+      ),
+      catalog: _buildCatalog(),
+      tabCodesByParent: const {
+        'user': ['account_settings'],
+        'production': ['production_order_query'],
+      },
+    );
+
+    Future<void> pumpProductionPage({required String selectedPageCode}) async {
+      final settingsController = SoftwareSettingsController.memory();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: registry.build(
+              pageCode: 'production',
+              session: _session,
+              state: baseState.copyWith(selectedPageCode: selectedPageCode),
+              onLogout: () {},
+              onRefreshShellData: ({loadCatalog = false}) async {},
+              onNavigateToPageTarget:
+                  ({
+                    required pageCode,
+                    String? tabCode,
+                    String? routePayloadJson,
+                  }) {},
+              onVisibilityConfigSaved: () {},
+              messageService: _TestShellMessageService(),
+              softwareSettingsController: settingsController,
+              timeSyncController: _buildTimeSyncController(settingsController),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await pumpProductionPage(selectedPageCode: 'production');
+    expect(
+      tester
+          .widget<ProductionOrderQueryPage>(find.byType(ProductionOrderQueryPage))
+          .pollingEnabled,
+      isTrue,
+    );
+
+    await pumpProductionPage(selectedPageCode: 'user');
+    expect(
+      tester
+          .widget<ProductionOrderQueryPage>(find.byType(ProductionOrderQueryPage))
+          .pollingEnabled,
+      isFalse,
+      );
+    });
+
+  testWidgets('主壳会把消息模块活跃态真实传到消息中心页面', (tester) async {
+    final registry = MainShellPageRegistry();
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    final baseState = MainShellViewState(
+      loading: false,
+      currentUser: _buildCurrentUser(),
+      authzSnapshot: _buildSnapshot(
+        visibleSidebarCodes: const ['user', 'message'],
+        tabCodesByParent: const {
+          'user': ['account_settings'],
+          'message': ['message_center'],
+        },
+        moduleItems: [
+          _buildModuleItem('user'),
+          _buildModuleItem('message'),
+        ],
+      ),
+      catalog: _buildCatalog(),
+      tabCodesByParent: const {
+        'user': ['account_settings'],
+        'message': ['message_center'],
+      },
+    );
+
+    Future<void> pumpMessagePage({required String selectedPageCode}) async {
+      final settingsController = SoftwareSettingsController.memory();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox.expand(
+              child: registry.build(
+                pageCode: 'message',
+                session: _session,
+                state: baseState.copyWith(selectedPageCode: selectedPageCode),
+                onLogout: () {},
+                onRefreshShellData: ({loadCatalog = false}) async {},
+                onNavigateToPageTarget:
+                    ({
+                      required pageCode,
+                      String? tabCode,
+                      String? routePayloadJson,
+                    }) {},
+                onVisibilityConfigSaved: () {},
+                messageService: _TestShellMessageService(),
+                softwareSettingsController: settingsController,
+                timeSyncController: _buildTimeSyncController(settingsController),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await pumpMessagePage(selectedPageCode: 'message');
+    expect(
+      tester.widget<MessageCenterPage>(find.byType(MessageCenterPage))
+          .pollingEnabled,
+      isTrue,
+    );
+
+    await pumpMessagePage(selectedPageCode: 'user');
+    expect(
+      tester.widget<MessageCenterPage>(find.byType(MessageCenterPage))
+          .pollingEnabled,
+      isFalse,
+    );
+  });
+
   testWidgets('点击软件设置入口后显示软件设置页面说明', (tester) async {
     await _pumpMainShellPage(
       tester,
@@ -494,7 +777,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('控制本机软件的外观和布局偏好。'), findsOneWidget);
+    expect(find.text('主题、密度与预览'), findsOneWidget);
+    expect(find.text('跟随系统'), findsOneWidget);
   });
 
   testWidgets('软件设置页展示启动后默认进入选项并可更新 controller', (tester) async {
@@ -663,6 +947,7 @@ void main() {
             required onLogout,
             required visibleTabCodes,
             required capabilityCodes,
+            required bool moduleActive,
             String? preferredTabCode,
             String? routePayloadJson,
             VoidCallback? onVisibilityConfigSaved,
@@ -719,6 +1004,7 @@ void main() {
             required onLogout,
             required visibleTabCodes,
             required capabilityCodes,
+            required bool moduleActive,
             String? preferredTabCode,
             String? routePayloadJson,
             VoidCallback? onVisibilityConfigSaved,
@@ -737,6 +1023,30 @@ void main() {
   });
 
   testWidgets('首页快捷跳转按可见菜单动态展示并优先携带首个可见页签', (tester) async {
+    final homeDashboardService = _TestHomeDashboardService(
+      _buildDashboardData(
+        todoSummary: const HomeDashboardTodoSummary(
+          totalCount: 1,
+          pendingApprovalCount: 1,
+          highPriorityCount: 0,
+          exceptionCount: 0,
+          overdueCount: 0,
+        ),
+        todoItems: const [
+          HomeDashboardTodoItem(
+            id: 1,
+            title: '待办跳转到用户管理',
+            categoryLabel: '用户模块',
+            priorityLabel: '待审批',
+            sourceModule: 'user',
+            targetPageCode: 'user',
+            targetTabCode: 'user_management',
+            targetRoutePayloadJson: '{"target_tab_code":"user_management"}',
+          ),
+        ],
+      ),
+    );
+
     await _pumpMainShellPage(
       tester,
       authService: _TestShellAuthService(),
@@ -750,6 +1060,7 @@ void main() {
       ),
       pageCatalogService: _TestShellPageCatalogService(),
       messageService: _TestShellMessageService(),
+      homeDashboardService: homeDashboardService,
       messageWsServiceFactory:
           ({
             required baseUrl,
@@ -768,6 +1079,7 @@ void main() {
             required onLogout,
             required visibleTabCodes,
             required capabilityCodes,
+            required bool moduleActive,
             String? preferredTabCode,
             String? routePayloadJson,
             VoidCallback? onVisibilityConfigSaved,
@@ -781,20 +1093,11 @@ void main() {
       onLogout: () {},
     );
 
-    final todoCard = find.ancestor(
-      of: find.text('我的待办队列'),
-      matching: find.byType(Card),
-    );
-    expect(
-      find.descendant(of: todoCard, matching: find.text('用户')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: todoCard, matching: find.text('产品')),
-      findsNothing,
-    );
+    expect(find.text('我的待办队列'), findsOneWidget);
+    expect(find.text('待办跳转到用户管理'), findsOneWidget);
+    expect(find.text('产品'), findsNothing);
 
-    await tester.tap(find.descendant(of: todoCard, matching: find.text('用户')));
+    await tester.tap(find.text('待办跳转到用户管理'));
     await tester.pumpAndSettle();
 
     expect(
@@ -883,6 +1186,55 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(homeDashboardService.loadCount, 2);
+  });
+
+  testWidgets('主壳进入后台时停止全局轮询，恢复前台后立即补拉并重连 WS', (tester) async {
+    _CountingReconnectMessageWsService? wsService;
+    final authzService = _CountingShellAuthzService();
+    final messageService = _CountingShellMessageService();
+
+    await _pumpMainShellPage(
+      tester,
+      authService: _TestShellAuthService(),
+      authzService: authzService,
+      pageCatalogService: _TestShellPageCatalogService(),
+      messageService: messageService,
+      messageWsServiceFactory:
+          ({
+            required baseUrl,
+            required accessToken,
+            required onEvent,
+            required onDisconnected,
+          }) {
+            wsService = _CountingReconnectMessageWsService(
+              baseUrl: baseUrl,
+              accessToken: accessToken,
+              onEvent: onEvent,
+              onDisconnected: onDisconnected,
+            );
+            return wsService!;
+          },
+      onLogout: () {},
+    );
+
+    expect(authzService.callCount, 1);
+    expect(messageService.unreadCountCallCount, 0);
+    expect(wsService!.reconnectCount, 0);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 31));
+
+    expect(authzService.callCount, 1);
+    expect(messageService.unreadCountCallCount, 0);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(authzService.callCount, 2);
+    expect(messageService.unreadCountCallCount, 1);
+    expect(wsService!.reconnectCount, 1);
   });
 
   testWidgets('防抖窗口内多次消息事件会合并为一次工作台刷新', (tester) async {
@@ -1296,6 +1648,7 @@ void main() {
             required onLogout,
             required visibleTabCodes,
             required capabilityCodes,
+            required bool moduleActive,
             String? preferredTabCode,
             String? routePayloadJson,
             VoidCallback? onVisibilityConfigSaved,

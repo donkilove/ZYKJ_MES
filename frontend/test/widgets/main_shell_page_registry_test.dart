@@ -57,6 +57,7 @@ void main() {
             required onLogout,
             required visibleTabCodes,
             required capabilityCodes,
+            required bool moduleActive,
             String? preferredTabCode,
             String? routePayloadJson,
             VoidCallback? onVisibilityConfigSaved,

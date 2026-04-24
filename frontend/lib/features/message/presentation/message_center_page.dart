@@ -41,6 +41,7 @@ class MessageCenterPage extends StatefulWidget {
     this.canPublishAnnouncement = false,
     this.canViewDetail = false,
     this.canUseJump = false,
+    this.pollingEnabled = true,
     this.onUnreadCountChanged,
     this.onNavigateToPage,
     this.service,
@@ -56,6 +57,7 @@ class MessageCenterPage extends StatefulWidget {
   final bool canPublishAnnouncement;
   final bool canViewDetail;
   final bool canUseJump;
+  final bool pollingEnabled;
   final void Function(int count)? onUnreadCountChanged;
   final void Function(
     String pageCode, {
@@ -79,6 +81,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   late final MessageService _service;
   late final UserService _userService;
   Timer? _pollTimer;
+  int _loadRequestToken = 0;
 
   bool _loading = false;
   String _error = '';
@@ -115,18 +118,26 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     _userService = widget.userService ?? UserService(widget.session);
     _consumeRoutePayload(widget.routePayloadJson, triggerLoad: false);
     _load();
-    _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      _load(reset: false);
-    });
+    _updatePollingState();
   }
 
   @override
   void didUpdateWidget(covariant MessageCenterPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final pollingBecameEnabled =
+        !oldWidget.pollingEnabled && widget.pollingEnabled;
+    final pollingBecameDisabled =
+        oldWidget.pollingEnabled && !widget.pollingEnabled;
+    if (pollingBecameDisabled) {
+      _stopPolling();
+    }
     if (widget.routePayloadJson != oldWidget.routePayloadJson) {
       _consumeRoutePayload(widget.routePayloadJson);
     }
-    if (widget.refreshTick != oldWidget.refreshTick) {
+    if (pollingBecameEnabled) {
+      _updatePollingState(triggerImmediateLoad: true);
+    } else if (widget.refreshTick != oldWidget.refreshTick &&
+        widget.pollingEnabled) {
       _load(reset: false);
     }
   }
@@ -166,13 +177,45 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     super.dispose();
   }
 
+  void _applySummary(MessageSummaryResult summary) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _allMessageCount = summary.totalCount;
+      _unreadCount = summary.unreadCount;
+      _todoCount = summary.todoUnreadCount;
+      _urgentCount = summary.urgentUnreadCount;
+    });
+    widget.onUnreadCountChanged?.call(summary.unreadCount);
+  }
+
   Future<void> _load({bool reset = true}) async {
     if (_loading) return;
+    final requestToken = ++_loadRequestToken;
     setState(() {
       _loading = true;
       _error = '';
       if (reset) _page = 1;
     });
+    var listSucceeded = false;
+    var summaryResolved = false;
+    MessageSummaryResult? summaryResult;
+    _service
+        .getSummary()
+        .then((summary) {
+          summaryResolved = true;
+          summaryResult = summary;
+          if (!listSucceeded ||
+              !mounted ||
+              requestToken != _loadRequestToken) {
+            return;
+          }
+          _applySummary(summary);
+        })
+        .catchError((_) {
+          summaryResolved = true;
+        });
     try {
       final result = await _service.listMessages(
         page: _page,
@@ -183,7 +226,9 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         status: _statusFilter.isEmpty ? null : _statusFilter,
         messageType: _typeFilter.isEmpty ? null : _typeFilter,
         priority: _priorityFilter.isEmpty ? null : _priorityFilter,
-        sourceModule: _sourceModuleFilter.isEmpty ? null : _sourceModuleFilter,
+        sourceModule: _sourceModuleFilter.isEmpty
+            ? null
+            : _sourceModuleFilter,
         startTime: _dateRange?.start,
         endTime: _dateRange?.end,
         todoOnly: _todoOnly,
@@ -207,7 +252,10 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         }
         _selectedIds.removeWhere((id) => !_items.any((item) => item.id == id));
       });
-      _refreshStats();
+      listSucceeded = true;
+      if (summaryResolved && summaryResult != null) {
+        _applySummary(summaryResult!);
+      }
       if (widget.canViewDetail && _selectedItem != null) {
         await _loadSelectedDetail(_selectedItem!.id, silent: true);
       }
@@ -222,22 +270,36 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
       if (!mounted) return;
       setState(() => _error = e.toString());
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && requestToken == _loadRequestToken) {
+        setState(() => _loading = false);
+      }
     }
   }
 
-  Future<void> _refreshStats() async {
-    try {
-      final summary = await _service.getSummary();
-      widget.onUnreadCountChanged?.call(summary.unreadCount);
-      if (!mounted) return;
-      setState(() {
-        _allMessageCount = summary.totalCount;
-        _unreadCount = summary.unreadCount;
-        _todoCount = summary.todoUnreadCount;
-        _urgentCount = summary.urgentUnreadCount;
-      });
-    } catch (_) {}
+  void _startPolling() {
+    _pollTimer?.cancel();
+    if (!widget.pollingEnabled) {
+      return;
+    }
+    _pollTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _load(reset: false);
+    });
+  }
+
+  void _stopPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+  }
+
+  void _updatePollingState({bool triggerImmediateLoad = false}) {
+    if (!widget.pollingEnabled) {
+      _stopPolling();
+      return;
+    }
+    if (triggerImmediateLoad) {
+      _load(reset: false);
+    }
+    _startPolling();
   }
 
   Future<void> _loadSelectedDetail(int messageId, {bool silent = false}) async {
