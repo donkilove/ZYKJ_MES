@@ -672,9 +672,7 @@ Finder _metricValueFinder(String label, String value) {
 }
 
 void main() {
-  testWidgets('message center 在 pollingEnabled=false 时不会启动轮询', (
-    tester,
-  ) async {
+  testWidgets('message center 在 pollingEnabled=false 时不会启动轮询', (tester) async {
     final service = _FakeMessageService();
 
     await _pumpMessageCenterPage(
@@ -715,9 +713,7 @@ void main() {
     expect(service.listMessagesCallCount, 2);
   });
 
-  testWidgets('message center 同帧停用轮询并刷新 tick 变化时不额外触发列表刷新', (
-    tester,
-  ) async {
+  testWidgets('message center 同帧停用轮询并刷新 tick 变化时不额外触发列表刷新', (tester) async {
     final service = _FakeMessageService();
 
     tester.view.physicalSize = const Size(1600, 1200);
@@ -768,9 +764,7 @@ void main() {
     expect(service.summaryAfterListCompletionCount, 0);
   });
 
-  testWidgets('message center 摘要已启动但延迟完成时列表仍先渲染并解除 loading', (
-    tester,
-  ) async {
+  testWidgets('message center 摘要已启动但延迟完成时列表仍先渲染并解除 loading', (tester) async {
     final service = _FakeMessageService()
       ..summaryCompleter = Completer<MessageSummaryResult>();
 
@@ -836,7 +830,10 @@ void main() {
     expect(service.listMessagesCallCount, 1);
     expect(service.summaryCallCount, 1);
     expect(find.text('待办消息'), findsWidgets);
-    expect(find.byKey(const ValueKey('message-center-select-1')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('message-center-select-1')),
+      findsOneWidget,
+    );
     expect(find.text('摘要接口失败'), findsNothing);
     expect(find.byType(LinearProgressIndicator), findsNothing);
 
@@ -925,9 +922,7 @@ void main() {
     expect(unreadCounts, [5]);
   });
 
-  testWidgets('message center 列表同步失败时不会被摘要链路拖慢或额外发起摘要', (
-    tester,
-  ) async {
+  testWidgets('message center 列表同步失败时不会被摘要链路拖慢或额外发起摘要', (tester) async {
     final service = _FakeMessageService()
       ..listError = ApiException('无权限访问消息接口', 401)
       ..summaryCompleter = Completer<MessageSummaryResult>();
@@ -989,6 +984,31 @@ void main() {
     expect(find.byType(MesSectionCard), findsAtLeastNWidgets(2));
     expect(find.byType(MesDetailPanel), findsOneWidget);
     expect(find.byType(MesPaginationBar), findsOneWidget);
+  });
+
+  testWidgets('message center 重组顶部操作区、次级筛选层与紧凑概览区', (tester) async {
+    final service = _FakeMessageService();
+
+    await _pumpMessageCenterPage(tester, service: service);
+
+    expect(
+      find.byKey(const ValueKey('message-center-primary-actions')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('message-center-secondary-filters')),
+      findsOneWidget,
+    );
+
+    final metricCards = find.byType(MesMetricCard);
+    expect(metricCards, findsNWidgets(4));
+    expect(_metricValueFinder('未读消息', '12'), findsOneWidget);
+    expect(_metricValueFinder('待处理', '1'), findsOneWidget);
+    expect(_metricValueFinder('高优先级', '2'), findsOneWidget);
+    expect(_metricValueFinder('全部消息', '14'), findsOneWidget);
+
+    final firstMetricCardSize = tester.getSize(metricCards.first);
+    expect(firstMetricCardSize.width, lessThan(260));
   });
 
   testWidgets(
