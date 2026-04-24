@@ -8,6 +8,17 @@ class MessageCenterPreviewPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MesDetailPanel(title: '消息详情预览', expandChild: true, child: child);
+    return MesDetailPanel(
+      title: '消息详情预览',
+      expandChild: true,
+      child: Scrollbar(
+        thumbVisibility: true,
+        child: SingleChildScrollView(
+          key: const ValueKey('message-center-preview-scroll'),
+          padding: const EdgeInsets.only(right: 4),
+          child: child,
+        ),
+      ),
+    );
   }
 }

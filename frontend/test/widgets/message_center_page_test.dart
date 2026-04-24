@@ -1014,6 +1014,51 @@ void main() {
     expect(firstOverviewCardSize.height, lessThan(84));
   });
 
+  testWidgets('message center 点击左侧消息项后右侧详情预览切换到目标消息', (tester) async {
+    final service = _FakeMessageService();
+
+    await _pumpMessageCenterPage(tester, service: service);
+
+    expect(find.byKey(const ValueKey('message-center-preview-detail-1')), findsOneWidget);
+    expect(find.text('正文内容'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('message-center-tile-3')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('message-center-preview-detail-3')), findsOneWidget);
+    expect(find.text('您的账号已创建，请进入个人中心修改密码。'), findsOneWidget);
+    expect(find.text('排障提示'), findsNothing);
+  });
+
+  testWidgets('message center 列表详情操作改为页内切换而不是弹窗主路径', (tester) async {
+    final service = _FakeMessageService();
+
+    await _pumpMessageCenterPage(tester, service: service);
+
+    await tester.tap(find.byKey(const ValueKey('message-center-detail-3')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('消息详情'), findsNothing);
+    expect(find.byKey(const ValueKey('message-center-preview-detail-3')), findsOneWidget);
+    expect(find.text('您的账号已创建，请进入个人中心修改密码。'), findsOneWidget);
+  });
+
+  testWidgets('message center 详情面板内部存在独立可滚动区域', (tester) async {
+    final service = _FakeMessageService();
+
+    tester.view.physicalSize = const Size(1600, 720);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(_buildMessageCenterPageApp(service: service));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('message-center-preview-scroll')), findsOneWidget);
+  });
+
   testWidgets(
     'message center supports filters, preview, read actions and jumps',
     (tester) async {
@@ -1054,6 +1099,10 @@ void main() {
       expect(find.text('投递失败'), findsWidgets);
       expect(find.text('查看详情'), findsOneWidget);
 
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('message-center-preview-read-1')),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(
         find.byKey(const ValueKey('message-center-preview-read-1')),
       );
@@ -1169,6 +1218,14 @@ void main() {
       await tester.tap(find.text('包含历史消息'));
       await tester.pumpAndSettle();
       expect(service.lastActiveOnly, isFalse);
+      await tester.scrollUntilVisible(
+        find.text('历史公告'),
+        180,
+        scrollable: find.descendant(
+          of: find.byKey(const ValueKey('message-center-list-scroll')),
+          matching: find.byType(Scrollable),
+        ),
+      );
       expect(find.text('历史公告'), findsWidgets);
 
       await tester.tap(
@@ -1198,14 +1255,22 @@ void main() {
       await tester.pumpAndSettle();
       expect(service.publishCount, 1);
 
-      await tester.tap(find.text('待办消息').first);
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('message-center-tile-1')),
+        -180,
+        scrollable: find.descendant(
+          of: find.byKey(const ValueKey('message-center-list-scroll')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await tester.ensureVisible(find.byKey(const ValueKey('message-center-tile-1')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('详情').first);
+      await tester.tap(find.byKey(const ValueKey('message-center-tile-1')));
       await tester.pumpAndSettle();
-      expect(find.text('消息详情'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('message-center-detail-1')));
+      await tester.pumpAndSettle();
+      expect(find.text('消息详情'), findsNothing);
       expect(find.text('阅读状态'), findsWidgets);
-      await tester.tap(find.text('关闭'));
-      await tester.pumpAndSettle();
       await tester.tap(find.text('跳转').first);
       await tester.pumpAndSettle();
       expect(navigatedPage, 'production');
@@ -1215,7 +1280,9 @@ void main() {
         '{"action":"detail","authorization_id":101}',
       );
 
-      await tester.tap(find.text('注册审批通过').first);
+      await tester.ensureVisible(find.byKey(const ValueKey('message-center-tile-3')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('message-center-tile-3')));
       await tester.pumpAndSettle();
       final userRow = find.ancestor(
         of: find.text('注册审批通过').first,
@@ -1227,7 +1294,9 @@ void main() {
       expect(navigatedTab, 'account_settings');
       expect(navigatedRoutePayloadJson, '{"action":"change_password"}');
 
-      await tester.tap(find.text('产品版本已发布').first);
+      await tester.ensureVisible(find.byKey(const ValueKey('message-center-tile-4')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('message-center-tile-4')));
       await tester.pumpAndSettle();
       final productRow = find.ancestor(
         of: find.text('产品版本已发布').first,
@@ -1244,7 +1313,9 @@ void main() {
         '{"action":"view_version","product_id":66,"product_name":"产品A","target_version":3}',
       );
 
-      await tester.tap(find.text('工艺模板已发布').first);
+      await tester.ensureVisible(find.byKey(const ValueKey('message-center-tile-5')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('message-center-tile-5')));
       await tester.pumpAndSettle();
       final craftRow = find.ancestor(
         of: find.text('工艺模板已发布').first,

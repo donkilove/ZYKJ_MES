@@ -46,7 +46,7 @@ class MessageCenterListSection extends StatelessWidget {
           const LinearProgressIndicator(minHeight: 2),
           const SizedBox(height: 12),
         ],
-        Expanded(child: content),
+        Expanded(child: ClipRect(child: content)),
         const SizedBox(height: 12),
         MesPaginationBar(
           page: page,
