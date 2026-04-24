@@ -81,6 +81,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   late final MessageService _service;
   late final UserService _userService;
   Timer? _pollTimer;
+  int _loadRequestToken = 0;
 
   bool _loading = false;
   String _error = '';
@@ -176,27 +177,45 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     super.dispose();
   }
 
+  void _applySummary(MessageSummaryResult summary) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _allMessageCount = summary.totalCount;
+      _unreadCount = summary.unreadCount;
+      _todoCount = summary.todoUnreadCount;
+      _urgentCount = summary.urgentUnreadCount;
+    });
+    widget.onUnreadCountChanged?.call(summary.unreadCount);
+  }
+
   Future<void> _load({bool reset = true}) async {
     if (_loading) return;
+    final requestToken = ++_loadRequestToken;
     setState(() {
       _loading = true;
       _error = '';
       if (reset) _page = 1;
     });
-    var listSettled = false;
-    final summaryCompleter = Completer<MessageSummaryResult?>();
-    final summaryTimer = Timer(Duration.zero, () async {
-      if (listSettled) {
-        summaryCompleter.complete(null);
-        return;
-      }
-      try {
-        summaryCompleter.complete(await _service.getSummary());
-      } catch (_) {
-        summaryCompleter.complete(null);
-      }
-    });
-    final summaryFuture = summaryCompleter.future;
+    var listSucceeded = false;
+    var summaryResolved = false;
+    MessageSummaryResult? summaryResult;
+    _service
+        .getSummary()
+        .then((summary) {
+          summaryResolved = true;
+          summaryResult = summary;
+          if (!listSucceeded ||
+              !mounted ||
+              requestToken != _loadRequestToken) {
+            return;
+          }
+          _applySummary(summary);
+        })
+        .catchError((_) {
+          summaryResolved = true;
+        });
     try {
       final result = await _service.listMessages(
         page: _page,
@@ -215,8 +234,6 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         todoOnly: _todoOnly,
         activeOnly: !_includeInactive,
       );
-      listSettled = true;
-      final summary = await summaryFuture;
       if (!mounted) return;
       setState(() {
         _items = result.items;
@@ -234,27 +251,15 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
           _selectedDetail = null;
         }
         _selectedIds.removeWhere((id) => !_items.any((item) => item.id == id));
-        if (summary != null) {
-          _allMessageCount = summary.totalCount;
-          _unreadCount = summary.unreadCount;
-          _todoCount = summary.todoUnreadCount;
-          _urgentCount = summary.urgentUnreadCount;
-        }
       });
-      if (summary != null) {
-        widget.onUnreadCountChanged?.call(summary.unreadCount);
+      listSucceeded = true;
+      if (summaryResolved && summaryResult != null) {
+        _applySummary(summaryResult!);
       }
       if (widget.canViewDetail && _selectedItem != null) {
         await _loadSelectedDetail(_selectedItem!.id, silent: true);
       }
     } on ApiException catch (e) {
-      listSettled = true;
-      if (summaryTimer.isActive) {
-        summaryTimer.cancel();
-        if (!summaryCompleter.isCompleted) {
-          summaryCompleter.complete(null);
-        }
-      }
       if (!mounted) return;
       if (e.statusCode == 401) {
         widget.onLogout();
@@ -262,17 +267,12 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
       }
       setState(() => _error = e.message);
     } catch (e) {
-      listSettled = true;
-      if (summaryTimer.isActive) {
-        summaryTimer.cancel();
-        if (!summaryCompleter.isCompleted) {
-          summaryCompleter.complete(null);
-        }
-      }
       if (!mounted) return;
       setState(() => _error = e.toString());
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && requestToken == _loadRequestToken) {
+        setState(() => _loading = false);
+      }
     }
   }
 

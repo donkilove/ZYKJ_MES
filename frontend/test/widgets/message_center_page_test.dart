@@ -754,6 +754,84 @@ void main() {
     expect(service.summaryAfterListCompletionCount, 0);
   });
 
+  testWidgets('message center 摘要已启动但延迟完成时列表仍先渲染并解除 loading', (
+    tester,
+  ) async {
+    final service = _FakeMessageService()
+      ..summaryCompleter = Completer<MessageSummaryResult>();
+
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(_buildMessageCenterPageApp(service: service));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+
+    expect(service.listMessagesCallCount, 1);
+    expect(service.summaryCallCount, 1);
+    expect(find.text('待办消息'), findsWidgets);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+
+    final refreshButton = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, '刷新'),
+    );
+    expect(refreshButton.onPressed, isNotNull);
+
+    expect(find.text('全部消息'), findsOneWidget);
+
+    service.summaryCompleter!.complete(
+      const MessageSummaryResult(
+        totalCount: 14,
+        unreadCount: 12,
+        todoUnreadCount: 1,
+        urgentUnreadCount: 2,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('14'), findsOneWidget);
+    expect(find.text('12'), findsOneWidget);
+    expect(find.text('1'), findsOneWidget);
+    expect(find.text('2'), findsWidgets);
+  });
+
+  testWidgets('message center 摘要失败时不会破坏列表成功路径', (tester) async {
+    final service = _FakeMessageService()
+      ..summaryCompleter = Completer<MessageSummaryResult>();
+
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(_buildMessageCenterPageApp(service: service));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+
+    service.summaryCompleter!.completeError(ApiException('摘要接口失败', 500));
+    await tester.pumpAndSettle();
+
+    expect(service.listMessagesCallCount, 1);
+    expect(service.summaryCallCount, 1);
+    expect(find.text('待办消息'), findsWidgets);
+    expect(find.byKey(const ValueKey('message-center-select-1')), findsOneWidget);
+    expect(find.text('摘要接口失败'), findsNothing);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+
+    final refreshButton = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, '刷新'),
+    );
+    expect(refreshButton.onPressed, isNotNull);
+  });
+
   testWidgets('message center 列表同步失败时不会被摘要链路拖慢或额外发起摘要', (
     tester,
   ) async {
@@ -778,9 +856,10 @@ void main() {
       ),
     );
     await tester.pump();
+    await tester.pump();
 
     expect(logoutCount, 1);
-    expect(service.summaryCallCount, 0);
+    expect(service.summaryCallCount, 1);
     expect(service.summaryCompletionCount, 0);
   });
 
