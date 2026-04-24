@@ -24,7 +24,19 @@
 
 - 插件统一放在 `plugins/` 根目录下组织。
 - 仓库固定解释器路径为 `plugins/runtime/python312/python.exe`。
-- 需要调用仓库内置 Python 时，优先直接使用上述解释器，避免依赖系统全局 Python。
+- 涉及仓库内插件运行、插件安装说明、插件调试复现、CI/脚本需要固定版本时，必须使用内置解释器，避免依赖系统全局 Python。
+- 仅在运行仓库根级启动脚本、开发者自管工具链，且任务不依赖插件固定运行时时，可以继续使用系统 Python。
+- 当前运行时目录按官方 `Python 3.12.10 Windows embeddable package (64-bit)` 原样入仓，仅额外补充说明文档；日常维护不允许随意裁剪、增删其中二进制内容。
+- 平台边界：当前仅支持 Windows x64。
+- 整目录入仓是为了同时固定 `python.exe`、`python312.dll`、`python312.zip`、VC 运行库与扩展模块，避免插件在不同机器上因缺文件或版本漂移无法复现。
+- 运行时升级或替换时，统一用新的官方 embeddable package 整包覆盖 `plugins/runtime/python312/`，保留或更新本目录 `README.md`，再执行：
+
+```powershell
+git check-ignore -v plugins/runtime/python312/python.exe
+& .\plugins\runtime\python312\python.exe -c "import sys; print(sys.version)"
+```
+
+- 校验通过标准：`python.exe` 不应被忽略，且 `sys.version` 输出目标版本号；若不满足，则不得提交。
 
 ## 默认启动命令
 
