@@ -13,10 +13,12 @@ import 'package:mes_client/features/plugin_host/services/plugin_runtime_locator.
 
 void main() {
   test('openPlugin 会把视图状态切到 starting', () async {
+    final runtimeEnv = await _createRuntimeEnvironment();
+    addTearDown(runtimeEnv.dispose);
     final controller = PluginHostController(
       catalogService: _StubCatalogService.withPlugin(),
       processService: _BlockingProcessService(),
-      runtimeLocator: _StubRuntimeLocator(),
+      runtimeLocator: _StubRuntimeLocator(runtimeRoot: runtimeEnv.runtimeRoot.path),
     );
     await controller.loadCatalog();
 
@@ -28,11 +30,13 @@ void main() {
   });
 
   test('已运行时再次打开同一插件不会重复拉起进程', () async {
+    final runtimeEnv = await _createRuntimeEnvironment();
+    addTearDown(runtimeEnv.dispose);
     final processService = _CountingProcessService();
     final controller = PluginHostController(
       catalogService: _StubCatalogService.withPlugin(),
       processService: processService,
-      runtimeLocator: _StubRuntimeLocator(),
+      runtimeLocator: _StubRuntimeLocator(runtimeRoot: runtimeEnv.runtimeRoot.path),
     );
     await controller.loadCatalog();
 
@@ -53,10 +57,12 @@ void main() {
   });
 
   test('启动失败时会进入 failed 状态并保留错误信息', () async {
+    final runtimeEnv = await _createRuntimeEnvironment();
+    addTearDown(runtimeEnv.dispose);
     final controller = PluginHostController(
       catalogService: _StubCatalogService.withPlugin(),
       processService: _FailingProcessService(),
-      runtimeLocator: _StubRuntimeLocator(),
+      runtimeLocator: _StubRuntimeLocator(runtimeRoot: runtimeEnv.runtimeRoot.path),
     );
     await controller.loadCatalog();
 
@@ -64,6 +70,97 @@ void main() {
 
     expect(controller.viewState.phase, PluginHostPhase.failed);
     expect(controller.viewState.errorMessage, contains('ready timeout'));
+  });
+
+  test('manifest 缺失时 openPlugin 会通知 failed 状态', () async {
+    final runtimeEnv = await _createRuntimeEnvironment();
+    addTearDown(runtimeEnv.dispose);
+    final controller = PluginHostController(
+      catalogService: _MissingManifestCatalogService(),
+      processService: _CountingProcessService(),
+      runtimeLocator: _StubRuntimeLocator(runtimeRoot: runtimeEnv.runtimeRoot.path),
+    );
+    await controller.loadCatalog();
+
+    final phases = <PluginHostPhase>[];
+    controller.addListener(() {
+      phases.add(controller.viewState.phase);
+    });
+
+    await controller.openPlugin('serial_assistant');
+
+    expect(controller.viewState.phase, PluginHostPhase.failed);
+    expect(controller.viewState.errorMessage, 'plugin manifest missing');
+    expect(phases, contains(PluginHostPhase.failed));
+    expect(phases.last, PluginHostPhase.failed);
+  });
+
+  test('宿主插件根目录缺失时会在启动前进入 failed 状态', () async {
+    final runtimeEnv = await _createRuntimeEnvironment();
+    addTearDown(runtimeEnv.dispose);
+    final processService = _CountingProcessService();
+    final controller = PluginHostController(
+      catalogService: _StubCatalogService.withPlugin(),
+      processService: processService,
+      runtimeLocator: _StubRuntimeLocator(
+        runtimeRoot: runtimeEnv.runtimeRoot.path,
+        pluginRoot: _missingPath('plugin_root'),
+      ),
+    );
+    await controller.loadCatalog();
+
+    await controller.openPlugin('serial_assistant');
+
+    expect(controller.viewState.phase, PluginHostPhase.failed);
+    expect(controller.viewState.errorMessage, '插件目录缺失');
+    expect(processService.startCount, 0);
+  });
+
+  test('restartPlugin 遇到宿主插件根目录缺失时会进入 failed 状态', () async {
+    final runtimeEnv = await _createRuntimeEnvironment();
+    addTearDown(runtimeEnv.dispose);
+    final processService = _CountingProcessService();
+    final controller = PluginHostController(
+      catalogService: _StubCatalogService.withPlugin(),
+      processService: processService,
+      runtimeLocator: _StubRuntimeLocator(
+        runtimeRoot: runtimeEnv.runtimeRoot.path,
+        pluginRoot: _missingPath('plugin_root'),
+      ),
+    );
+    await controller.loadCatalog();
+    controller.debugInjectSession(
+      PluginSession(
+        pluginId: 'serial_assistant',
+        process: null,
+        pid: 456,
+        entryUrl: Uri.parse('http://127.0.0.1:43125/'),
+        heartbeatUrl: Uri.parse('http://127.0.0.1:43125/__heartbeat__'),
+      ),
+    );
+
+    await controller.restartPlugin('serial_assistant');
+
+    expect(controller.viewState.phase, PluginHostPhase.failed);
+    expect(controller.viewState.errorMessage, '插件目录缺失');
+    expect(controller.activeSession, isNull);
+    expect(processService.startCount, 0);
+  });
+
+  test('Python 运行时缺失时会在启动前进入 failed 状态', () async {
+    final processService = _CountingProcessService();
+    final controller = PluginHostController(
+      catalogService: _StubCatalogService.withPlugin(),
+      processService: processService,
+      runtimeLocator: _StubRuntimeLocator(runtimeRoot: _missingPath('runtime')),
+    );
+    await controller.loadCatalog();
+
+    await controller.openPlugin('serial_assistant');
+
+    expect(controller.viewState.phase, PluginHostPhase.failed);
+    expect(controller.viewState.errorMessage, 'Python 运行时缺失');
+    expect(processService.startCount, 0);
   });
 }
 
@@ -94,12 +191,50 @@ class _StubCatalogService extends PluginCatalogService {
   }
 }
 
+class _MissingManifestCatalogService extends PluginCatalogService {
+  _MissingManifestCatalogService() : super(pluginRootResolver: () async => '');
+
+  @override
+  Future<List<PluginCatalogItem>> scan() async {
+    return [
+      PluginCatalogItem(
+        directory: Directory.systemTemp,
+        manifest: null,
+        status: PluginCatalogItemStatus.invalid,
+      ),
+    ];
+  }
+}
+
 class _StubRuntimeLocator extends PluginRuntimeLocator {
-  _StubRuntimeLocator()
+  _StubRuntimeLocator({String? runtimeRoot, String? pluginRoot})
     : super(
         executablePath: r'C:\ZYKJ_MES\mes_client.exe',
-        environment: const {},
+        environment: _buildEnvironment(
+          runtimeRoot: runtimeRoot,
+          pluginRoot: pluginRoot,
+        ),
       );
+
+  @override
+  bool fileExists(String path) => File(path).existsSync();
+
+  @override
+  bool dirExists(String path) => Directory(path).existsSync();
+}
+
+Map<String, String> _buildEnvironment({
+  String? runtimeRoot,
+  String? pluginRoot,
+}) {
+  final environment = <String, String>{};
+  if (runtimeRoot != null) {
+    environment['MES_PYTHON_RUNTIME_DIR'] = runtimeRoot;
+  }
+  if (pluginRoot != null) {
+    environment['MES_PLUGIN_ROOT'] = pluginRoot;
+  }
+  return environment;
 }
 
 class _BlockingProcessService extends PluginProcessService {
@@ -155,4 +290,27 @@ class _FailingProcessService extends PluginProcessService {
   }) {
     throw TimeoutException('ready timeout');
   }
+}
+
+class _RuntimeEnvironment {
+  _RuntimeEnvironment(this.runtimeRoot);
+
+  final Directory runtimeRoot;
+
+  Future<void> dispose() async {
+    if (await runtimeRoot.exists()) {
+      await runtimeRoot.delete(recursive: true);
+    }
+  }
+}
+
+Future<_RuntimeEnvironment> _createRuntimeEnvironment() async {
+  final runtimeRoot = await Directory.systemTemp.createTemp('plugin_runtime_');
+  final pythonExecutable = File('${runtimeRoot.path}\\python.exe');
+  await pythonExecutable.create();
+  return _RuntimeEnvironment(runtimeRoot);
+}
+
+String _missingPath(String suffix) {
+  return '${Directory.systemTemp.path}\\missing_${suffix}_${DateTime.now().microsecondsSinceEpoch}';
 }

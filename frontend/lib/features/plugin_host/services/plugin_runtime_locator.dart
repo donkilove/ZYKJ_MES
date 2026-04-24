@@ -19,6 +19,10 @@ class PluginRuntimeLocator {
   final String currentDirectory;
   final bool Function(String path) directoryExists;
 
+  bool dirExists(String path) => directoryExists(path);
+
+  bool fileExists(String path) => File(path).existsSync();
+
   String resolvePythonExecutable() {
     final externalRuntimeDir = environment['MES_PYTHON_RUNTIME_DIR']?.trim();
     if (externalRuntimeDir != null && externalRuntimeDir.isNotEmpty) {

@@ -76,6 +76,12 @@ class PluginHostController extends ChangeNotifier {
     debugInjectSession(session);
   }
 
+  void debugSetViewState(PluginHostViewState state) {
+    _viewState = state;
+    _selectedPluginId = state.focusedPluginId;
+    notifyListeners();
+  }
+
   Future<void> openPlugin(String pluginId) async {
     final running = _sessions[pluginId];
     if (running != null) {
@@ -102,24 +108,15 @@ class PluginHostController extends ChangeNotifier {
     );
     notifyListeners();
 
-    final plugin = _plugins.where((item) => item.manifest?.id == pluginId).firstOrNull;
-    if (plugin == null || plugin.manifest == null) {
-      _viewState = _viewState.copyWith(
-        phase: PluginHostPhase.failed,
-        focusedPluginId: pluginId,
-        statusTitle: '${_displayNameFor(pluginId)}启动失败',
-        statusMessage: '宿主未找到可用插件清单。',
-        errorMessage: 'plugin manifest missing',
-      );
+    final launchContext = _prepareLaunchContext(pluginId);
+    if (launchContext == null) {
       notifyListeners();
       return;
     }
 
-    final pythonExecutable = _runtimeLocator.resolvePythonExecutable();
-    final runtimeRoot = pythonExecutable.substring(
-      0,
-      pythonExecutable.length - r'\python.exe'.length,
-    );
+    final plugin = launchContext.plugin;
+    final pythonExecutable = launchContext.pythonExecutable;
+    final runtimeRoot = launchContext.runtimeRoot;
 
     try {
       final started = await _processService.start(
@@ -172,39 +169,81 @@ class PluginHostController extends ChangeNotifier {
       return;
     }
     await _processService.stop(existingSession);
-    final plugin = _plugins.where((item) => item.manifest?.id == pluginId).firstOrNull;
-    if (plugin == null || plugin.manifest == null) {
-      _sessions.remove(pluginId);
-      if (_selectedPluginId == pluginId) {
-        _selectedPluginId = null;
-      }
-      notifyListeners();
-      return;
-    }
-    final pythonExecutable = _runtimeLocator.resolvePythonExecutable();
-    final runtimeRoot = pythonExecutable.substring(
-      0,
-      pythonExecutable.length - r'\python.exe'.length,
-    );
-    final restarted = await _processService.start(
-      plugin: plugin,
-      pythonExecutable: pythonExecutable,
-      runtimeRoot: runtimeRoot,
-    );
-    _sessions[pluginId] = restarted;
-    _selectedPluginId = pluginId;
-    _viewState = _viewState.copyWith(
-      phase: PluginHostPhase.running,
-      focusedPluginId: pluginId,
-      statusTitle: '${_displayNameFor(pluginId)}运行中',
-      statusMessage: '插件页面已就绪。',
-      errorMessage: null,
-    );
-    notifyListeners();
+    _sessions.remove(pluginId);
+    await openPlugin(pluginId);
   }
 
   String _displayNameFor(String pluginId) {
     final plugin = _plugins.where((item) => item.manifest?.id == pluginId).firstOrNull;
     return plugin?.manifest?.name ?? pluginId;
   }
+
+  void _failToOpenPlugin({
+    required String pluginId,
+    required String statusMessage,
+    required String errorMessage,
+  }) {
+    _viewState = _viewState.copyWith(
+      phase: PluginHostPhase.failed,
+      focusedPluginId: pluginId,
+      statusTitle: '${_displayNameFor(pluginId)}启动失败',
+      statusMessage: statusMessage,
+      errorMessage: errorMessage,
+    );
+  }
+
+  _PluginLaunchContext? _prepareLaunchContext(String pluginId) {
+    final plugin = _plugins.where((item) => item.manifest?.id == pluginId).firstOrNull;
+    if (plugin == null || plugin.manifest == null) {
+      _failToOpenPlugin(
+        pluginId: pluginId,
+        statusMessage: '宿主未找到可用插件清单。',
+        errorMessage: 'plugin manifest missing',
+      );
+      return null;
+    }
+
+    final pluginRoot = _runtimeLocator.resolvePluginRoot();
+    if (!_runtimeLocator.dirExists(pluginRoot)) {
+      _failToOpenPlugin(
+        pluginId: pluginId,
+        statusMessage: '宿主检查插件目录时发现目录不存在。',
+        errorMessage: '插件目录缺失',
+      );
+      return null;
+    }
+
+    final pythonExecutable = _runtimeLocator.resolvePythonExecutable();
+    if (!_runtimeLocator.fileExists(pythonExecutable)) {
+      _failToOpenPlugin(
+        pluginId: pluginId,
+        statusMessage: '宿主检查 Python 运行时时发现解释器不存在。',
+        errorMessage: 'Python 运行时缺失',
+      );
+      return null;
+    }
+
+    final runtimeRoot = pythonExecutable.substring(
+      0,
+      pythonExecutable.length - r'\python.exe'.length,
+    );
+
+    return _PluginLaunchContext(
+      plugin: plugin,
+      pythonExecutable: pythonExecutable,
+      runtimeRoot: runtimeRoot,
+    );
+  }
+}
+
+class _PluginLaunchContext {
+  const _PluginLaunchContext({
+    required this.plugin,
+    required this.pythonExecutable,
+    required this.runtimeRoot,
+  });
+
+  final PluginCatalogItem plugin;
+  final String pythonExecutable;
+  final String runtimeRoot;
 }

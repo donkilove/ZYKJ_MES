@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:mes_client/features/plugin_host/presentation/plugin_host_controller.dart';
 import 'package:mes_client/features/plugin_host/models/plugin_host_view_state.dart';
-import 'package:mes_client/features/plugin_host/presentation/widgets/plugin_host_webview_panel.dart';
 
 class PluginHostWorkspace extends StatelessWidget {
   const PluginHostWorkspace({
     super.key,
     required this.controller,
-    this.webviewBuilder,
+    required this.webviewBuilder,
   });
 
   final PluginHostController controller;
-  final Widget Function(Uri entryUrl)? webviewBuilder;
+  final Widget Function(Uri entryUrl) webviewBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -64,9 +63,7 @@ class PluginHostWorkspace extends StatelessWidget {
 
     final activeSession = controller.activeSession;
     if (activeSession != null) {
-      final content =
-          webviewBuilder?.call(activeSession.entryUrl) ??
-          PluginHostWebviewPanel(entryUrl: activeSession.entryUrl);
+      final content = webviewBuilder(activeSession.entryUrl);
       return Padding(
         padding: const EdgeInsets.all(16),
         child: Card(

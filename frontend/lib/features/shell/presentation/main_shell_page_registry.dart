@@ -5,6 +5,7 @@ import 'package:mes_client/features/message/presentation/message_center_page.dar
 import 'package:mes_client/features/message/services/message_service.dart';
 import 'package:mes_client/features/plugin_host/presentation/plugin_host_controller.dart';
 import 'package:mes_client/features/plugin_host/presentation/plugin_host_page.dart';
+import 'package:mes_client/features/plugin_host/presentation/widgets/plugin_host_webview_panel.dart';
 import 'package:mes_client/features/product/presentation/product_page.dart';
 import 'package:mes_client/features/production/presentation/production_page.dart';
 import 'package:mes_client/features/quality/presentation/quality_page.dart';
@@ -273,7 +274,10 @@ class MainShellPageRegistry {
         if (pluginHostController == null) {
           return const Center(child: Text('插件中心控制器缺失'));
         }
-        return PluginHostPage(controller: pluginHostController);
+        return PluginHostPage(
+          controller: pluginHostController,
+          webviewBuilder: (entryUrl) => PluginHostWebviewPanel(entryUrl: entryUrl),
+        );
       default:
         return Center(child: Text('页面暂未实现：$pageCode'));
     }
