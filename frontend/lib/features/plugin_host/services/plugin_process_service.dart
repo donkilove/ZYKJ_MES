@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -18,6 +19,7 @@ class PluginProcessService {
     ProcessStarter? processStarter,
     Future<bool> Function(Uri heartbeatUrl)? heartbeatClient,
     bool Function(Process process)? killProcess,
+    Duration readyTimeout = const Duration(seconds: 15),
   }) : processStarter = processStarter ?? Process.start,
        heartbeatClient =
            heartbeatClient ??
@@ -25,11 +27,13 @@ class PluginProcessService {
              final response = await http.get(heartbeatUrl);
              return response.statusCode == 200;
            }),
-       killProcess = killProcess ?? ((process) => process.kill());
+       killProcess = killProcess ?? ((process) => process.kill()),
+       readyTimeout = readyTimeout;
 
   final ProcessStarter processStarter;
   final Future<bool> Function(Uri heartbeatUrl) heartbeatClient;
   final bool Function(Process process) killProcess;
+  final Duration readyTimeout;
 
   Future<PluginSession> start({
     required PluginCatalogItem plugin,
@@ -59,11 +63,22 @@ class PluginProcessService {
       environment: environment,
     );
 
-    final readyLine = await process.stdout
+    final lines = process.stdout
         .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .firstWhere((line) => line.contains('"event":"ready"'));
+        .transform(const LineSplitter());
+    late final String readyLine;
+    try {
+      readyLine = await lines.first.timeout(readyTimeout);
+    } on StateError {
+      throw TimeoutException('插件未在限定时间内返回 ready 消息');
+    }
     final payload = jsonDecode(readyLine) as Map<String, dynamic>;
+    if (payload['event'] != 'ready') {
+      throw const FormatException('ready 消息 event 非法');
+    }
+    if (payload['pid'] is! int || payload['entry_url'] is! String) {
+      throw const FormatException('ready 消息缺少 pid 或 entry_url');
+    }
 
     return PluginSession(
       pluginId: manifest.id,
