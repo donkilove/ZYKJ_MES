@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/ui/patterns/mes_detail_panel.dart';
 import 'package:mes_client/core/ui/patterns/mes_filter_bar.dart';
-import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
 import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
@@ -663,12 +662,10 @@ Future<void> _pumpMessageCenterPage(
 }
 
 Finder _metricValueFinder(String label, String value) {
-  final labelFinder = find.text(label);
-  final metricCardFinder = find.ancestor(
-    of: labelFinder,
-    matching: find.byType(MesMetricCard),
+  final cardFinder = find.byKey(
+    ValueKey('message-center-overview-card-$label'),
   );
-  return find.descendant(of: metricCardFinder, matching: find.text(value));
+  return find.descendant(of: cardFinder, matching: find.text(value));
 }
 
 void main() {
@@ -1000,15 +997,21 @@ void main() {
       findsOneWidget,
     );
 
-    final metricCards = find.byType(MesMetricCard);
-    expect(metricCards, findsNWidgets(4));
+    final overviewCards = <String>['未读消息', '待处理', '高优先级', '全部消息'].map(
+      (label) => find.byKey(ValueKey('message-center-overview-card-$label')),
+    );
+    for (final card in overviewCards) {
+      expect(card, findsOneWidget);
+    }
     expect(_metricValueFinder('未读消息', '12'), findsOneWidget);
     expect(_metricValueFinder('待处理', '1'), findsOneWidget);
     expect(_metricValueFinder('高优先级', '2'), findsOneWidget);
     expect(_metricValueFinder('全部消息', '14'), findsOneWidget);
 
-    final firstMetricCardSize = tester.getSize(metricCards.first);
-    expect(firstMetricCardSize.width, lessThan(260));
+    final firstOverviewCardSize = tester.getSize(
+      find.byKey(const ValueKey('message-center-overview-card-未读消息')),
+    );
+    expect(firstOverviewCardSize.height, lessThan(84));
   });
 
   testWidgets(
