@@ -39,24 +39,49 @@ class MessageCenterListSection extends StatelessWidget {
         ? const MesEmptyState(title: '暂无消息')
         : body;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (loading && !isEmpty) ...[
-          const LinearProgressIndicator(minHeight: 2),
-          const SizedBox(height: 12),
-        ],
-        Expanded(child: ClipRect(child: content)),
-        const SizedBox(height: 12),
-        MesPaginationBar(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final useCompactScroll = constraints.maxHeight < 140;
+        final pagination = MesPaginationBar(
           page: page,
           totalPages: totalPages,
           total: total,
           loading: loading,
           onPrevious: onPrevious,
           onNext: onNext,
-        ),
-      ],
+        );
+        if (useCompactScroll) {
+          return SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (loading && !isEmpty) ...[
+                    const LinearProgressIndicator(minHeight: 2),
+                    const SizedBox(height: 8),
+                  ],
+                  SizedBox(height: 96, child: ClipRect(child: content)),
+                  const SizedBox(height: 8),
+                  pagination,
+                ],
+              ),
+            ),
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (loading && !isEmpty) ...[
+              const LinearProgressIndicator(minHeight: 2),
+              const SizedBox(height: 12),
+            ],
+            Expanded(child: ClipRect(child: content)),
+            const SizedBox(height: 12),
+            pagination,
+          ],
+        );
+      },
     );
   }
 }

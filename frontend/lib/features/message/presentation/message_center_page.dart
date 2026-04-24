@@ -208,9 +208,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         .then((summary) {
           summaryResolved = true;
           summaryResult = summary;
-          if (!listSucceeded ||
-              !mounted ||
-              requestToken != _loadRequestToken) {
+          if (!listSucceeded || !mounted || requestToken != _loadRequestToken) {
             return;
           }
           _applySummary(summary);
@@ -228,9 +226,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         status: _statusFilter.isEmpty ? null : _statusFilter,
         messageType: _typeFilter.isEmpty ? null : _typeFilter,
         priority: _priorityFilter.isEmpty ? null : _priorityFilter,
-        sourceModule: _sourceModuleFilter.isEmpty
-            ? null
-            : _sourceModuleFilter,
+        sourceModule: _sourceModuleFilter.isEmpty ? null : _sourceModuleFilter,
         startTime: _dateRange?.start,
         endTime: _dateRange?.end,
         todoOnly: _todoOnly,
@@ -486,10 +482,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     _load();
   }
 
-  Future<void> _selectItem(
-    MessageItem item, {
-    bool silent = true,
-  }) async {
+  Future<void> _selectItem(MessageItem item, {bool silent = true}) async {
     setState(() {
       _selectedItem = item;
       if (_selectedDetail?.item.id != item.id) {
@@ -821,7 +814,9 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   Widget _buildBody(ThemeData theme) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        const stackedLayoutBreakpoint = 1100.0;
         final totalPages = _total == 0 ? 1 : (_total / _pageSize).ceil();
+        final useStackedLayout = constraints.maxWidth < stackedLayoutBreakpoint;
         final list = MessageCenterListSection(
           loading: _loading,
           error: _error,
@@ -840,7 +835,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
             _load(reset: false);
           },
         );
-        if (constraints.maxWidth < 1100) {
+        if (useStackedLayout) {
           return Column(
             key: const ValueKey('message-center-stacked-layout'),
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -855,6 +850,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
           );
         }
         return Row(
+          key: const ValueKey('message-center-split-layout'),
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(flex: 15, child: list),
@@ -919,7 +915,10 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
       MessageCenterDetailField(label: '消息状态', value: item.statusName),
       MessageCenterDetailField(label: '阅读状态', value: item.readStatusName),
       MessageCenterDetailField(label: '投递状态', value: item.deliveryStatusName),
-      MessageCenterDetailField(label: '投递次数', value: '${item.deliveryAttemptCount}'),
+      MessageCenterDetailField(
+        label: '投递次数',
+        value: '${item.deliveryAttemptCount}',
+      ),
       if (item.lastPushAt != null)
         MessageCenterDetailField(
           label: '最近投递',
@@ -937,19 +936,16 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
         ),
       if (detail?.failureReasonHint != null &&
           detail!.failureReasonHint!.isNotEmpty)
-        MessageCenterDetailField(label: '排障提示', value: detail.failureReasonHint!),
+        MessageCenterDetailField(
+          label: '排障提示',
+          value: detail.failureReasonHint!,
+        ),
       if (disabledReason != null)
         MessageCenterDetailField(label: '跳转状态', value: disabledReason),
       if (!widget.canViewDetail)
-        const MessageCenterDetailField(
-          label: '详情权限',
-          value: '当前账号未开通消息详情查看权限',
-        ),
+        const MessageCenterDetailField(label: '详情权限', value: '当前账号未开通消息详情查看权限'),
       if (!widget.canUseJump || widget.onNavigateToPage == null)
-        const MessageCenterDetailField(
-          label: '跳转权限',
-          value: '当前账号未开通业务跳转权限',
-        ),
+        const MessageCenterDetailField(label: '跳转权限', value: '当前账号未开通业务跳转权限'),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

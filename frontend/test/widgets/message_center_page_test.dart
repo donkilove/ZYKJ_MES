@@ -1019,13 +1019,19 @@ void main() {
 
     await _pumpMessageCenterPage(tester, service: service);
 
-    expect(find.byKey(const ValueKey('message-center-preview-detail-1')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('message-center-preview-detail-1')),
+      findsOneWidget,
+    );
     expect(find.text('正文内容'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('message-center-tile-3')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('message-center-preview-detail-3')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('message-center-preview-detail-3')),
+      findsOneWidget,
+    );
     expect(find.text('您的账号已创建，请进入个人中心修改密码。'), findsOneWidget);
     expect(find.text('排障提示'), findsNothing);
   });
@@ -1039,7 +1045,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('消息详情'), findsNothing);
-    expect(find.byKey(const ValueKey('message-center-preview-detail-3')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('message-center-preview-detail-3')),
+      findsOneWidget,
+    );
     expect(find.text('您的账号已创建，请进入个人中心修改密码。'), findsOneWidget);
   });
 
@@ -1059,10 +1068,40 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('message-center-tile-3')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('message-center-stacked-layout')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('message-center-stacked-layout')),
+      findsOneWidget,
+    );
     expect(find.text('消息详情预览'), findsOneWidget);
     expect(find.text('您的账号已创建，请进入个人中心修改密码。'), findsOneWidget);
-    expect(find.byKey(const ValueKey('message-center-preview-detail-3')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('message-center-preview-detail-3')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('message center 宽布局下使用显式双列分支 key', (tester) async {
+    final service = _FakeMessageService();
+
+    tester.view.physicalSize = const Size(1440, 960);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(_buildMessageCenterPageApp(service: service));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('message-center-split-layout')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('message-center-stacked-layout')),
+      findsNothing,
+    );
+    expect(find.text('消息详情预览'), findsOneWidget);
   });
 
   testWidgets('message center 详情面板在小高度下仍可独立滚动到低位动作区', (tester) async {
@@ -1078,13 +1117,23 @@ void main() {
     await tester.pumpWidget(_buildMessageCenterPageApp(service: service));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('message-center-preview-scroll')), findsOneWidget);
-    expect(find.byKey(const ValueKey('message-center-preview-read-1')), findsOneWidget);
-    expect(find.byKey(const ValueKey('message-center-preview-jump-1')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('message-center-preview-scroll')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('message-center-preview-read-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('message-center-preview-jump-1')),
+      findsOneWidget,
+    );
     expect(find.text('排障提示'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    final viewportHeight = tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    final viewportHeight =
+        tester.view.physicalSize.height / tester.view.devicePixelRatio;
     final beforeScrollRect = tester.getRect(
       find.byKey(const ValueKey('message-center-preview-read-1')),
     );
@@ -1097,13 +1146,44 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('message-center-preview-read-1')), findsOneWidget);
-    expect(find.byKey(const ValueKey('message-center-preview-jump-1')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('message-center-preview-read-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('message-center-preview-jump-1')),
+      findsOneWidget,
+    );
     expect(find.text('排障提示'), findsOneWidget);
     final afterScrollRect = tester.getRect(
       find.byKey(const ValueKey('message-center-preview-read-1')),
     );
     expect(afterScrollRect.bottom, lessThanOrEqualTo(viewportHeight));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('message center 更小高度下详情区不出现 overflow 异常', (tester) async {
+    final service = _FakeMessageService();
+
+    tester.view.physicalSize = const Size(1280, 540);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(_buildMessageCenterPageApp(service: service));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('message-center-preview-scroll')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('message-center-preview-jump-1')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('RenderFlex overflowed'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -1311,7 +1391,9 @@ void main() {
           matching: find.byType(Scrollable),
         ),
       );
-      await tester.ensureVisible(find.byKey(const ValueKey('message-center-tile-1')));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('message-center-tile-1')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('message-center-tile-1')));
       await tester.pumpAndSettle();
@@ -1328,7 +1410,9 @@ void main() {
         '{"action":"detail","authorization_id":101}',
       );
 
-      await tester.ensureVisible(find.byKey(const ValueKey('message-center-tile-3')));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('message-center-tile-3')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('message-center-tile-3')));
       await tester.pumpAndSettle();
@@ -1342,7 +1426,9 @@ void main() {
       expect(navigatedTab, 'account_settings');
       expect(navigatedRoutePayloadJson, '{"action":"change_password"}');
 
-      await tester.ensureVisible(find.byKey(const ValueKey('message-center-tile-4')));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('message-center-tile-4')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('message-center-tile-4')));
       await tester.pumpAndSettle();
@@ -1361,7 +1447,9 @@ void main() {
         '{"action":"view_version","product_id":66,"product_name":"产品A","target_version":3}',
       );
 
-      await tester.ensureVisible(find.byKey(const ValueKey('message-center-tile-5')));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('message-center-tile-5')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('message-center-tile-5')));
       await tester.pumpAndSettle();

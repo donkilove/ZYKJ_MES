@@ -9,6 +9,8 @@ class MessageCenterFilterSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final viewportHeight = MediaQuery.sizeOf(context).height;
+    final useCompactRows = viewportHeight < 760;
     final commonChildren = <Widget>[];
     final secondaryChildren = <Widget>[];
     if (child case final Wrap wrapChild) {
@@ -25,20 +27,19 @@ class MessageCenterFilterSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: commonChildren,
-          ),
-          if (secondaryChildren.isNotEmpty) ...[
-            const SizedBox(height: 4),
+          if (useCompactRows)
+            _buildCompactRow(commonChildren)
+          else
             Wrap(
-              key: const ValueKey('message-center-secondary-filters'),
               spacing: 8,
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
+              children: commonChildren,
+            ),
+          if (secondaryChildren.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            if (useCompactRows)
+              _buildCompactRow([
                 Text(
                   '辅助筛选',
                   style: theme.textTheme.labelMedium?.copyWith(
@@ -47,8 +48,40 @@ class MessageCenterFilterSection extends StatelessWidget {
                   ),
                 ),
                 ...secondaryChildren,
-              ],
-            ),
+              ], key: const ValueKey('message-center-secondary-filters'))
+            else
+              Wrap(
+                key: const ValueKey('message-center-secondary-filters'),
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    '辅助筛选',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  ...secondaryChildren,
+                ],
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompactRow(List<Widget> children, {Key? key}) {
+    return SingleChildScrollView(
+      key: key,
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          for (var index = 0; index < children.length; index++) ...[
+            if (index > 0) const SizedBox(width: 8),
+            children[index],
           ],
         ],
       ),
