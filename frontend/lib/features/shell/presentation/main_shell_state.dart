@@ -5,6 +5,7 @@ import 'package:mes_client/core/models/page_catalog_models.dart';
 import 'package:mes_client/features/shell/models/home_dashboard_models.dart';
 
 const String softwareSettingsUtilityCode = 'software_settings';
+const String pluginHostUtilityCode = 'plugin_host';
 
 class MainShellMenuItem {
   const MainShellMenuItem({

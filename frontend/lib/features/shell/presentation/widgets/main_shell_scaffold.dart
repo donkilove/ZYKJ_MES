@@ -9,6 +9,7 @@ class MainShellScaffold extends StatelessWidget {
     required this.currentUserDisplayName,
     required this.content,
     required this.onSelectMenu,
+    required this.onOpenPluginHost,
     required this.onOpenSoftwareSettings,
     required this.sidebarCollapsed,
     required this.onLogout,
@@ -21,6 +22,7 @@ class MainShellScaffold extends StatelessWidget {
   final String currentUserDisplayName;
   final Widget content;
   final ValueChanged<String> onSelectMenu;
+  final VoidCallback onOpenPluginHost;
   final VoidCallback onOpenSoftwareSettings;
   final bool sidebarCollapsed;
   final VoidCallback onLogout;
@@ -112,6 +114,13 @@ class MainShellScaffold extends StatelessWidget {
                     ),
                   ),
                   const Divider(height: 1),
+                  ListTile(
+                    key: const ValueKey('main-shell-entry-plugin-host'),
+                    selected: state.activeUtilityCode == pluginHostUtilityCode,
+                    leading: const Icon(Icons.extension_rounded),
+                    title: sidebarCollapsed ? null : const Text('插件中心'),
+                    onTap: onOpenPluginHost,
+                  ),
                   ListTile(
                     key: const ValueKey('main-shell-entry-software-settings'),
                     selected: isSoftwareSettingsActive,

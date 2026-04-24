@@ -8,6 +8,10 @@ import 'package:mes_client/features/auth/services/auth_service.dart';
 import 'package:mes_client/features/auth/services/authz_service.dart';
 import 'package:mes_client/features/message/services/message_service.dart';
 import 'package:mes_client/features/message/services/message_ws_service.dart';
+import 'package:mes_client/features/plugin_host/presentation/plugin_host_controller.dart';
+import 'package:mes_client/features/plugin_host/services/plugin_catalog_service.dart';
+import 'package:mes_client/features/plugin_host/services/plugin_process_service.dart';
+import 'package:mes_client/features/plugin_host/services/plugin_runtime_locator.dart';
 import 'package:mes_client/features/settings/models/software_settings_models.dart';
 import 'package:mes_client/features/settings/presentation/software_settings_controller.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_controller.dart';
@@ -33,6 +37,7 @@ class MainShellPage extends StatefulWidget {
     this.pageCatalogService,
     this.messageService,
     this.homeDashboardService,
+    this.pluginHostController,
     this.userPageBuilder,
     this.productPageBuilder,
     this.equipmentPageBuilder,
@@ -57,6 +62,7 @@ class MainShellPage extends StatefulWidget {
   final PageCatalogService? pageCatalogService;
   final MessageService? messageService;
   final HomeDashboardService? homeDashboardService;
+  final PluginHostController? pluginHostController;
   final MainShellUserPageBuilder? userPageBuilder;
   final MainShellModulePageBuilder? productPageBuilder;
   final MainShellModulePageBuilder? equipmentPageBuilder;
@@ -72,6 +78,7 @@ class _MainShellPageState extends State<MainShellPage>
     with WidgetsBindingObserver {
   final MainShellPageRegistry _pageRegistry = const MainShellPageRegistry();
   late final MainShellController _controller;
+  late final PluginHostController _pluginHostController;
 
   @override
   void initState() {
@@ -86,6 +93,16 @@ class _MainShellPageState extends State<MainShellPage>
         widget.messageService ?? MessageService(widget.session);
     final homeDashboardService =
         widget.homeDashboardService ?? HomeDashboardService(widget.session);
+    final pluginRuntimeLocator = PluginRuntimeLocator();
+    _pluginHostController =
+        widget.pluginHostController ??
+        PluginHostController(
+          catalogService: PluginCatalogService(
+            pluginRootResolver: () async => pluginRuntimeLocator.resolvePluginRoot(),
+          ),
+          processService: PluginProcessService(),
+          runtimeLocator: pluginRuntimeLocator,
+        );
 
     _controller = MainShellController(
       session: widget.session,
@@ -124,6 +141,7 @@ class _MainShellPageState extends State<MainShellPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _pluginHostController.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -189,6 +207,7 @@ class _MainShellPageState extends State<MainShellPage>
       messageService: _controller.messageService,
       softwareSettingsController: widget.softwareSettingsController,
       timeSyncController: widget.timeSyncController,
+      pluginHostController: _pluginHostController,
       homeRefreshStatusText: _controller.homeRefreshStatusText(),
       userPageBuilder: widget.userPageBuilder,
       productPageBuilder: widget.productPageBuilder,
@@ -236,6 +255,7 @@ class _MainShellPageState extends State<MainShellPage>
               ? const SizedBox.shrink()
               : _buildContent(contentPageCode),
           onSelectMenu: _controller.selectMenu,
+          onOpenPluginHost: _controller.openPluginHost,
           onOpenSoftwareSettings: _controller.openSoftwareSettings,
           sidebarCollapsed: sidebarCollapsed,
           onLogout: widget.onLogout,

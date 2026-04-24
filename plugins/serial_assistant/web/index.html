@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>串口助手</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: "Microsoft YaHei", sans-serif;
+        background: #f4f6fb;
+        color: #1d2433;
+      }
+      main {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+      .panel {
+        background: #fff;
+        border-radius: 16px;
+        box-shadow: 0 10px 30px rgba(31, 45, 61, 0.08);
+        padding: 20px;
+        margin-bottom: 16px;
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+      label {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 180px;
+      }
+      input,
+      select,
+      textarea,
+      button {
+        font: inherit;
+      }
+      input,
+      select,
+      textarea {
+        padding: 10px 12px;
+        border: 1px solid #cfd7e6;
+        border-radius: 10px;
+      }
+      textarea {
+        width: 100%;
+        min-height: 120px;
+        resize: vertical;
+      }
+      button {
+        padding: 10px 16px;
+        border: none;
+        border-radius: 10px;
+        background: #1f6feb;
+        color: #fff;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: #4b5565;
+      }
+      pre {
+        margin: 0;
+        min-height: 180px;
+        background: #111827;
+        color: #d7f3ff;
+        padding: 16px;
+        border-radius: 12px;
+        overflow: auto;
+      }
+      #status {
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="panel">
+        <h1>串口助手</h1>
+        <p id="status">状态：未连接</p>
+        <div class="row">
+          <label>
+            端口
+            <select id="port"></select>
+          </label>
+          <label>
+            波特率
+            <input id="baudrate" value="115200" />
+          </label>
+        </div>
+        <div class="row">
+          <button id="refreshPorts">刷新端口</button>
+          <button id="open">打开</button>
+          <button id="close" class="secondary">关闭</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="row">
+          <label style="flex: 1 1 100%;">
+            发送内容
+            <textarea id="sendText"></textarea>
+          </label>
+        </div>
+        <div class="row">
+          <button id="send">发送</button>
+          <button id="read" class="secondary">读取一次</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>接收日志</h2>
+        <pre id="receiveLog"></pre>
+      </section>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>

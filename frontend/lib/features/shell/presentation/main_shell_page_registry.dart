@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/message/presentation/message_center_page.dart';
 import 'package:mes_client/features/message/services/message_service.dart';
+import 'package:mes_client/features/plugin_host/presentation/plugin_host_controller.dart';
+import 'package:mes_client/features/plugin_host/presentation/plugin_host_page.dart';
 import 'package:mes_client/features/product/presentation/product_page.dart';
 import 'package:mes_client/features/production/presentation/production_page.dart';
 import 'package:mes_client/features/quality/presentation/quality_page.dart';
@@ -58,6 +60,7 @@ class MainShellPageRegistry {
     required MessageService messageService,
     required SoftwareSettingsController softwareSettingsController,
     required TimeSyncController timeSyncController,
+    PluginHostController? pluginHostController,
     String? homeRefreshStatusText,
     void Function(int count)? onUnreadCountChanged,
     MainShellUserPageBuilder? userPageBuilder,
@@ -266,6 +269,11 @@ class MainShellPageRegistry {
           timeSyncController: timeSyncController,
           apiBaseUrl: session.baseUrl,
         );
+      case pluginHostUtilityCode:
+        if (pluginHostController == null) {
+          return const Center(child: Text('插件中心控制器缺失'));
+        }
+        return PluginHostPage(controller: pluginHostController);
       default:
         return Center(child: Text('页面暂未实现：$pageCode'));
     }

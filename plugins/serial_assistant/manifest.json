@@ -1,0 +1,26 @@
+{
+  "id": "serial_assistant",
+  "name": "串口助手",
+  "version": "0.1.0",
+  "entry": {
+    "type": "python",
+    "script": "launcher.py"
+  },
+  "ui": {
+    "type": "web",
+    "mode": "embedded"
+  },
+  "runtime": {
+    "python": "3.14",
+    "arch": "win_amd64"
+  },
+  "dependencies": {
+    "mode": "plugin_local",
+    "paths": ["vendor", "app"]
+  },
+  "permissions": ["serial", "filesystem"],
+  "lifecycle": {
+    "startup_timeout_sec": 15,
+    "heartbeat_interval_sec": 5
+  }
+}

@@ -3,6 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/services/effective_clock.dart';
 import 'package:mes_client/features/message/presentation/message_center_page.dart';
 import 'package:mes_client/features/message/services/message_service.dart';
+import 'package:mes_client/features/plugin_host/models/plugin_catalog_item.dart';
+import 'package:mes_client/features/plugin_host/presentation/plugin_host_controller.dart';
+import 'package:mes_client/features/plugin_host/presentation/plugin_host_page.dart';
+import 'package:mes_client/features/plugin_host/services/plugin_catalog_service.dart';
+import 'package:mes_client/features/plugin_host/services/plugin_process_service.dart';
+import 'package:mes_client/features/plugin_host/services/plugin_runtime_locator.dart';
 import 'package:mes_client/features/settings/presentation/software_settings_controller.dart';
 import 'package:mes_client/features/settings/presentation/software_settings_page.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_page_registry.dart';
@@ -165,6 +171,45 @@ void main() {
     expect(identical(settingsPage.timeSyncController, timeSyncController), isTrue);
     expect(settingsPage.apiBaseUrl, testSession.baseUrl);
   });
+
+  test('插件中心工具页会返回 PluginHostPage', () {
+    const registry = MainShellPageRegistry();
+    final pluginHostController = PluginHostController(
+      catalogService: _StubCatalogService(),
+      processService: _StubProcessService(),
+      runtimeLocator: _StubRuntimeLocator(),
+    );
+    final state = MainShellViewState(
+      currentUser: buildCurrentUser(),
+      authzSnapshot: buildSnapshot(),
+      catalog: buildCatalog(),
+      tabCodesByParent: const {
+        'user': ['user_management'],
+      },
+      menus: const [
+        MainShellMenuItem(code: 'home', title: '首页', icon: Icons.home),
+      ],
+      selectedPageCode: 'home',
+    );
+
+    final widget = registry.build(
+      pageCode: pluginHostUtilityCode,
+      session: testSession,
+      state: state,
+      onLogout: () {},
+      onRefreshShellData: ({bool loadCatalog = true}) async {},
+      onNavigateToPageTarget:
+          ({required pageCode, String? tabCode, String? routePayloadJson}) {},
+      onVisibilityConfigSaved: () {},
+      onUnreadCountChanged: (_) {},
+      messageService: MessageService(testSession),
+      softwareSettingsController: softwareSettingsController,
+      timeSyncController: timeSyncController,
+      pluginHostController: pluginHostController,
+    );
+
+    expect(widget, isA<PluginHostPage>());
+  });
 }
 
 TimeSyncController _buildTimeSyncController(
@@ -196,4 +241,25 @@ class _FakeWindowsTimeSyncService extends WindowsTimeSyncService {}
 class _FixedEffectiveClock extends EffectiveClock {
   @override
   DateTime now() => DateTime.utc(2026, 4, 20, 10, 30);
+}
+
+class _StubCatalogService extends PluginCatalogService {
+  _StubCatalogService() : super(pluginRootResolver: () async => '');
+
+  @override
+  Future<List<PluginCatalogItem>> scan() async {
+    return const <PluginCatalogItem>[];
+  }
+}
+
+class _StubProcessService extends PluginProcessService {
+  _StubProcessService();
+}
+
+class _StubRuntimeLocator extends PluginRuntimeLocator {
+  _StubRuntimeLocator()
+    : super(
+        executablePath: r'C:\ZYKJ_MES\mes_client.exe',
+        environment: const {},
+      );
 }
