@@ -1280,6 +1280,7 @@ class _HomeShellIntegrationAppState extends State<_HomeShellIntegrationApp> {
             required onLogout,
             required visibleTabCodes,
             required capabilityCodes,
+            required bool moduleActive,
             String? preferredTabCode,
             String? routePayloadJson,
             VoidCallback? onVisibilityConfigSaved,
@@ -1314,6 +1315,7 @@ class _HomeShellIntegrationAppState extends State<_HomeShellIntegrationApp> {
             required onLogout,
             required visibleTabCodes,
             required capabilityCodes,
+            required bool moduleActive,
             String? preferredTabCode,
             String? routePayloadJson,
           }) {
@@ -1351,6 +1353,7 @@ class _HomeShellIntegrationAppState extends State<_HomeShellIntegrationApp> {
             required onLogout,
             required visibleTabCodes,
             required capabilityCodes,
+            required bool moduleActive,
             String? preferredTabCode,
             String? routePayloadJson,
           }) {
@@ -1390,6 +1393,7 @@ class _HomeShellIntegrationAppState extends State<_HomeShellIntegrationApp> {
             required onLogout,
             required visibleTabCodes,
             required capabilityCodes,
+            required bool moduleActive,
             String? preferredTabCode,
             String? routePayloadJson,
           }) {
@@ -1420,6 +1424,7 @@ class _HomeShellIntegrationAppState extends State<_HomeShellIntegrationApp> {
             required onLogout,
             required visibleTabCodes,
             required capabilityCodes,
+            required bool moduleActive,
             String? preferredTabCode,
             String? routePayloadJson,
           }) {
@@ -1440,6 +1445,7 @@ class _HomeShellIntegrationAppState extends State<_HomeShellIntegrationApp> {
             required onLogout,
             required visibleTabCodes,
             required capabilityCodes,
+            required bool moduleActive,
             String? preferredTabCode,
             String? routePayloadJson,
           }) {

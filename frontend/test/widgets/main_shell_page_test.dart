@@ -254,7 +254,7 @@ class _TestShellAuthzService extends AuthzService {
 }
 
 class _CountingShellAuthzService extends _TestShellAuthzService {
-  _CountingShellAuthzService({super.snapshot, super.error});
+  _CountingShellAuthzService();
 
   int callCount = 0;
 
