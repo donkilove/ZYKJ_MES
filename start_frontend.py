@@ -57,7 +57,8 @@ def build_subprocess_env() -> dict[str, str]:
     merged_no_proxy = _merge_no_proxy(env.get("NO_PROXY") or env.get("no_proxy"))
     env["NO_PROXY"] = merged_no_proxy
     env["no_proxy"] = merged_no_proxy
-    env.setdefault("MES_PLUGIN_ROOT", str(ROOT_DIR / "plugins"))
+    env["MES_PLUGIN_ROOT"] = str(ROOT_DIR / "plugins")
+    env["MES_PYTHON_RUNTIME_DIR"] = str(ROOT_DIR / "plugins" / "runtime" / "python312")
     return env
 
 
