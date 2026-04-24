@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/ui/patterns/mes_detail_panel.dart';
 import 'package:mes_client/core/ui/patterns/mes_filter_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
 import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
@@ -44,6 +45,8 @@ class _FakeMessageService extends MessageService {
   Object? listError;
   Object? markAllReadError;
   Completer<MessageSummaryResult>? summaryCompleter;
+  final List<Completer<MessageSummaryResult>> summaryCompleters =
+      <Completer<MessageSummaryResult>>[];
   final Map<int, Object> detailErrors = <int, Object>{};
   final Map<int, Object> jumpErrors = <int, Object>{};
   final Map<int, Object> markReadErrors = <int, Object>{};
@@ -271,7 +274,9 @@ class _FakeMessageService extends MessageService {
       todoUnreadCount: todoUnreadItems,
       urgentUnreadCount: urgentUnreadItems,
     );
-    final completer = summaryCompleter;
+    final completer = summaryCompleters.isNotEmpty
+        ? summaryCompleters.removeAt(0)
+        : summaryCompleter;
     if (completer != null) {
       return completer.future.whenComplete(() {
         summaryCompletionCount += 1;
@@ -657,6 +662,15 @@ Future<void> _pumpMessageCenterPage(
   await tester.pumpAndSettle();
 }
 
+Finder _metricValueFinder(String label, String value) {
+  final labelFinder = find.text(label);
+  final metricCardFinder = find.ancestor(
+    of: labelFinder,
+    matching: find.byType(MesMetricCard),
+  );
+  return find.descendant(of: metricCardFinder, matching: find.text(value));
+}
+
 void main() {
   testWidgets('message center 在 pollingEnabled=false 时不会启动轮询', (
     tester,
@@ -830,6 +844,85 @@ void main() {
       find.widgetWithText(OutlinedButton, '刷新'),
     );
     expect(refreshButton.onPressed, isNotNull);
+  });
+
+  testWidgets('message center 会丢弃旧轮次延迟返回的摘要结果', (tester) async {
+    final firstSummaryCompleter = Completer<MessageSummaryResult>();
+    final secondSummaryCompleter = Completer<MessageSummaryResult>();
+    final service = _FakeMessageService()
+      ..summaryCompleters.addAll([
+        firstSummaryCompleter,
+        secondSummaryCompleter,
+      ]);
+    final unreadCounts = <int>[];
+
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      _buildMessageCenterPageApp(
+        service: service,
+        canViewDetail: false,
+        canUseJump: false,
+        onUnreadCountChanged: unreadCounts.add,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+
+    expect(service.listMessagesCallCount, 1);
+    expect(service.summaryCallCount, 1);
+    expect(find.text('待办消息'), findsWidgets);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '刷新'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+
+    expect(service.listMessagesCallCount, 2);
+    expect(service.summaryCallCount, 2);
+
+    secondSummaryCompleter.complete(
+      const MessageSummaryResult(
+        totalCount: 22,
+        unreadCount: 5,
+        todoUnreadCount: 2,
+        urgentUnreadCount: 1,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(_metricValueFinder('全部消息', '22'), findsOneWidget);
+    expect(_metricValueFinder('未读消息', '5'), findsOneWidget);
+    expect(_metricValueFinder('待处理', '2'), findsOneWidget);
+    expect(_metricValueFinder('高优先级', '1'), findsOneWidget);
+    expect(unreadCounts, [5]);
+
+    firstSummaryCompleter.complete(
+      const MessageSummaryResult(
+        totalCount: 99,
+        unreadCount: 17,
+        todoUnreadCount: 8,
+        urgentUnreadCount: 6,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(_metricValueFinder('全部消息', '22'), findsOneWidget);
+    expect(_metricValueFinder('未读消息', '5'), findsOneWidget);
+    expect(_metricValueFinder('待处理', '2'), findsOneWidget);
+    expect(_metricValueFinder('高优先级', '1'), findsOneWidget);
+    expect(_metricValueFinder('全部消息', '99'), findsNothing);
+    expect(_metricValueFinder('未读消息', '17'), findsNothing);
+    expect(_metricValueFinder('待处理', '8'), findsNothing);
+    expect(_metricValueFinder('高优先级', '6'), findsNothing);
+    expect(unreadCounts, [5]);
   });
 
   testWidgets('message center 列表同步失败时不会被摘要链路拖慢或额外发起摘要', (
