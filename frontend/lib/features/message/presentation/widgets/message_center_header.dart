@@ -9,7 +9,6 @@ class MessageCenterHeader extends StatelessWidget {
     required this.errorText,
     required this.loading,
     required this.canPublishAnnouncement,
-    required this.onReset,
     required this.onRefresh,
     required this.onMaintenance,
     required this.onPublishAnnouncement,
@@ -22,7 +21,6 @@ class MessageCenterHeader extends StatelessWidget {
   final String errorText;
   final bool loading;
   final bool canPublishAnnouncement;
-  final VoidCallback onReset;
   final VoidCallback onRefresh;
   final VoidCallback onMaintenance;
   final VoidCallback onPublishAnnouncement;
@@ -56,7 +54,6 @@ class MessageCenterHeader extends StatelessWidget {
         MessageCenterActionBar(
           loading: loading,
           canPublishAnnouncement: canPublishAnnouncement,
-          onReset: onReset,
           onRefresh: onRefresh,
           onMaintenance: onMaintenance,
           onPublishAnnouncement: onPublishAnnouncement,

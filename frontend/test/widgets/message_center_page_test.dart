@@ -4,10 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/ui/patterns/mes_detail_panel.dart';
-import 'package:mes_client/core/ui/patterns/mes_filter_bar.dart';
 import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
-import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/message/models/message_models.dart';
 import 'package:mes_client/features/craft/presentation/craft_page.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
@@ -668,13 +666,6 @@ Future<void> _pumpMessageCenterPage(
   await tester.pumpAndSettle();
 }
 
-Finder _metricValueFinder(String label, String value) {
-  final cardFinder = find.byKey(
-    ValueKey('message-center-overview-card-$label'),
-  );
-  return find.descendant(of: cardFinder, matching: find.text(value));
-}
-
 void main() {
   testWidgets('message center 在 pollingEnabled=false 时不会启动轮询', (tester) async {
     final service = _FakeMessageService();
@@ -794,8 +785,6 @@ void main() {
     );
     expect(refreshButton.onPressed, isNotNull);
 
-    expect(find.text('全部消息'), findsOneWidget);
-
     service.summaryCompleter!.complete(
       const MessageSummaryResult(
         totalCount: 14,
@@ -806,10 +795,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('14'), findsOneWidget);
-    expect(find.text('12'), findsOneWidget);
-    expect(find.text('1'), findsOneWidget);
-    expect(find.text('2'), findsWidgets);
+    expect(find.text('待办消息'), findsWidgets);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
   });
 
   testWidgets('message center 摘要失败时不会破坏列表成功路径', (tester) async {
@@ -899,10 +886,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(_metricValueFinder('全部消息', '22'), findsOneWidget);
-    expect(_metricValueFinder('未读消息', '5'), findsOneWidget);
-    expect(_metricValueFinder('待处理', '2'), findsOneWidget);
-    expect(_metricValueFinder('高优先级', '1'), findsOneWidget);
     expect(unreadCounts, [5]);
 
     firstSummaryCompleter.complete(
@@ -915,14 +898,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(_metricValueFinder('全部消息', '22'), findsOneWidget);
-    expect(_metricValueFinder('未读消息', '5'), findsOneWidget);
-    expect(_metricValueFinder('待处理', '2'), findsOneWidget);
-    expect(_metricValueFinder('高优先级', '1'), findsOneWidget);
-    expect(_metricValueFinder('全部消息', '99'), findsNothing);
-    expect(_metricValueFinder('未读消息', '17'), findsNothing);
-    expect(_metricValueFinder('待处理', '8'), findsNothing);
-    expect(_metricValueFinder('高优先级', '6'), findsNothing);
+    expect(find.text('待办消息'), findsWidgets);
     expect(unreadCounts, [5]);
   });
 
@@ -955,17 +931,6 @@ void main() {
     expect(service.summaryCompletionCount, 0);
   });
 
-  testWidgets('message center 支持 route payload 进入待办过滤态', (tester) async {
-    final service = _FakeMessageService();
-    await _pumpMessageCenterPage(
-      tester,
-      service: service,
-      routePayloadJson: '{"preset":"todo_only"}',
-    );
-
-    expect(service.lastTodoOnly, isTrue);
-  });
-
   testWidgets('message center 使用统一有效时间展示当前生效时间', (tester) async {
     final service = _FakeMessageService();
 
@@ -984,13 +949,13 @@ void main() {
     await _pumpMessageCenterPage(tester, service: service);
 
     expect(find.byType(MesPageHeader), findsOneWidget);
-    expect(find.byType(MesFilterBar), findsOneWidget);
-    expect(find.byType(MesSectionCard), findsAtLeastNWidgets(2));
     expect(find.byType(MesDetailPanel), findsOneWidget);
     expect(find.byType(MesPaginationBar), findsOneWidget);
+    expect(find.text('筛选条件'), findsNothing);
+    expect(find.text('消息概览'), findsNothing);
   });
 
-  testWidgets('message center 重组顶部操作区、次级筛选层与紧凑概览区', (tester) async {
+  testWidgets('message center 已移除筛选区和消息概览区', (tester) async {
     final service = _FakeMessageService();
 
     await _pumpMessageCenterPage(tester, service: service);
@@ -999,26 +964,10 @@ void main() {
       find.byKey(const ValueKey('message-center-primary-actions')),
       findsOneWidget,
     );
-    expect(
-      find.byKey(const ValueKey('message-center-secondary-filters')),
-      findsOneWidget,
-    );
-
-    final overviewCards = <String>['未读消息', '待处理', '高优先级', '全部消息'].map(
-      (label) => find.byKey(ValueKey('message-center-overview-card-$label')),
-    );
-    for (final card in overviewCards) {
-      expect(card, findsOneWidget);
-    }
-    expect(_metricValueFinder('未读消息', '12'), findsOneWidget);
-    expect(_metricValueFinder('待处理', '1'), findsOneWidget);
-    expect(_metricValueFinder('高优先级', '2'), findsOneWidget);
-    expect(_metricValueFinder('全部消息', '14'), findsOneWidget);
-
-    final firstOverviewCardSize = tester.getSize(
-      find.byKey(const ValueKey('message-center-overview-card-未读消息')),
-    );
-    expect(firstOverviewCardSize.height, lessThan(84));
+    expect(find.byKey(const ValueKey('message-center-secondary-filters')), findsNothing);
+    expect(find.byKey(const ValueKey('message-center-overview-card-未读消息')), findsNothing);
+    expect(find.text('筛选条件'), findsNothing);
+    expect(find.text('消息概览'), findsNothing);
   });
 
   testWidgets('message center 点击左侧消息项后右侧详情预览切换到目标消息', (tester) async {
@@ -1295,7 +1244,6 @@ void main() {
       expect(find.text('有效'), findsWidgets);
       expect(find.text('详情'), findsWidgets);
       expect(unreadCountFromPage, 12);
-      expect(find.text('全部消息'), findsOneWidget);
 
       await tester.tap(find.text('待办消息').first);
       await tester.pumpAndSettle();
@@ -1317,95 +1265,6 @@ void main() {
         findsNothing,
       );
 
-      await tester.enterText(
-        find.byKey(const ValueKey('message-center-keyword-field')),
-        '注册审批',
-      );
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pumpAndSettle();
-      expect(service.lastKeyword, '注册审批');
-      expect(find.text('注册审批通过'), findsWidgets);
-      expect(find.text('待办消息'), findsNothing);
-
-      await tester.tap(find.text('重置'));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byKey(const ValueKey('message-center-filter-状态')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('已读').last);
-      await tester.pumpAndSettle();
-      expect(service.lastStatus, 'read');
-
-      await tester.tap(find.text('重置'));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byKey(const ValueKey('message-center-filter-分类')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('预警').last);
-      await tester.pumpAndSettle();
-      expect(service.lastMessageType, 'warning');
-      expect(find.text('设备点检超时'), findsWidgets);
-
-      await tester.tap(find.text('重置'));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byKey(const ValueKey('message-center-filter-优先级')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('紧急').last);
-      await tester.pumpAndSettle();
-      expect(service.lastPriority, 'urgent');
-      expect(find.text('待办消息'), findsWidgets);
-      expect(find.text('设备点检超时'), findsWidgets);
-
-      await tester.tap(find.text('重置'));
-      await tester.pumpAndSettle();
-
-      await tester.tap(
-        find.byKey(const ValueKey('message-center-filter-来源模块')),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('产品').last);
-      await tester.pumpAndSettle();
-      expect(service.lastSourceModule, 'product');
-      expect(find.text('产品版本已发布'), findsWidgets);
-      expect(find.text('注册审批通过'), findsNothing);
-
-      await tester.tap(find.text('重置'));
-      await tester.pumpAndSettle();
-
-      await tester.tap(
-        find.byKey(const ValueKey('message-center-date-range-button')),
-      );
-      await tester.pumpAndSettle();
-      expect(service.lastStartTime, DateTime.utc(2026, 3, 17));
-      expect(service.lastEndTime, DateTime.utc(2026, 3, 19, 23, 59, 59));
-      expect(find.text('03-17 ~ 03-19'), findsOneWidget);
-      expect(find.text('设备点检超时'), findsWidgets);
-      expect(find.text('历史公告'), findsNothing);
-
-      await tester.tap(find.text('重置'));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('20条').last);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('10条').last);
-      await tester.pumpAndSettle();
-      expect(service.lastPageSize, 10);
-      expect(find.text('下一页'), findsOneWidget);
-
-      await tester.tap(find.text('下一页'));
-      await tester.pumpAndSettle();
-      expect(service.lastPage, 2);
-
-      await tester.tap(find.text('仅看待处理'));
-      await tester.pumpAndSettle();
-      expect(service.lastTodoOnly, isTrue);
-      expect(service.lastPage, 1);
-      expect(service.lastPageSize, 10);
-
-      await tester.tap(find.text('重置'));
-      await tester.pumpAndSettle();
-
       await tester.tap(find.byKey(const ValueKey('message-center-select-3')));
       await tester.pumpAndSettle();
       await tester.tap(
@@ -1415,22 +1274,6 @@ void main() {
       expect(service.batchReadCount, 1);
       expect(service.lastBatchReadIds, [3]);
       expect(unreadCountFromPage, 10);
-
-      await tester.tap(find.text('重置'));
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('包含历史消息'));
-      await tester.pumpAndSettle();
-      expect(service.lastActiveOnly, isFalse);
-      await tester.scrollUntilVisible(
-        find.text('历史公告'),
-        180,
-        scrollable: find.descendant(
-          of: find.byKey(const ValueKey('message-center-list-scroll')),
-          matching: find.byType(Scrollable),
-        ),
-      );
-      expect(find.text('历史公告'), findsWidgets);
 
       await tester.tap(
         find.byKey(const ValueKey('message-center-mark-all-read-button')),

@@ -5,7 +5,6 @@ class MessageCenterActionBar extends StatelessWidget {
     super.key,
     required this.loading,
     required this.canPublishAnnouncement,
-    required this.onReset,
     required this.onRefresh,
     required this.onMaintenance,
     required this.onPublishAnnouncement,
@@ -16,7 +15,6 @@ class MessageCenterActionBar extends StatelessWidget {
 
   final bool loading;
   final bool canPublishAnnouncement;
-  final VoidCallback onReset;
   final VoidCallback onRefresh;
   final VoidCallback onMaintenance;
   final VoidCallback onPublishAnnouncement;
@@ -35,11 +33,6 @@ class MessageCenterActionBar extends StatelessWidget {
         children: [
           _ActionGroup(
             children: [
-              OutlinedButton.icon(
-                onPressed: loading ? null : onReset,
-                icon: const Icon(Icons.filter_alt_off, size: 16),
-                label: const Text('重置'),
-              ),
               OutlinedButton.icon(
                 onPressed: loading ? null : onRefresh,
                 icon: const Icon(Icons.refresh, size: 16),
