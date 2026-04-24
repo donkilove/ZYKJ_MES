@@ -373,6 +373,13 @@ class MainShellController extends ChangeNotifier {
     _setState(_state.copyWith(activeUtilityCode: softwareSettingsUtilityCode));
   }
 
+  void openPluginHost() {
+    if (_state.activeUtilityCode == pluginHostUtilityCode) {
+      return;
+    }
+    _setState(_state.copyWith(activeUtilityCode: pluginHostUtilityCode));
+  }
+
   String? homeRefreshStatusText() {
     if (_state.manualRefreshing) {
       return '正在刷新业务数据...';

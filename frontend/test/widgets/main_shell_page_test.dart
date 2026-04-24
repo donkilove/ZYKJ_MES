@@ -9,12 +9,17 @@ import 'package:mes_client/features/message/models/message_models.dart';
 import 'package:mes_client/features/message/presentation/message_center_page.dart';
 import 'package:mes_client/core/services/effective_clock.dart';
 import 'package:mes_client/core/models/page_catalog_models.dart';
+import 'package:mes_client/features/plugin_host/models/plugin_catalog_item.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_page.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/auth/services/auth_service.dart';
 import 'package:mes_client/features/auth/services/authz_service.dart';
 import 'package:mes_client/features/message/services/message_service.dart';
 import 'package:mes_client/features/message/services/message_ws_service.dart';
+import 'package:mes_client/features/plugin_host/presentation/plugin_host_controller.dart';
+import 'package:mes_client/features/plugin_host/services/plugin_catalog_service.dart';
+import 'package:mes_client/features/plugin_host/services/plugin_process_service.dart';
+import 'package:mes_client/features/plugin_host/services/plugin_runtime_locator.dart';
 import 'package:mes_client/features/settings/models/software_settings_models.dart';
 import 'package:mes_client/features/settings/presentation/software_settings_controller.dart';
 import 'package:mes_client/features/shell/models/home_dashboard_models.dart';
@@ -458,6 +463,7 @@ Future<void> _pumpMainShellPage(
   })?
   messageWsServiceFactory,
   HomeDashboardService? homeDashboardService,
+  PluginHostController? pluginHostController,
   Widget Function({
     required AppSession session,
     required VoidCallback onLogout,
@@ -506,6 +512,7 @@ Future<void> _pumpMainShellPage(
         messageService: messageService,
         messageWsServiceFactory: messageWsServiceFactory,
         homeDashboardService: homeDashboardService,
+        pluginHostController: pluginHostController,
         userPageBuilder: userPageBuilder,
         productionPageBuilder: productionPageBuilder,
       ),
@@ -539,6 +546,27 @@ class _FakeServerTimeService extends ServerTimeService {
 }
 
 class _FakeWindowsTimeSyncService extends WindowsTimeSyncService {}
+
+class _StubPluginCatalogService extends PluginCatalogService {
+  _StubPluginCatalogService() : super(pluginRootResolver: () async => '');
+
+  @override
+  Future<List<PluginCatalogItem>> scan() async {
+    return const <PluginCatalogItem>[];
+  }
+}
+
+class _StubPluginProcessService extends PluginProcessService {
+  _StubPluginProcessService();
+}
+
+class _StubPluginRuntimeLocator extends PluginRuntimeLocator {
+  _StubPluginRuntimeLocator()
+    : super(
+        executablePath: r'C:\ZYKJ_MES\mes_client.exe',
+        environment: const {},
+      );
+}
 
 void main() {
   testWidgets('主壳会把用户模块活跃态真实传到个人中心页面', (tester) async {
@@ -1521,6 +1549,35 @@ void main() {
     );
 
     expect(find.textContaining('加载当前用户失败：用户接口失败'), findsOneWidget);
+  });
+
+  testWidgets('主壳左侧会显示插件中心入口并可切换到插件中心内容', (tester) async {
+    final pluginHostController = PluginHostController(
+      catalogService: _StubPluginCatalogService(),
+      processService: _StubPluginProcessService(),
+      runtimeLocator: _StubPluginRuntimeLocator(),
+    );
+
+    await _pumpMainShellPage(
+      tester,
+      authService: _TestShellAuthService(),
+      authzService: _TestShellAuthzService(),
+      pageCatalogService: _TestShellPageCatalogService(),
+      messageService: _TestShellMessageService(),
+      pluginHostController: pluginHostController,
+      onLogout: () {},
+    );
+
+    expect(find.byKey(const ValueKey('main-shell-entry-plugin-host')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('main-shell-entry-plugin-host')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('main-shell-content-plugin_host')),
+      findsOneWidget,
+    );
+    expect(find.text('插件中心'), findsWidgets);
   });
 
   testWidgets('权限快照加载失败时显示错误态', (tester) async {
