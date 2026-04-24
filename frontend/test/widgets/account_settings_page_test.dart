@@ -132,6 +132,49 @@ void main() {
     );
   });
 
+  testWidgets('账号设置页 pollingEnabled=false 时不会启动会话轮询，切回 true 会补拉并恢复轮询', (
+    tester,
+  ) async {
+    final userService = _FakeUserService();
+
+    Future<void> pumpPage({required bool pollingEnabled}) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: AccountSettingsPage(
+              session: AppSession(baseUrl: '', accessToken: ''),
+              onLogout: () {},
+              canChangePassword: true,
+              canViewSession: true,
+              pollingEnabled: pollingEnabled,
+              userService: userService,
+            ),
+          ),
+        ),
+      );
+    }
+
+    await pumpPage(pollingEnabled: false);
+    await tester.pumpAndSettle();
+
+    expect(userService.getMySessionCalls, 1);
+
+    await tester.pump(const Duration(seconds: 30));
+    await tester.pumpAndSettle();
+
+    expect(userService.getMySessionCalls, 1);
+
+    await pumpPage(pollingEnabled: true);
+    await tester.pumpAndSettle();
+
+    expect(userService.getMySessionCalls, 2);
+
+    await tester.pump(const Duration(seconds: 30));
+    await tester.pumpAndSettle();
+
+    expect(userService.getMySessionCalls, 3);
+  });
+
   testWidgets('账号设置页直接展示并校验最新密码规则', (tester) async {
     final userService = _FakeUserService();
 

@@ -483,6 +483,56 @@ void main() {
     expect(service.lastOrderStatus, 'in_progress');
   });
 
+  testWidgets('订单查询页 pollingEnabled=false 时不会启动定时刷新，切回 true 会补拉并恢复轮询', (
+    tester,
+  ) async {
+    final service = _FakeProductionOrderQueryPageService();
+
+    Future<void> pumpPage({required bool pollingEnabled}) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ProductionOrderQueryPage(
+              session: AppSession(baseUrl: '', accessToken: ''),
+              onLogout: () {},
+              canFirstArticle: true,
+              canEndProduction: true,
+              canCreateManualRepairOrder: true,
+              canCreateAssistAuthorization: true,
+              canProxyView: false,
+              canExportCsv: false,
+              pollingEnabled: pollingEnabled,
+              service: service,
+              pollInterval: const Duration(seconds: 12),
+            ),
+          ),
+        ),
+      );
+    }
+
+    await pumpPage(pollingEnabled: false);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(service.requestedPages, [1]);
+
+    await tester.pump(const Duration(seconds: 12));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(service.requestedPages, [1]);
+
+    await pumpPage(pollingEnabled: true);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(service.requestedPages, [1, 1]);
+
+    await tester.pump(const Duration(seconds: 12));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(service.requestedPages, [1, 1, 1]);
+  });
+
   testWidgets('订单查询页支持筛选并展示工单列表', (tester) async {
     final service = _FakeProductionOrderQueryPageService();
 

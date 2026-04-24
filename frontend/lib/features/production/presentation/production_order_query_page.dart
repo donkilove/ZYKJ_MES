@@ -138,7 +138,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
       _loadProxyStages();
     }
     _loadOrders();
-    _startPolling();
+    _syncPollingState();
   }
 
   @override
@@ -146,6 +146,10 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     super.didUpdateWidget(oldWidget);
     if (widget.routePayloadJson != oldWidget.routePayloadJson) {
       _consumeRoutePayload(widget.routePayloadJson);
+    }
+    if (widget.pollingEnabled != oldWidget.pollingEnabled ||
+        widget.pollInterval != oldWidget.pollInterval) {
+      _syncPollingState(previousPollingEnabled: oldWidget.pollingEnabled);
     }
   }
 
@@ -407,13 +411,30 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
 
   void _startPolling() {
     _pollTimer?.cancel();
-    if (widget.pollInterval <= Duration.zero) {
+    if (!widget.pollingEnabled || widget.pollInterval <= Duration.zero) {
       return;
     }
     _pollTimer = Timer.periodic(
       widget.pollInterval,
       (_) => _loadOrders(silent: true),
     );
+  }
+
+  void _stopPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+  }
+
+  void _syncPollingState({bool? previousPollingEnabled}) {
+    if (!widget.pollingEnabled || widget.pollInterval <= Duration.zero) {
+      _stopPolling();
+      return;
+    }
+    final shouldCatchUp = previousPollingEnabled == false && widget.pollingEnabled;
+    if (shouldCatchUp) {
+      unawaited(_loadOrders(silent: true));
+    }
+    _startPolling();
   }
 
   Future<void> _loadOrders({bool silent = false, int? page}) async {

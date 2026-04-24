@@ -68,10 +68,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     _userService = widget.userService ?? UserService(widget.session);
     _authService = widget.authService ?? AuthService();
     _loadData();
-    _sessionRefreshTimer = Timer.periodic(
-      const Duration(seconds: 30),
-      (_) => _refreshSession(),
-    );
+    _syncSessionPolling();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _consumeRoutePayload(widget.routePayloadJson);
     });
@@ -82,6 +79,9 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     super.didUpdateWidget(oldWidget);
     if (widget.routePayloadJson != oldWidget.routePayloadJson) {
       _consumeRoutePayload(widget.routePayloadJson);
+    }
+    if (widget.pollingEnabled != oldWidget.pollingEnabled) {
+      _syncSessionPolling(previousPollingEnabled: oldWidget.pollingEnabled);
     }
   }
 
@@ -120,6 +120,30 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
         widget.onLogout();
       }
     }
+  }
+
+  void _startSessionPolling() {
+    _sessionRefreshTimer?.cancel();
+    if (!widget.pollingEnabled || !widget.canViewSession) {
+      _sessionRefreshTimer = null;
+      return;
+    }
+    _sessionRefreshTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _refreshSession(),
+    );
+  }
+
+  void _syncSessionPolling({bool? previousPollingEnabled}) {
+    if (!widget.pollingEnabled || !widget.canViewSession) {
+      _sessionRefreshTimer?.cancel();
+      _sessionRefreshTimer = null;
+      return;
+    }
+    if (previousPollingEnabled == false && widget.pollingEnabled) {
+      unawaited(_refreshSession());
+    }
+    _startSessionPolling();
   }
 
   void _checkSessionTimeout(CurrentSessionResult session) {
