@@ -1043,10 +1043,10 @@ void main() {
     expect(find.text('您的账号已创建，请进入个人中心修改密码。'), findsOneWidget);
   });
 
-  testWidgets('message center 详情面板内部存在独立可滚动区域', (tester) async {
+  testWidgets('message center 详情面板在小高度下仍可独立滚动到低位动作区', (tester) async {
     final service = _FakeMessageService();
 
-    tester.view.physicalSize = const Size(1600, 720);
+    tester.view.physicalSize = const Size(1600, 620);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
       tester.view.resetPhysicalSize();
@@ -1057,6 +1057,32 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('message-center-preview-scroll')), findsOneWidget);
+    expect(find.byKey(const ValueKey('message-center-preview-read-1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('message-center-preview-jump-1')), findsOneWidget);
+    expect(find.text('排障提示'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    final viewportHeight = tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    final beforeScrollRect = tester.getRect(
+      find.byKey(const ValueKey('message-center-preview-read-1')),
+    );
+    expect(beforeScrollRect.bottom, greaterThan(viewportHeight));
+
+    await tester.dragUntilVisible(
+      find.byKey(const ValueKey('message-center-preview-read-1')),
+      find.byKey(const ValueKey('message-center-preview-scroll')),
+      const Offset(0, -120),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('message-center-preview-read-1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('message-center-preview-jump-1')), findsOneWidget);
+    expect(find.text('排障提示'), findsOneWidget);
+    final afterScrollRect = tester.getRect(
+      find.byKey(const ValueKey('message-center-preview-read-1')),
+    );
+    expect(afterScrollRect.bottom, lessThanOrEqualTo(viewportHeight));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(

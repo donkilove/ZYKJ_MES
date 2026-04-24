@@ -11,12 +11,17 @@ class MessageCenterPreviewPanel extends StatelessWidget {
     return MesDetailPanel(
       title: '消息详情预览',
       expandChild: true,
-      child: Scrollbar(
-        thumbVisibility: true,
-        child: SingleChildScrollView(
-          key: const ValueKey('message-center-preview-scroll'),
-          padding: const EdgeInsets.only(right: 4),
-          child: child,
+      child: LayoutBuilder(
+        builder: (context, constraints) => Scrollbar(
+          thumbVisibility: true,
+          child: SingleChildScrollView(
+            key: const ValueKey('message-center-preview-scroll'),
+            padding: const EdgeInsets.only(right: 4),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: child,
+            ),
+          ),
         ),
       ),
     );
