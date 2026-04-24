@@ -3,6 +3,8 @@ const baudrateInput = document.getElementById("baudrate");
 const sendText = document.getElementById("sendText");
 const receiveLog = document.getElementById("receiveLog");
 const statusText = document.getElementById("status");
+const clearSendButton = document.getElementById("clearSend");
+const clearLogButton = document.getElementById("clearLog");
 
 let activeHandle = null;
 
@@ -10,6 +12,10 @@ function appendLog(message) {
   const now = new Date().toLocaleTimeString();
   receiveLog.textContent += `[${now}] ${message}\n`;
   receiveLog.scrollTop = receiveLog.scrollHeight;
+}
+
+function setStatus(message) {
+  statusText.textContent = `状态：${message}`;
 }
 
 async function request(path, options = {}) {
@@ -25,17 +31,26 @@ async function request(path, options = {}) {
 }
 
 async function loadPorts() {
+  const currentValue = portSelect.value;
   const payload = await request("/api/ports");
   portSelect.innerHTML = "";
   for (const item of payload.items) {
     const option = document.createElement("option");
     option.value = item.port;
     option.textContent = `${item.port} - ${item.description}`;
+    if (item.port === currentValue) {
+      option.selected = true;
+    }
     portSelect.appendChild(option);
   }
+  if (!portSelect.value && portSelect.options.length > 0) {
+    portSelect.selectedIndex = 0;
+  }
+  appendLog(`已刷新端口列表，共 ${payload.items.length} 项`);
 }
 
 async function openPort() {
+  setStatus("正在连接");
   const payload = await request("/api/open", {
     method: "POST",
     body: JSON.stringify({
@@ -44,12 +59,13 @@ async function openPort() {
     }),
   });
   activeHandle = payload.handle;
-  statusText.textContent = `状态：已连接 ${portSelect.value}`;
-  appendLog(`已打开端口 ${portSelect.value}`);
+  setStatus(`已连接 ${payload.port} @ ${payload.baudrate}`);
+  appendLog(`已打开端口 ${payload.port} @ ${payload.baudrate}`);
 }
 
 async function closePort() {
   if (!activeHandle) {
+    setStatus("未连接");
     return;
   }
   await request("/api/close", {
@@ -58,7 +74,7 @@ async function closePort() {
   });
   appendLog("端口已关闭");
   activeHandle = null;
-  statusText.textContent = "状态：未连接";
+  setStatus("未连接");
 }
 
 async function sendPayload() {
@@ -99,6 +115,12 @@ document.getElementById("send").addEventListener("click", () => {
 });
 document.getElementById("read").addEventListener("click", () => {
   readOnce().catch((error) => appendLog(`读取失败：${error.message}`));
+});
+clearSendButton.addEventListener("click", () => {
+  sendText.value = "";
+});
+clearLogButton.addEventListener("click", () => {
+  receiveLog.textContent = "";
 });
 
 loadPorts().catch((error) => appendLog(`初始化失败：${error.message}`));

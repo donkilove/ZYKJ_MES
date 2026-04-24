@@ -69,7 +69,15 @@ def start_server(base_dir: Path) -> tuple[int, str]:
                         payload["port"],
                         int(payload.get("baudrate", 115200)),
                     )
-                    self._send_json(HTTPStatus.OK, {"handle": handle})
+                    self._send_json(
+                        HTTPStatus.OK,
+                        {
+                            "handle": handle,
+                            "status": "opened",
+                            "port": payload["port"],
+                            "baudrate": int(payload.get("baudrate", 115200)),
+                        },
+                    )
                     return
                 if parsed.path == "/api/send":
                     bridge.send(payload["handle"], payload.get("payload", ""))
@@ -77,7 +85,10 @@ def start_server(base_dir: Path) -> tuple[int, str]:
                     return
                 if parsed.path == "/api/close":
                     bridge.close(payload["handle"])
-                    self._send_json(HTTPStatus.OK, {"status": "closed"})
+                    self._send_json(
+                        HTTPStatus.OK,
+                        {"status": "closed", "handle": payload["handle"]},
+                    )
                     return
             except Exception as error:  # noqa: BLE001
                 self._send_json(

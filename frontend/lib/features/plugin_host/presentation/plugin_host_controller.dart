@@ -24,6 +24,7 @@ class PluginHostController extends ChangeNotifier {
   String? _selectedPluginId;
   final Map<String, PluginSession> _sessions = <String, PluginSession>{};
   PluginHostViewState _viewState = const PluginHostViewState();
+  int _openSequence = 0;
 
   List<PluginCatalogItem> get plugins => _plugins;
   bool get loading => _loading;
@@ -64,7 +65,7 @@ class PluginHostController extends ChangeNotifier {
     _viewState = _viewState.copyWith(
       phase: PluginHostPhase.running,
       focusedPluginId: session.pluginId,
-      statusTitle: '${session.pluginId}运行中',
+      statusTitle: '${_displayNameFor(session.pluginId)}运行中',
       statusMessage: '插件页面已就绪。',
       errorMessage: null,
     );
@@ -82,7 +83,7 @@ class PluginHostController extends ChangeNotifier {
       _viewState = _viewState.copyWith(
         phase: PluginHostPhase.running,
         focusedPluginId: pluginId,
-        statusTitle: '${running.pluginId}运行中',
+        statusTitle: '${_displayNameFor(pluginId)}运行中',
         statusMessage: '插件页面已就绪。',
         errorMessage: null,
       );
@@ -90,12 +91,13 @@ class PluginHostController extends ChangeNotifier {
       return;
     }
 
+    final currentSequence = ++_openSequence;
     _selectedPluginId = pluginId;
     _viewState = _viewState.copyWith(
       phase: PluginHostPhase.starting,
       focusedPluginId: pluginId,
-      statusTitle: '正在启动串口助手',
-      statusMessage: '宿主正在拉起插件进程并等待页面就绪。',
+      statusTitle: '正在启动${_displayNameFor(pluginId)}',
+      statusMessage: '宿主正在拉起插件进程并等待页面就绪',
       errorMessage: null,
     );
     notifyListeners();
@@ -105,7 +107,7 @@ class PluginHostController extends ChangeNotifier {
       _viewState = _viewState.copyWith(
         phase: PluginHostPhase.failed,
         focusedPluginId: pluginId,
-        statusTitle: '串口助手启动失败',
+        statusTitle: '${_displayNameFor(pluginId)}启动失败',
         statusMessage: '宿主未找到可用插件清单。',
         errorMessage: 'plugin manifest missing',
       );
@@ -125,19 +127,25 @@ class PluginHostController extends ChangeNotifier {
         pythonExecutable: pythonExecutable,
         runtimeRoot: runtimeRoot,
       );
+      if (currentSequence != _openSequence) {
+        return;
+      }
       _sessions[pluginId] = started;
       _viewState = _viewState.copyWith(
         phase: PluginHostPhase.running,
         focusedPluginId: pluginId,
-        statusTitle: '串口助手运行中',
+        statusTitle: '${_displayNameFor(pluginId)}运行中',
         statusMessage: '插件页面已就绪。',
         errorMessage: null,
       );
     } catch (error) {
+      if (currentSequence != _openSequence) {
+        return;
+      }
       _viewState = _viewState.copyWith(
         phase: PluginHostPhase.failed,
         focusedPluginId: pluginId,
-        statusTitle: '串口助手启动失败',
+        statusTitle: '${_displayNameFor(pluginId)}启动失败',
         statusMessage: '宿主未能完成插件启动。',
         errorMessage: error.toString(),
       );
@@ -146,12 +154,14 @@ class PluginHostController extends ChangeNotifier {
   }
 
   Future<void> closePlugin(String pluginId) async {
+    _openSequence += 1;
     final session = _sessions.remove(pluginId);
     if (session != null) {
       await _processService.stop(session);
     }
     if (_selectedPluginId == pluginId) {
       _selectedPluginId = null;
+      _viewState = const PluginHostViewState();
     }
     notifyListeners();
   }
@@ -183,6 +193,18 @@ class PluginHostController extends ChangeNotifier {
     );
     _sessions[pluginId] = restarted;
     _selectedPluginId = pluginId;
+    _viewState = _viewState.copyWith(
+      phase: PluginHostPhase.running,
+      focusedPluginId: pluginId,
+      statusTitle: '${_displayNameFor(pluginId)}运行中',
+      statusMessage: '插件页面已就绪。',
+      errorMessage: null,
+    );
     notifyListeners();
+  }
+
+  String _displayNameFor(String pluginId) {
+    final plugin = _plugins.where((item) => item.manifest?.id == pluginId).firstOrNull;
+    return plugin?.manifest?.name ?? pluginId;
   }
 }

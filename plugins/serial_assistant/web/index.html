@@ -64,6 +64,10 @@
       button.secondary {
         background: #4b5565;
       }
+      button.ghost {
+        background: #eef3ff;
+        color: #1f4bb6;
+      }
       pre {
         margin: 0;
         min-height: 180px;
@@ -76,6 +80,17 @@
       #status {
         font-weight: 700;
       }
+      .hint {
+        color: #526076;
+        margin: 0 0 8px;
+      }
+      .toolbar {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+        align-items: center;
+      }
     </style>
   </head>
   <body>
@@ -83,6 +98,7 @@
       <section class="panel">
         <h1>串口助手</h1>
         <p id="status">状态：未连接</p>
+        <p class="hint">先选择端口和波特率，再执行打开、发送、读取、关闭。</p>
         <div class="row">
           <label>
             端口
@@ -101,20 +117,27 @@
       </section>
 
       <section class="panel">
+        <h2>发送区</h2>
+        <p class="hint">第一阶段只支持文本发送，不启用十六进制模式。</p>
         <div class="row">
           <label style="flex: 1 1 100%;">
             发送内容
             <textarea id="sendText"></textarea>
           </label>
         </div>
-        <div class="row">
+        <div class="toolbar">
           <button id="send">发送</button>
+          <button id="clearSend" class="ghost">清空发送框</button>
           <button id="read" class="secondary">读取一次</button>
         </div>
       </section>
 
       <section class="panel">
         <h2>接收日志</h2>
+        <p class="hint">显示连接状态、发送记录与接收记录。</p>
+        <div class="toolbar">
+          <button id="clearLog" class="ghost">清空日志</button>
+        </div>
         <pre id="receiveLog"></pre>
       </section>
     </main>

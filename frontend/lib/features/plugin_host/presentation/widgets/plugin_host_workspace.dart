@@ -20,6 +20,17 @@ class PluginHostWorkspace extends StatelessWidget {
       return _PluginHostStatusPanel(
         title: viewState.statusTitle,
         message: viewState.statusMessage,
+        actions: [
+          TextButton(
+            onPressed: () {
+              final pluginId = viewState.focusedPluginId;
+              if (pluginId != null) {
+                controller.closePlugin(pluginId);
+              }
+            },
+            child: const Text('取消启动'),
+          ),
+        ],
       );
     }
 

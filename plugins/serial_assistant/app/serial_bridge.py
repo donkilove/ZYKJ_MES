@@ -26,7 +26,8 @@ class SerialBridge:
             }
             for port in list_ports.comports()
         ]
-        ports.append({"port": "loop://", "description": "内置回环测试端口"})
+        if not any(item["port"] == "loop://" for item in ports):
+            ports.append({"port": "loop://", "description": "内置回环测试端口"})
         return ports
 
     def open(self, port: str, baudrate: int) -> str:
