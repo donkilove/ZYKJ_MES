@@ -1190,6 +1190,8 @@ class QualityPermissionCodes {
   static const String pageQualityDataQueryView = 'page.quality_data_query.view';
 
   static const String firstArticlesList = 'quality.first_articles.list';
+  static const String firstArticlesScanReview =
+      'quality.first_articles.scan_review';
   static const String statsOverview = 'quality.stats.overview';
   static const String statsProcesses = 'quality.stats.processes';
   static const String statsOperators = 'quality.stats.operators';
@@ -1284,6 +1286,8 @@ class CraftFeaturePermissionCodes {
 
 class QualityFeaturePermissionCodes {
   static const String firstArticlesView = 'feature.quality.first_articles.view';
+  static const String firstArticlesScanReview =
+      'feature.quality.first_articles.scan_review';
   static const String statsView = 'feature.quality.stats.view';
 }
 

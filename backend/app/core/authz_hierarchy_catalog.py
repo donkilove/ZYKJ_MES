@@ -548,6 +548,14 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         dependency_permission_codes=("feature.quality.first_articles.detail",),
     ),
     FeatureDefinition(
+        permission_code="feature.quality.first_articles.scan_review",
+        permission_name="扫码复核首件",
+        module_code="quality",
+        page_code="first_article_management",
+        action_permission_codes=("quality.first_articles.scan_review",),
+        dependency_permission_codes=("feature.quality.first_articles.detail",),
+    ),
+    FeatureDefinition(
         permission_code="feature.quality.stats.view",
         permission_name="查看质量数据统计",
         module_code="quality",

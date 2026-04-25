@@ -95,6 +95,7 @@ PERM_QUALITY_REPAIR_ORDERS_DETAIL = "quality.repair_orders.detail"
 PERM_QUALITY_REPAIR_ORDERS_PHENOMENA_SUMMARY = "quality.repair_orders.phenomena_summary"
 PERM_QUALITY_REPAIR_ORDERS_COMPLETE = "quality.repair_orders.complete"
 PERM_QUALITY_REPAIR_ORDERS_EXPORT = "quality.repair_orders.export"
+PERM_QUALITY_FIRST_ARTICLES_SCAN_REVIEW = "quality.first_articles.scan_review"
 
 
 @dataclass(frozen=True, slots=True)
@@ -686,6 +687,12 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
     (
         "quality.first_articles.disposition",
         "首件处置",
+        AUTHZ_MODULE_QUALITY,
+        "first_article_management",
+    ),
+    (
+        PERM_QUALITY_FIRST_ARTICLES_SCAN_REVIEW,
+        "扫码复核首件",
         AUTHZ_MODULE_QUALITY,
         "first_article_management",
     ),
