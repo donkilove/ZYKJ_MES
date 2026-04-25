@@ -56,6 +56,37 @@ void main() {
     expect(controller.viewState.phase, PluginHostPhase.running);
   });
 
+  test('取消启动后迟到的会话会被立即回收', () async {
+    final runtimeEnv = await _createRuntimeEnvironment();
+    addTearDown(runtimeEnv.dispose);
+    final processService = _CancelableProcessService();
+    final controller = PluginHostController(
+      catalogService: _StubCatalogService.withPlugin(),
+      processService: processService,
+      runtimeLocator: _StubRuntimeLocator(runtimeRoot: runtimeEnv.runtimeRoot.path),
+    );
+    await controller.loadCatalog();
+
+    final openFuture = controller.openPlugin('serial_assistant');
+    await Future<void>.delayed(Duration.zero);
+    await controller.closePlugin('serial_assistant');
+
+    processService.completeStart(
+      PluginSession(
+        pluginId: 'serial_assistant',
+        process: null,
+        pid: 789,
+        entryUrl: Uri.parse('http://127.0.0.1:43125/'),
+        heartbeatUrl: Uri.parse('http://127.0.0.1:43125/__heartbeat__'),
+      ),
+    );
+    await openFuture;
+
+    expect(processService.stopCount, 1);
+    expect(controller.activeSession, isNull);
+    expect(controller.viewState.phase, PluginHostPhase.idle);
+  });
+
   test('启动失败时会进入 failed 状态并保留错误信息', () async {
     final runtimeEnv = await _createRuntimeEnvironment();
     addTearDown(runtimeEnv.dispose);
@@ -289,6 +320,33 @@ class _FailingProcessService extends PluginProcessService {
     required String runtimeRoot,
   }) {
     throw TimeoutException('ready timeout');
+  }
+}
+
+class _CancelableProcessService extends PluginProcessService {
+  _CancelableProcessService();
+
+  final Completer<PluginSession> _startCompleter = Completer<PluginSession>();
+  int stopCount = 0;
+
+  void completeStart(PluginSession session) {
+    if (!_startCompleter.isCompleted) {
+      _startCompleter.complete(session);
+    }
+  }
+
+  @override
+  Future<PluginSession> start({
+    required PluginCatalogItem plugin,
+    required String pythonExecutable,
+    required String runtimeRoot,
+  }) {
+    return _startCompleter.future;
+  }
+
+  @override
+  Future<void> stop(PluginSession session) async {
+    stopCount += 1;
   }
 }
 

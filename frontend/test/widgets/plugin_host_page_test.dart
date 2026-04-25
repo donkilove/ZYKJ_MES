@@ -14,7 +14,7 @@ import 'package:mes_client/features/plugin_host/services/plugin_runtime_locator.
 
 void main() {
   testWidgets('插件中心会渲染列表与空工作区', (tester) async {
-    final runtimeEnv = await _createRuntimeEnvironment();
+    final runtimeEnv = _createRuntimeEnvironment();
     addTearDown(runtimeEnv.dispose);
     final controller = PluginHostController(
       catalogService: _StubCatalogService(),
@@ -43,7 +43,7 @@ void main() {
   });
 
   testWidgets('插件列表为空时会提示检查插件目录', (tester) async {
-    final runtimeEnv = await _createRuntimeEnvironment();
+    final runtimeEnv = _createRuntimeEnvironment();
     addTearDown(runtimeEnv.dispose);
     final controller = PluginHostController(
       catalogService: _EmptyCatalogService(),
@@ -70,7 +70,7 @@ void main() {
   });
 
   testWidgets('启动中状态会渲染宿主启动面板', (tester) async {
-    final runtimeEnv = await _createRuntimeEnvironment();
+    final runtimeEnv = _createRuntimeEnvironment();
     addTearDown(runtimeEnv.dispose);
     final controller = PluginHostController(
       catalogService: _StubCatalogService(),
@@ -106,7 +106,7 @@ void main() {
   });
 
   testWidgets('异常状态会渲染宿主错误面板', (tester) async {
-    final runtimeEnv = await _createRuntimeEnvironment();
+    final runtimeEnv = _createRuntimeEnvironment();
     addTearDown(runtimeEnv.dispose);
     final controller = PluginHostController(
       catalogService: _StubCatalogService(),
@@ -144,7 +144,7 @@ void main() {
   });
 
   testWidgets('宿主插件根目录缺失时工作区直接展示插件目录缺失', (tester) async {
-    final runtimeEnv = await _createRuntimeEnvironment();
+    final runtimeEnv = _createRuntimeEnvironment();
     addTearDown(runtimeEnv.dispose);
     final processService = _CountingProcessService();
     final controller = PluginHostController(
@@ -176,7 +176,7 @@ void main() {
   });
 
   testWidgets('Python 运行时缺失时工作区直接展示宿主错误文案', (tester) async {
-    final runtimeEnv = await _createRuntimeEnvironment();
+    final runtimeEnv = _createRuntimeEnvironment();
     addTearDown(runtimeEnv.dispose);
     final controller = PluginHostController(
       catalogService: _StubCatalogService(),
@@ -206,7 +206,7 @@ void main() {
   });
 
   testWidgets('工作区在存在活动会话时会显示内嵌区域与宿主工具条', (tester) async {
-    final runtimeEnv = await _createRuntimeEnvironment();
+    final runtimeEnv = _createRuntimeEnvironment();
     addTearDown(runtimeEnv.dispose);
     final controller = PluginHostController(
       catalogService: _StubCatalogService(),
@@ -340,21 +340,21 @@ class _RuntimeEnvironment {
   final Directory pluginRoot;
   final Directory runtimeRoot;
 
-  Future<void> dispose() async {
-    if (await pluginRoot.exists()) {
-      await pluginRoot.delete(recursive: true);
+  void dispose() {
+    if (pluginRoot.existsSync()) {
+      pluginRoot.deleteSync(recursive: true);
     }
-    if (await runtimeRoot.exists()) {
-      await runtimeRoot.delete(recursive: true);
+    if (runtimeRoot.existsSync()) {
+      runtimeRoot.deleteSync(recursive: true);
     }
   }
 }
 
-Future<_RuntimeEnvironment> _createRuntimeEnvironment() async {
-  final pluginRoot = await Directory.systemTemp.createTemp('plugin_root_');
-  final runtimeRoot = await Directory.systemTemp.createTemp('plugin_runtime_');
+_RuntimeEnvironment _createRuntimeEnvironment() {
+  final pluginRoot = Directory.systemTemp.createTempSync('plugin_root_');
+  final runtimeRoot = Directory.systemTemp.createTempSync('plugin_runtime_');
   final pythonExecutable = File('${runtimeRoot.path}\\python.exe');
-  await pythonExecutable.create();
+  pythonExecutable.createSync();
   return _RuntimeEnvironment(pluginRoot, runtimeRoot);
 }
 

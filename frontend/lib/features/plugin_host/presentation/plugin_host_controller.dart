@@ -125,6 +125,7 @@ class PluginHostController extends ChangeNotifier {
         runtimeRoot: runtimeRoot,
       );
       if (currentSequence != _openSequence) {
+        await _processService.stop(started);
         return;
       }
       _sessions[pluginId] = started;
