@@ -9,11 +9,11 @@ class PluginHostPage extends StatefulWidget {
   const PluginHostPage({
     super.key,
     required this.controller,
-    this.webviewBuilder,
+    required this.webviewBuilder,
   });
 
   final PluginHostController controller;
-  final Widget Function(Uri entryUrl)? webviewBuilder;
+  final Widget Function(Uri entryUrl) webviewBuilder;
 
   @override
   State<PluginHostPage> createState() => _PluginHostPageState();

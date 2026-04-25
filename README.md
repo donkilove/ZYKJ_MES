@@ -6,6 +6,7 @@
 
 - `backend/`：Python 后端，负责 API、数据库迁移、权限与业务服务。
 - `frontend/`：Flutter 前端，默认以 Windows 桌面应用方式运行。
+- `plugins/`：插件根目录；固定 Python 解释器位于 `plugins/runtime/python312/python.exe`。
 - `docs/superpowers/specs/` 与 `docs/superpowers/plans/`：近期功能设计与实施计划。
 - `evidence/`：任务日志、验证日志、只读复核与交付留痕。
 
@@ -18,6 +19,24 @@
 5. `docs/AGENTS/30-工具治理与验证门禁.md`
 6. `docs/AGENTS/40-质量交付与留痕.md`
 7. `docs/AGENTS/50-模板与索引.md`
+
+## 插件运行时口径
+
+- 插件统一放在 `plugins/` 根目录下组织。
+- 仓库固定解释器路径为 `plugins/runtime/python312/python.exe`。
+- 涉及仓库内插件运行、插件安装说明、插件调试复现、CI/脚本需要固定版本时，必须使用内置解释器，避免依赖系统全局 Python。
+- 仅在运行仓库根级启动脚本、开发者自管工具链，且任务不依赖插件固定运行时时，可以继续使用系统 Python。
+- 当前运行时目录按官方 `Python 3.12.10 Windows embeddable package (64-bit)` 原样入仓，仅额外补充说明文档；日常维护不允许随意裁剪、增删其中二进制内容。
+- 平台边界：当前仅支持 Windows x64。
+- 整目录入仓是为了同时固定 `python.exe`、`python312.dll`、`python312.zip`、VC 运行库与扩展模块，避免插件在不同机器上因缺文件或版本漂移无法复现。
+- 运行时升级或替换时，统一用新的官方 embeddable package 整包覆盖 `plugins/runtime/python312/`，保留或更新本目录 `README.md`，再执行：
+
+```powershell
+git check-ignore -v plugins/runtime/python312/python.exe
+& .\plugins\runtime\python312\python.exe -c "import sys; print(sys.version)"
+```
+
+- 校验通过标准：`python.exe` 不应被忽略，且 `sys.version` 输出目标版本号；若不满足，则不得提交。
 
 ## 默认启动命令
 

@@ -46,11 +46,10 @@ class PluginProcessService {
 
     final environment = <String, String>{
       'PYTHONHOME': runtimeRoot,
-      'PYTHONPATH': manifest.dependencyPaths
-          .map((relativePath) => p.join(plugin.directory.path, relativePath))
-          .join(';'),
       'MES_PLUGIN_ID': manifest.id,
       'MES_PLUGIN_DIR': plugin.directory.path,
+      'MES_PLUGIN_VENDOR_DIR': p.join(plugin.directory.path, 'vendor'),
+      'MES_PLUGIN_APP_DIR': p.join(plugin.directory.path, 'app'),
       'MES_RUNTIME_DIR': runtimeRoot,
       'MES_HOST_SESSION_ID': DateTime.now().microsecondsSinceEpoch.toString(),
     };

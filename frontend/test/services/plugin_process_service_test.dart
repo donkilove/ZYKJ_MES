@@ -9,7 +9,7 @@ import 'package:mes_client/features/plugin_host/models/plugin_session.dart';
 import 'package:mes_client/features/plugin_host/services/plugin_process_service.dart';
 
 void main() {
-  test('start 会注入 PYTHONPATH 并解析 ready 消息', () async {
+  test('start 会注入插件目录信息并解析 ready 消息', () async {
     final process = _FakeProcess(
       stdoutLines: const [
         '{"event":"ready","pid":456,"entry_url":"http://127.0.0.1:43125/","heartbeat_url":"http://127.0.0.1:43125/__heartbeat__"}',
@@ -52,7 +52,9 @@ void main() {
     );
 
     expect(capturedEnvironment, isNotNull);
-    expect(capturedEnvironment!['PYTHONPATH'], contains('vendor'));
+    expect(capturedEnvironment!['MES_PLUGIN_DIR'], Directory.systemTemp.path);
+    expect(capturedEnvironment!['MES_PLUGIN_VENDOR_DIR'], contains('vendor'));
+    expect(capturedEnvironment!['MES_PLUGIN_APP_DIR'], contains('app'));
     expect(session.entryUrl.toString(), 'http://127.0.0.1:43125/');
     expect(session.pid, 456);
   });
@@ -174,7 +176,7 @@ PluginCatalogItem _buildReadyPluginItem() {
       name: '串口助手',
       version: '0.1.0',
       entryScript: 'launcher.py',
-      pythonVersion: '3.14',
+      pythonVersion: '3.12',
       arch: 'win_amd64',
       dependencyPaths: ['vendor', 'app'],
       permissions: ['serial'],

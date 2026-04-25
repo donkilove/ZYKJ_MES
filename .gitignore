@@ -51,6 +51,36 @@ backend/pyright_errors.txt
 backend/remaining_errors.txt
 
 # ===============================
+# 插件运行时与 vendor 目录：本体纳入版本控制，缓存继续忽略
+# ===============================
+!plugins/
+!plugins/runtime/
+!plugins/runtime/python312/
+!plugins/runtime/python312/**
+!plugins/**/vendor/
+!plugins/**/vendor/**
+plugins/runtime/python312/**/*.log
+plugins/runtime/python312/**/*.tmp
+plugins/runtime/python312/**/*.temp
+plugins/runtime/python312/**/*.bak
+plugins/runtime/python312/**/*.orig
+plugins/runtime/python312/**/.DS_Store
+plugins/runtime/python312/**/Thumbs.db
+plugins/runtime/python312/**/Desktop.ini
+plugins/**/vendor/**/*.log
+plugins/**/vendor/**/*.tmp
+plugins/**/vendor/**/*.temp
+plugins/**/vendor/**/*.bak
+plugins/**/vendor/**/*.orig
+plugins/**/vendor/**/.DS_Store
+plugins/**/vendor/**/Thumbs.db
+plugins/**/vendor/**/Desktop.ini
+plugins/**/__pycache__/
+plugins/**/.pytest_cache/
+plugins/**/.mypy_cache/
+plugins/**/.ruff_cache/
+
+# ===============================
 # Flutter / Dart 前端构建产物
 # ===============================
 frontend/.dart_tool/
