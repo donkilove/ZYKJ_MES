@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     app_env: str = "dev"
     app_host: str = "0.0.0.0"
     app_port: int = 8000
+    public_base_url: str = ""
     api_v1_prefix: str = "/api/v1"
 
     db_host: str = "127.0.0.1"
