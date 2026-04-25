@@ -763,6 +763,140 @@ class FirstArticleSubmitRequestInput {
   }
 }
 
+class FirstArticleReviewSessionResult {
+  const FirstArticleReviewSessionResult({
+    required this.sessionId,
+    required this.reviewUrl,
+    required this.expiresAt,
+    required this.status,
+    required this.firstArticleRecordId,
+    required this.reviewerUserId,
+    required this.reviewedAt,
+    required this.reviewRemark,
+  });
+
+  final int sessionId;
+  final String? reviewUrl;
+  final DateTime expiresAt;
+  final String status;
+  final int? firstArticleRecordId;
+  final int? reviewerUserId;
+  final DateTime? reviewedAt;
+  final String? reviewRemark;
+
+  factory FirstArticleReviewSessionResult.fromJson(Map<String, dynamic> json) {
+    return FirstArticleReviewSessionResult(
+      sessionId: (json['session_id'] as int?) ?? 0,
+      reviewUrl: json['review_url'] as String?,
+      expiresAt: DateTime.parse(json['expires_at'] as String),
+      status: (json['status'] as String?) ?? '',
+      firstArticleRecordId: json['first_article_record_id'] as int?,
+      reviewerUserId: json['reviewer_user_id'] as int?,
+      reviewedAt: _parseDateOrNull(json['reviewed_at']),
+      reviewRemark: json['review_remark'] as String?,
+    );
+  }
+}
+
+class FirstArticleReviewSessionDetail {
+  const FirstArticleReviewSessionDetail({
+    required this.sessionId,
+    required this.status,
+    required this.expiresAt,
+    required this.orderId,
+    required this.orderCode,
+    required this.productName,
+    required this.orderProcessId,
+    required this.processName,
+    required this.operatorUserId,
+    required this.operatorUsername,
+    required this.templateId,
+    required this.checkContent,
+    required this.testValue,
+    required this.participantUserIds,
+    required this.reviewRemark,
+  });
+
+  final int sessionId;
+  final String status;
+  final DateTime expiresAt;
+  final int orderId;
+  final String orderCode;
+  final String productName;
+  final int orderProcessId;
+  final String processName;
+  final int operatorUserId;
+  final String operatorUsername;
+  final int? templateId;
+  final String checkContent;
+  final String testValue;
+  final List<int> participantUserIds;
+  final String? reviewRemark;
+
+  factory FirstArticleReviewSessionDetail.fromJson(Map<String, dynamic> json) {
+    return FirstArticleReviewSessionDetail(
+      sessionId: (json['session_id'] as int?) ?? 0,
+      status: (json['status'] as String?) ?? '',
+      expiresAt: DateTime.parse(json['expires_at'] as String),
+      orderId: (json['order_id'] as int?) ?? 0,
+      orderCode: (json['order_code'] as String?) ?? '',
+      productName: (json['product_name'] as String?) ?? '',
+      orderProcessId: (json['order_process_id'] as int?) ?? 0,
+      processName: (json['process_name'] as String?) ?? '',
+      operatorUserId: (json['operator_user_id'] as int?) ?? 0,
+      operatorUsername: (json['operator_username'] as String?) ?? '',
+      templateId: json['template_id'] as int?,
+      checkContent: (json['check_content'] as String?) ?? '',
+      testValue: (json['test_value'] as String?) ?? '',
+      participantUserIds:
+          (json['participant_user_ids'] as List<dynamic>? ?? const [])
+              .map((entry) => (entry as num).toInt())
+              .toList(),
+      reviewRemark: json['review_remark'] as String?,
+    );
+  }
+}
+
+class FirstArticleReviewSessionRefreshInput {
+  const FirstArticleReviewSessionRefreshInput({
+    required this.checkContent,
+    required this.testValue,
+    required this.participantUserIds,
+  });
+
+  final String checkContent;
+  final String testValue;
+  final List<int> participantUserIds;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'check_content': checkContent,
+      'test_value': testValue,
+      'participant_user_ids': participantUserIds,
+    };
+  }
+}
+
+class FirstArticleReviewSubmitInput {
+  const FirstArticleReviewSubmitInput({
+    required this.token,
+    required this.reviewResult,
+    this.reviewRemark,
+  });
+
+  final String token;
+  final String reviewResult;
+  final String? reviewRemark;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'token': token,
+      'review_result': reviewResult,
+      'review_remark': reviewRemark,
+    };
+  }
+}
+
 class OrderPipelineModeItem {
   OrderPipelineModeItem({
     required this.orderId,
