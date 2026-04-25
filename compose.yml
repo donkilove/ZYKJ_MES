@@ -50,6 +50,8 @@ services:
       dockerfile: Dockerfile
     image: zykj-mes-backend:local
     restart: unless-stopped
+    env_file:
+      - backend/.env
     depends_on:
       postgres:
         condition: service_healthy
@@ -83,6 +85,7 @@ services:
       SESSION_TOUCH_MIN_INTERVAL_SECONDS: ${SESSION_TOUCH_MIN_INTERVAL_SECONDS:-30}
       GUNICORN_MAX_REQUESTS: ${GUNICORN_MAX_REQUESTS:-0}
       GUNICORN_MAX_REQUESTS_JITTER: ${GUNICORN_MAX_REQUESTS_JITTER:-0}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD}
       PRODUCTION_DEFAULT_VERIFICATION_CODE: ${PRODUCTION_DEFAULT_VERIFICATION_CODE}
@@ -121,6 +124,8 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    env_file:
+      - backend/.env
     depends_on:
       postgres:
         condition: service_healthy
@@ -151,6 +156,7 @@ services:
       DB_POOL_TIMEOUT_SECONDS: ${WORKER_DB_POOL_TIMEOUT_SECONDS:-5}
       DB_POOL_RECYCLE_SECONDS: ${WORKER_DB_POOL_RECYCLE_SECONDS:-1800}
       SESSION_TOUCH_MIN_INTERVAL_SECONDS: ${SESSION_TOUCH_MIN_INTERVAL_SECONDS:-30}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD}
       PRODUCTION_DEFAULT_VERIFICATION_CODE: ${PRODUCTION_DEFAULT_VERIFICATION_CODE}

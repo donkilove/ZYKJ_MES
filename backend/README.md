@@ -59,6 +59,8 @@ cd backend
 - 根目录 `compose.yml` 提供 `postgres`、`redis`、`backend-web`、`backend-worker` 四个服务。
 - `backend-web` 固定走 `gunicorn + uvicorn worker`，默认 `WEB_CONCURRENCY=4`，并显式禁用 reload。
 - `backend-worker` 仅运行独立 worker 入口，不承载 Web 请求。
+- `backend-web` 与 `backend-worker` 默认通过 `env_file: backend/.env` 读取运行参数；Docker 场景下对外扫码地址也应在这里配置。
+- 另外，根目录本地 `.env` 会通过 Compose 显式透传 `PUBLIC_BASE_URL`、`BOOTSTRAP_ADMIN_PASSWORD`、`PRODUCTION_DEFAULT_VERIFICATION_CODE` 等宿主机部署参数；这类值建议放在根 `.env`，避免写死进跟踪文件。
 
 ### 1. 启动
 
@@ -92,6 +94,9 @@ curl http://127.0.0.1:8000/health
   - `backend-web`: `WEB_RUN_BOOTSTRAP=false`、`WEB_RUN_BACKGROUND_LOOPS=false`
   - `backend-worker`: `WORKER_RUN_BOOTSTRAP=true`、`WORKER_RUN_BACKGROUND_LOOPS=true`
   - 后台循环细分仍由 `MAINTENANCE_AUTO_GENERATE_ENABLED`、`MESSAGE_DELIVERY_MAINTENANCE_ENABLED` 控制
+- 手机扫码复核对外地址：`PUBLIC_BASE_URL`
+  - Docker 或反向代理场景必须显式设置为手机实际可访问的宿主机地址，例如 `http://192.168.1.54:8000`
+  - 若不设置，系统只能根据当前请求或容器网络自行判断，可能得到 `127.0.0.1` 或 Docker 网段地址
 - 若调整了 PostgreSQL 初始账号/密码，请同步 `DB_BOOTSTRAP_USER` / `DB_BOOTSTRAP_PASSWORD`，并在需要时执行一次 `docker compose down -v` 重新初始化数据卷。
 
 ### 4. 停止与清理
