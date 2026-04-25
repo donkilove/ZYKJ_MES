@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>首件扫码复核</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4f7f5;
+        --panel: #ffffff;
+        --line: #d5ddd7;
+        --text: #123127;
+        --muted: #567066;
+        --accent: #0f8f60;
+        --accent-dark: #0b6f4b;
+        --danger: #b93838;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+        background:
+          radial-gradient(circle at top, rgba(15, 143, 96, 0.12), transparent 28%),
+          linear-gradient(180deg, #eef6f0 0%, var(--bg) 100%);
+        color: var(--text);
+      }
+
+      .shell {
+        width: min(100%, 480px);
+        margin: 0 auto;
+        padding: 24px 16px 40px;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid rgba(18, 49, 39, 0.08);
+        border-radius: 14px;
+        padding: 20px 18px;
+        box-shadow: 0 16px 40px rgba(18, 49, 39, 0.08);
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 24px;
+        line-height: 1.2;
+      }
+
+      .hint {
+        margin: 0 0 18px;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .message {
+        display: none;
+        margin: 0 0 16px;
+        padding: 12px 14px;
+        border-radius: 10px;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .message.show {
+        display: block;
+      }
+
+      .message.error {
+        background: rgba(185, 56, 56, 0.1);
+        color: var(--danger);
+      }
+
+      .message.success {
+        background: rgba(15, 143, 96, 0.12);
+        color: var(--accent-dark);
+      }
+
+      .field {
+        margin-bottom: 14px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+
+      input,
+      textarea,
+      button {
+        font: inherit;
+      }
+
+      input,
+      textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 12px 14px;
+        background: #fff;
+        color: var(--text);
+      }
+
+      textarea {
+        min-height: 96px;
+        resize: vertical;
+      }
+
+      .actions {
+        display: flex;
+        gap: 10px;
+      }
+
+      .actions button {
+        flex: 1;
+      }
+
+      button {
+        border: 0;
+        border-radius: 10px;
+        padding: 12px 14px;
+        background: var(--accent);
+        color: #fff;
+        font-weight: 700;
+      }
+
+      button.secondary {
+        background: #e7f2ec;
+        color: var(--accent-dark);
+      }
+
+      button:disabled {
+        opacity: 0.6;
+      }
+
+      .detail-list {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 18px;
+      }
+
+      .detail-item {
+        border: 1px solid rgba(18, 49, 39, 0.08);
+        border-radius: 10px;
+        padding: 12px 14px;
+        background: #fbfdfb;
+      }
+
+      .detail-item span {
+        display: block;
+        margin-bottom: 4px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .segment {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+
+      .segment label {
+        margin: 0;
+      }
+
+      .segment input {
+        display: none;
+      }
+
+      .segment span {
+        display: block;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 12px 10px;
+        text-align: center;
+        font-weight: 700;
+        color: var(--muted);
+        background: #fff;
+      }
+
+      .segment input:checked + span {
+        border-color: rgba(15, 143, 96, 0.4);
+        background: rgba(15, 143, 96, 0.1);
+        color: var(--accent-dark);
+      }
+
+      .hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel">
+        <h1>首件扫码复核</h1>
+        <p class="hint">登录后核对参数与检验值，确认无误后提交合格或不合格结果。</p>
+
+        <div id="message" class="message" role="status"></div>
+
+        <form id="login-form">
+          <div class="field">
+            <label for="username">账号</label>
+            <input id="username" name="username" autocomplete="username" required>
+          </div>
+          <div class="field">
+            <label for="password">密码</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" required>
+          </div>
+          <button id="login-button" type="submit">登录</button>
+        </form>
+
+        <section id="review-panel" class="hidden">
+          <div class="detail-list">
+            <div class="detail-item"><span>订单</span><strong id="order-code">-</strong></div>
+            <div class="detail-item"><span>产品</span><strong id="product-name">-</strong></div>
+            <div class="detail-item"><span>工序</span><strong id="process-name">-</strong></div>
+            <div class="detail-item"><span>操作员</span><strong id="operator-name">-</strong></div>
+            <div class="detail-item"><span>检验内容</span><strong id="check-content">-</strong></div>
+            <div class="detail-item"><span>检验值</span><strong id="test-value">-</strong></div>
+          </div>
+
+          <div class="segment" role="radiogroup" aria-label="复核结果">
+            <label>
+              <input type="radio" name="review-result" value="passed" checked>
+              <span>合格</span>
+            </label>
+            <label>
+              <input type="radio" name="review-result" value="failed">
+              <span>不合格</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label for="remark">备注</label>
+            <textarea id="remark" name="remark" placeholder="可选"></textarea>
+          </div>
+
+          <div class="actions">
+            <button id="reload-button" class="secondary" type="button">重新加载</button>
+            <button id="submit-button" type="button">提交复核</button>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script>
+      const token = new URLSearchParams(window.location.search).get("token") || "";
+      const messageNode = document.getElementById("message");
+      const loginForm = document.getElementById("login-form");
+      const loginButton = document.getElementById("login-button");
+      const reviewPanel = document.getElementById("review-panel");
+      const reloadButton = document.getElementById("reload-button");
+      const submitButton = document.getElementById("submit-button");
+      const remarkInput = document.getElementById("remark");
+      let accessToken = "";
+      let submitted = false;
+
+      function setMessage(text, type) {
+        messageNode.textContent = text || "";
+        messageNode.className = "message";
+        if (text) {
+          messageNode.classList.add("show", type || "error");
+        }
+      }
+
+      function setBusy(busy) {
+        loginButton.disabled = busy;
+        reloadButton.disabled = busy || !accessToken;
+        submitButton.disabled = busy || !accessToken || submitted;
+      }
+
+      function showReviewPanel(show) {
+        reviewPanel.classList.toggle("hidden", !show);
+        loginForm.classList.toggle("hidden", show);
+      }
+
+      async function requestJson(url, options) {
+        const init = Object.assign({ method: "GET" }, options || {});
+        const headers = Object.assign({}, init.headers || {});
+        if (accessToken) {
+          headers.Authorization = `Bearer ${accessToken}`;
+        }
+        init.headers = headers;
+
+        const response = await fetch(url, init);
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) {
+          const detail =
+            (payload && payload.detail) ||
+            (payload && payload.message) ||
+            "请求失败";
+          throw new Error(detail);
+        }
+        return payload && Object.prototype.hasOwnProperty.call(payload, "data")
+          ? payload.data
+          : payload;
+      }
+
+      async function loadDetail() {
+        if (!token) {
+          setMessage("扫码链接缺少复核令牌", "error");
+          return;
+        }
+        setBusy(true);
+        try {
+          const detail = await requestJson(
+            `/api/v1/production/first-article/review-sessions/detail?token=${encodeURIComponent(token)}`
+          );
+          document.getElementById("order-code").textContent = detail.order_code || "-";
+          document.getElementById("product-name").textContent = detail.product_name || "-";
+          document.getElementById("process-name").textContent = detail.process_name || "-";
+          document.getElementById("operator-name").textContent = detail.operator_username || "-";
+          document.getElementById("check-content").textContent = detail.check_content || "-";
+          document.getElementById("test-value").textContent = detail.test_value || "-";
+          setMessage("", "success");
+          showReviewPanel(true);
+        } catch (error) {
+          setMessage(error.message || "加载复核信息失败", "error");
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      loginForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (!token) {
+          setMessage("扫码链接缺少复核令牌", "error");
+          return;
+        }
+        setBusy(true);
+        setMessage("", "success");
+        const body = new URLSearchParams();
+        body.set("username", document.getElementById("username").value.trim());
+        body.set("password", document.getElementById("password").value);
+        try {
+          const result = await requestJson("/api/v1/auth/login", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body,
+          });
+          if (result.must_change_password) {
+            throw new Error("请先在主系统修改密码后再复核");
+          }
+          accessToken = result.access_token || "";
+          await loadDetail();
+        } catch (error) {
+          accessToken = "";
+          setMessage(error.message || "登录失败", "error");
+          setBusy(false);
+        }
+      });
+
+      reloadButton.addEventListener("click", () => {
+        if (!accessToken) {
+          return;
+        }
+        loadDetail();
+      });
+
+      submitButton.addEventListener("click", async () => {
+        if (!accessToken || submitted) {
+          return;
+        }
+        setBusy(true);
+        setMessage("", "success");
+        const selected = document.querySelector('input[name="review-result"]:checked');
+        try {
+          await requestJson("/api/v1/production/first-article/review-sessions/submit", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              token,
+              review_result: selected ? selected.value : "passed",
+              review_remark: remarkInput.value.trim() || null,
+            }),
+          });
+          submitted = true;
+          setMessage("复核已提交", "success");
+          setBusy(false);
+        } catch (error) {
+          setMessage(error.message || "提交复核失败", "error");
+          setBusy(false);
+        }
+      });
+
+      if (!token) {
+        setMessage("扫码链接缺少复核令牌", "error");
+      }
+    </script>
+  </body>
+</html>

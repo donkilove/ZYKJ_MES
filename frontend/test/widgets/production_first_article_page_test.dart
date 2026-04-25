@@ -201,13 +201,18 @@ MyOrderItem _buildOrder() {
 void main() {
   testWidgets('独立首件录入页发起扫码复核并显示等待状态', (tester) async {
     final service = _FakeProductionFirstArticleService();
+    const expectedReviewUrl =
+        'http://192.168.1.20:8000/first-article-review?token=abc';
     await tester.binding.setSurfaceSize(const Size(1200, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(
       MaterialApp(
         home: ProductionFirstArticlePage(
-          session: AppSession(baseUrl: '', accessToken: ''),
+          session: AppSession(
+            baseUrl: 'http://192.168.1.20:8000/api/v1',
+            accessToken: '',
+          ),
           onLogout: () {},
           order: _buildOrder(),
           service: service,
@@ -257,7 +262,7 @@ void main() {
     expect(find.text('等待质检扫码复核'), findsOneWidget);
     expect(find.byType(QrImageView), findsOneWidget);
     expect(find.text('刷新二维码'), findsOneWidget);
-    expect(find.text('/first-article-review?token=abc'), findsOneWidget);
+    expect(find.text(expectedReviewUrl), findsOneWidget);
     expect(service.lastReviewDraft, isNotNull);
     expect(service.lastReviewDraft?.templateId, 7);
     expect(service.lastReviewDraft?.checkContent, '模板检验内容');
@@ -265,6 +270,12 @@ void main() {
     expect(service.lastReviewDraft?.participantUserIds, [8, 9]);
     expect(service.lastReviewDraft?.pipelineInstanceId, 501);
     expect(service.lastReviewDraft?.assistAuthorizationId, 99);
+
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pump();
+
+    expect(find.byType(QrImageView), findsOneWidget);
+    expect(find.text(expectedReviewUrl), findsOneWidget);
 
     service.statusResult = FirstArticleReviewSessionResult(
       sessionId: 88,

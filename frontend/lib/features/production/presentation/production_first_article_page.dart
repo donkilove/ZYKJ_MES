@@ -17,12 +17,14 @@ class ProductionFirstArticlePage extends StatefulWidget {
     required this.onLogout,
     required this.order,
     this.service,
+    this.baseUri,
   });
 
   final AppSession session;
   final VoidCallback onLogout;
   final MyOrderItem order;
   final ProductionService? service;
+  final Uri? baseUri;
 
   @override
   State<ProductionFirstArticlePage> createState() =>
@@ -81,6 +83,48 @@ class _ProductionFirstArticlePageState
     final hh = local.hour.toString().padLeft(2, '0');
     final min = local.minute.toString().padLeft(2, '0');
     return '${local.year}-$mm-$dd $hh:$min';
+  }
+
+  String _scanReviewUrl(String? reviewUrl) {
+    final raw = (reviewUrl ?? '').trim();
+    if (raw.isEmpty) {
+      return '';
+    }
+    final parsed = Uri.tryParse(raw);
+    if (parsed != null && parsed.hasScheme) {
+      return raw;
+    }
+    final candidates = <Uri?>[
+      widget.baseUri,
+      Uri.tryParse(widget.session.baseUrl),
+      Uri.base,
+    ];
+    for (final base in candidates) {
+      if (base == null) {
+        continue;
+      }
+      if ((base.scheme == 'http' || base.scheme == 'https') &&
+          base.host.isNotEmpty) {
+        return base.resolve(raw).toString();
+      }
+    }
+    return raw;
+  }
+
+  FirstArticleReviewSessionResult _retainReviewUrl(
+    FirstArticleReviewSessionResult previous,
+    FirstArticleReviewSessionResult next,
+  ) {
+    return FirstArticleReviewSessionResult(
+      sessionId: next.sessionId,
+      reviewUrl: next.reviewUrl ?? previous.reviewUrl,
+      expiresAt: next.expiresAt,
+      status: next.status,
+      firstArticleRecordId: next.firstArticleRecordId,
+      reviewerUserId: next.reviewerUserId,
+      reviewedAt: next.reviewedAt,
+      reviewRemark: next.reviewRemark,
+    );
   }
 
   Future<void> _loadInitialData() async {
@@ -463,19 +507,20 @@ class _ProductionFirstArticlePageState
       if (!mounted) {
         return;
       }
-      if (result.status == 'approved') {
+      final retained = _retainReviewUrl(session, result);
+      if (retained.status == 'approved') {
         _stopReviewPolling();
         if (Navigator.of(context).canPop()) {
           Navigator.of(context).pop(true);
           return;
         }
         setState(() {
-          _reviewSession = result;
+          _reviewSession = retained;
           _message = '首件扫码复核已通过';
         });
         return;
       }
-      if (result.status == 'rejected') {
+      if (retained.status == 'rejected') {
         _stopReviewPolling();
         setState(() {
           _reviewSession = null;
@@ -483,18 +528,18 @@ class _ProductionFirstArticlePageState
         });
         return;
       }
-      if (result.status == 'expired' || result.status == 'cancelled') {
+      if (retained.status == 'expired' || retained.status == 'cancelled') {
         _stopReviewPolling();
         setState(() {
           _reviewSession = result;
-          _message = result.status == 'expired'
+          _message = retained.status == 'expired'
               ? '二维码已失效，请点击刷新二维码'
               : '复核会话已取消，请刷新二维码';
         });
         return;
       }
       setState(() {
-        _reviewSession = result;
+        _reviewSession = retained;
       });
     } catch (error) {
       if (!mounted) {
@@ -529,7 +574,7 @@ class _ProductionFirstArticlePageState
     if (session == null) {
       return const SizedBox.shrink();
     }
-    final reviewUrl = session.reviewUrl ?? '';
+    final reviewUrl = _scanReviewUrl(session.reviewUrl);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),

@@ -12,13 +12,18 @@ void main() {
 
   testWidgets('操作员发起扫码复核后轮询到质检通过', (tester) async {
     final service = _ScanReviewFakeProductionService();
+    const expectedReviewUrl =
+        'http://192.168.1.20:8000/first-article-review?token=abc';
     await tester.binding.setSurfaceSize(const Size(1000, 1200));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(
       MaterialApp(
         home: ProductionFirstArticlePage(
-          session: AppSession(baseUrl: '', accessToken: ''),
+          session: AppSession(
+            baseUrl: 'http://192.168.1.20:8000/api/v1',
+            accessToken: '',
+          ),
           onLogout: () {},
           order: _buildOrder(),
           service: service,
@@ -34,6 +39,7 @@ void main() {
     await tester.pump();
 
     expect(find.byType(QrImageView), findsOneWidget);
+    expect(find.text(expectedReviewUrl), findsOneWidget);
     service.approveLatestSession();
     await tester.pump(const Duration(seconds: 4));
     await tester.pump();

@@ -10,6 +10,7 @@ from app.bootstrap import run_startup_bootstrap
 from app.core.config import ensure_runtime_settings_secure, settings
 from app.services.maintenance_scheduler_service import run_maintenance_auto_generate_loop
 from app.services.message_service import run_message_delivery_maintenance_loop
+from app.web import first_article_review_router
 
 
 @asynccontextmanager
@@ -58,4 +59,5 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+app.include_router(first_article_review_router)
 app.include_router(api_router, prefix=settings.api_v1_prefix)

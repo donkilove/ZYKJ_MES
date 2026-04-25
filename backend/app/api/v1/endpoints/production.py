@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, load_only, selectinload
 
@@ -168,6 +168,7 @@ from app.services.production_order_service import (
     update_order_pipeline_mode,
     update_order,
 )
+from app.web import build_first_article_review_url
 from app.services.production_event_log_service import search_order_event_logs_by_code
 from app.services.production_data_query_service import (
     build_manual_filters,
@@ -953,6 +954,7 @@ def submit_first_article_api(
     status_code=status.HTTP_201_CREATED,
 )
 def create_first_article_review_session_api(
+    request: Request,
     order_id: int,
     payload: FirstArticleReviewSessionCreateRequest,
     db: Session = Depends(get_db),
@@ -975,7 +977,10 @@ def create_first_article_review_session_api(
         db.rollback()
         _raise_service_error(error)
     return success_response(
-        _to_first_article_review_session_result(result),
+        _to_first_article_review_session_result(
+            result,
+            review_url=build_first_article_review_url(request, result.review_url),
+        ),
         message="created",
     )
 
@@ -1007,6 +1012,7 @@ def get_first_article_review_session_status_api(
     response_model=ApiResponse[FirstArticleReviewSessionResult],
 )
 def refresh_first_article_review_session_api(
+    request: Request,
     order_id: int,
     session_id: int,
     payload: FirstArticleReviewSessionRefreshRequest,
@@ -1026,7 +1032,10 @@ def refresh_first_article_review_session_api(
         db.rollback()
         _raise_service_error(error)
     return success_response(
-        _to_first_article_review_session_result(result),
+        _to_first_article_review_session_result(
+            result,
+            review_url=build_first_article_review_url(request, result.review_url),
+        ),
         message="refreshed",
     )
 
@@ -1828,10 +1837,11 @@ def _to_pipeline_instance_item(row: object) -> PipelineInstanceItem:
 
 def _to_first_article_review_session_result(
     result: object,
+    review_url: str | None = None,
 ) -> FirstArticleReviewSessionResult:
     return FirstArticleReviewSessionResult(
         session_id=result.session_id,
-        review_url=result.review_url,
+        review_url=result.review_url if review_url is None else review_url,
         expires_at=result.expires_at,
         status=result.status,
         first_article_record_id=result.first_article_record_id,

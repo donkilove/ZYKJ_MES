@@ -104,7 +104,15 @@ class FirstArticleScanReviewApiTest(unittest.TestCase):
             db.close()
 
     def _login(self, username: str, password: str = "Admin@123456") -> str:
-        response = self.client.post(
+        return self._login_with_client(self.client, username, password)
+
+    def _login_with_client(
+        self,
+        client: TestClient,
+        username: str,
+        password: str = "Admin@123456",
+    ) -> str:
+        response = client.post(
             "/api/v1/auth/login",
             data={"username": username, "password": password},
         )
@@ -351,6 +359,35 @@ class FirstArticleScanReviewApiTest(unittest.TestCase):
             self.assertEqual(record.test_value, "长度 10.01")
         finally:
             db.close()
+
+    def test_scan_review_returns_backend_absolute_url_and_page_is_served(self) -> None:
+        context = self._create_context("PAGE")
+
+        with TestClient(app, base_url="http://192.168.10.5:8000") as client:
+            token = self._login_with_client(client, "admin")
+            create_response = client.post(
+                f"/api/v1/production/orders/{context['order_id']}/first-article/review-sessions",
+                headers={"Authorization": f"Bearer {token}"},
+                json={
+                    "order_process_id": context["order_process_id"],
+                    "template_id": context["template_id"],
+                    "check_content": "外观无划伤",
+                    "test_value": "长度 10.01",
+                    "participant_user_ids": [],
+                },
+            )
+
+            self.assertEqual(create_response.status_code, 201, create_response.text)
+            review_url = create_response.json()["data"]["review_url"]
+            self.assertEqual(
+                review_url.split("?token=")[0],
+                "http://192.168.10.5:8000/first-article-review",
+            )
+
+            page_response = client.get(review_url)
+            self.assertEqual(page_response.status_code, 200, page_response.text)
+            self.assertIn("首件扫码复核", page_response.text)
+            self.assertIn("/api/v1/auth/login", page_response.text)
 
     def test_scan_review_rejects_and_refresh_invalidates_old_token(self) -> None:
         context = self._create_context("FAIL")
