@@ -25,6 +25,7 @@ class _PluginHostWorkspaceState extends State<PluginHostWorkspace> {
   Widget build(BuildContext context) {
     final controller = widget.controller;
     final viewState = controller.viewState;
+    final isFullscreen = controller.isFullscreenActive;
     if (viewState.phase == PluginHostPhase.starting) {
       _clearCachedWebview();
       return _PluginHostStatusPanel(
@@ -77,46 +78,65 @@ class _PluginHostWorkspaceState extends State<PluginHostWorkspace> {
     if (activeSession != null) {
       final content = _resolveWebview(activeSession);
       final workspaceBackground = Theme.of(context).scaffoldBackgroundColor;
+      final toolbar = Padding(
+        padding: EdgeInsets.fromLTRB(
+          isFullscreen ? 12 : 16,
+          12,
+          isFullscreen ? 12 : 16,
+          12,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                activeSession.pluginId,
+                style: Theme.of(context).textTheme.titleMedium,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                controller.restartPlugin(activeSession.pluginId);
+              },
+              child: const Text('重启插件'),
+            ),
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: controller.toggleFullscreen,
+              child: Text(isFullscreen ? '退出全屏' : '全屏'),
+            ),
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: () {
+                controller.closePlugin(activeSession.pluginId);
+              },
+              child: const Text('关闭插件'),
+            ),
+          ],
+        ),
+      );
+      final contentPane = ColoredBox(
+        color: workspaceBackground,
+        child: RepaintBoundary(child: content),
+      );
+      if (isFullscreen) {
+        return Column(
+          children: [
+            toolbar,
+            const Divider(height: 1),
+            Expanded(child: contentPane),
+          ],
+        );
+      }
       return Padding(
         padding: const EdgeInsets.all(16),
         child: Card(
           clipBehavior: Clip.antiAlias,
           child: Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        activeSession.pluginId,
-                        style: Theme.of(context).textTheme.titleMedium,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        controller.restartPlugin(activeSession.pluginId);
-                      },
-                      child: const Text('重启插件'),
-                    ),
-                    const SizedBox(width: 8),
-                    TextButton(
-                      onPressed: () {
-                        controller.closePlugin(activeSession.pluginId);
-                      },
-                      child: const Text('关闭插件'),
-                    ),
-                  ],
-                ),
-              ),
+              toolbar,
               const Divider(height: 1),
-              Expanded(
-                child: ColoredBox(
-                  color: workspaceBackground,
-                  child: RepaintBoundary(child: content),
-                ),
-              ),
+              Expanded(child: contentPane),
             ],
           ),
         ),

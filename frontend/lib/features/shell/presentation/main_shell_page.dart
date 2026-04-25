@@ -16,6 +16,7 @@ import 'package:mes_client/features/settings/models/software_settings_models.dar
 import 'package:mes_client/features/settings/presentation/software_settings_controller.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_controller.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_page_registry.dart';
+import 'package:mes_client/features/shell/presentation/main_shell_state.dart';
 import 'package:mes_client/features/shell/presentation/widgets/main_shell_scaffold.dart';
 import 'package:mes_client/features/shell/services/home_dashboard_service.dart';
 import 'package:mes_client/features/time_sync/presentation/time_sync_controller.dart';
@@ -98,7 +99,8 @@ class _MainShellPageState extends State<MainShellPage>
         widget.pluginHostController ??
         PluginHostController(
           catalogService: PluginCatalogService(
-            pluginRootResolver: () async => pluginRuntimeLocator.resolvePluginRoot(),
+            pluginRootResolver: () async =>
+                pluginRuntimeLocator.resolvePluginRoot(),
           ),
           processService: PluginProcessService(),
           runtimeLocator: pluginRuntimeLocator,
@@ -223,6 +225,7 @@ class _MainShellPageState extends State<MainShellPage>
     return AnimatedBuilder(
       animation: Listenable.merge([
         _controller,
+        _pluginHostController,
         widget.softwareSettingsController,
         widget.timeSyncController,
       ]),
@@ -247,6 +250,9 @@ class _MainShellPageState extends State<MainShellPage>
         final sidebarCollapsed =
             widget.softwareSettingsController.settings.sidebarPreference ==
             AppSidebarPreference.collapsed;
+        final hideShellChrome =
+            state.activeUtilityCode == pluginHostUtilityCode &&
+            _pluginHostController.isFullscreenActive;
 
         return MainShellScaffold(
           state: state,
@@ -262,6 +268,7 @@ class _MainShellPageState extends State<MainShellPage>
           onRetry: () {
             unawaited(_handleRetry());
           },
+          hideShellChrome: hideShellChrome,
           showNoAccessPage: showNoAccessPage,
           showErrorPage: showErrorPage,
         );

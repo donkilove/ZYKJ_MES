@@ -14,6 +14,7 @@ class MainShellScaffold extends StatelessWidget {
     required this.sidebarCollapsed,
     required this.onLogout,
     required this.onRetry,
+    required this.hideShellChrome,
     required this.showNoAccessPage,
     required this.showErrorPage,
   });
@@ -27,6 +28,7 @@ class MainShellScaffold extends StatelessWidget {
   final bool sidebarCollapsed;
   final VoidCallback onLogout;
   final VoidCallback onRetry;
+  final bool hideShellChrome;
   final bool showNoAccessPage;
   final bool showErrorPage;
 
@@ -50,6 +52,17 @@ class MainShellScaffold extends StatelessWidget {
     final isSoftwareSettingsActive =
         state.activeUtilityCode == softwareSettingsUtilityCode;
     final hasActiveUtility = state.activeUtilityCode != null;
+
+    if (hideShellChrome) {
+      return Scaffold(
+        body: SafeArea(
+          child: Container(
+            key: ValueKey('main-shell-content-$contentPageCode'),
+            child: content,
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       body: Row(

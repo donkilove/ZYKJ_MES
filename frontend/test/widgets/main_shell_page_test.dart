@@ -10,6 +10,7 @@ import 'package:mes_client/features/message/presentation/message_center_page.dar
 import 'package:mes_client/core/services/effective_clock.dart';
 import 'package:mes_client/core/models/page_catalog_models.dart';
 import 'package:mes_client/features/plugin_host/models/plugin_catalog_item.dart';
+import 'package:mes_client/features/plugin_host/models/plugin_host_view_state.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_page.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/auth/services/auth_service.dart';
@@ -539,8 +540,14 @@ class _FakeServerTimeService extends ServerTimeService {
     return ServerTimeSnapshot(
       serverUtc: DateTime.utc(2026, 4, 20, 2, 0, 0),
       serverTimezoneOffsetMinutes: 480,
-      sampledAtEpochMs:
-          DateTime.utc(2026, 4, 20, 2, 0, 0).millisecondsSinceEpoch,
+      sampledAtEpochMs: DateTime.utc(
+        2026,
+        4,
+        20,
+        2,
+        0,
+        0,
+      ).millisecondsSinceEpoch,
     );
   }
 }
@@ -580,10 +587,7 @@ void main() {
           'user': ['account_settings'],
           'production': ['production_order_query'],
         },
-        moduleItems: [
-          _buildModuleItem('user'),
-          _buildModuleItem('production'),
-        ],
+        moduleItems: [_buildModuleItem('user'), _buildModuleItem('production')],
       ),
       catalog: _buildCatalog(),
       tabCodesByParent: const {
@@ -622,14 +626,16 @@ void main() {
 
     await pumpUserPage(selectedPageCode: 'user');
     expect(
-      tester.widget<AccountSettingsPage>(find.byType(AccountSettingsPage))
+      tester
+          .widget<AccountSettingsPage>(find.byType(AccountSettingsPage))
           .pollingEnabled,
       isTrue,
     );
 
     await pumpUserPage(selectedPageCode: 'production');
     expect(
-      tester.widget<AccountSettingsPage>(find.byType(AccountSettingsPage))
+      tester
+          .widget<AccountSettingsPage>(find.byType(AccountSettingsPage))
           .pollingEnabled,
       isFalse,
     );
@@ -646,10 +652,7 @@ void main() {
           'user': ['account_settings'],
           'production': ['production_order_query'],
         },
-        moduleItems: [
-          _buildModuleItem('user'),
-          _buildModuleItem('production'),
-        ],
+        moduleItems: [_buildModuleItem('user'), _buildModuleItem('production')],
       ),
       catalog: _buildCatalog(),
       tabCodesByParent: const {
@@ -689,7 +692,9 @@ void main() {
     await pumpProductionPage(selectedPageCode: 'production');
     expect(
       tester
-          .widget<ProductionOrderQueryPage>(find.byType(ProductionOrderQueryPage))
+          .widget<ProductionOrderQueryPage>(
+            find.byType(ProductionOrderQueryPage),
+          )
           .pollingEnabled,
       isTrue,
     );
@@ -697,11 +702,13 @@ void main() {
     await pumpProductionPage(selectedPageCode: 'user');
     expect(
       tester
-          .widget<ProductionOrderQueryPage>(find.byType(ProductionOrderQueryPage))
+          .widget<ProductionOrderQueryPage>(
+            find.byType(ProductionOrderQueryPage),
+          )
           .pollingEnabled,
       isFalse,
-      );
-    });
+    );
+  });
 
   testWidgets('主壳会把消息模块活跃态真实传到消息中心页面', (tester) async {
     final registry = MainShellPageRegistry();
@@ -720,10 +727,7 @@ void main() {
           'user': ['account_settings'],
           'message': ['message_center'],
         },
-        moduleItems: [
-          _buildModuleItem('user'),
-          _buildModuleItem('message'),
-        ],
+        moduleItems: [_buildModuleItem('user'), _buildModuleItem('message')],
       ),
       catalog: _buildCatalog(),
       tabCodesByParent: const {
@@ -753,7 +757,9 @@ void main() {
                 onVisibilityConfigSaved: () {},
                 messageService: _TestShellMessageService(),
                 softwareSettingsController: settingsController,
-                timeSyncController: _buildTimeSyncController(settingsController),
+                timeSyncController: _buildTimeSyncController(
+                  settingsController,
+                ),
               ),
             ),
           ),
@@ -764,14 +770,16 @@ void main() {
 
     await pumpMessagePage(selectedPageCode: 'message');
     expect(
-      tester.widget<MessageCenterPage>(find.byType(MessageCenterPage))
+      tester
+          .widget<MessageCenterPage>(find.byType(MessageCenterPage))
           .pollingEnabled,
       isTrue,
     );
 
     await pumpMessagePage(selectedPageCode: 'user');
     expect(
-      tester.widget<MessageCenterPage>(find.byType(MessageCenterPage))
+      tester
+          .widget<MessageCenterPage>(find.byType(MessageCenterPage))
           .pollingEnabled,
       isFalse,
     );
@@ -1568,9 +1576,14 @@ void main() {
       onLogout: () {},
     );
 
-    expect(find.byKey(const ValueKey('main-shell-entry-plugin-host')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('main-shell-entry-plugin-host')),
+      findsOneWidget,
+    );
 
-    await tester.tap(find.byKey(const ValueKey('main-shell-entry-plugin-host')));
+    await tester.tap(
+      find.byKey(const ValueKey('main-shell-entry-plugin-host')),
+    );
     await tester.pumpAndSettle();
 
     expect(
@@ -1578,6 +1591,57 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('插件中心'), findsWidgets);
+  });
+
+  testWidgets('插件中心进入全屏时主壳会隐藏左侧导航并在退出后恢复', (tester) async {
+    final pluginHostController = PluginHostController(
+      catalogService: _StubPluginCatalogService(),
+      processService: _StubPluginProcessService(),
+      runtimeLocator: _StubPluginRuntimeLocator(),
+    );
+    pluginHostController.debugSetViewState(
+      const PluginHostViewState(
+        phase: PluginHostPhase.running,
+        focusedPluginId: 'serial_assistant',
+        statusTitle: '串口助手运行中',
+        statusMessage: '插件页面已就绪。',
+      ),
+    );
+
+    await _pumpMainShellPage(
+      tester,
+      authService: _TestShellAuthService(),
+      authzService: _TestShellAuthzService(),
+      pageCatalogService: _TestShellPageCatalogService(),
+      messageService: _TestShellMessageService(),
+      pluginHostController: pluginHostController,
+      onLogout: () {},
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey('main-shell-entry-plugin-host')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('main-shell-menu-user')), findsOneWidget);
+
+    pluginHostController.enterFullscreen();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('main-shell-menu-user')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('main-shell-entry-plugin-host')),
+      findsNothing,
+    );
+
+    pluginHostController.exitFullscreen();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('main-shell-menu-user')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('main-shell-entry-plugin-host')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('权限快照加载失败时显示错误态', (tester) async {

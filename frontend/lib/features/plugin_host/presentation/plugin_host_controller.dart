@@ -24,15 +24,18 @@ class PluginHostController extends ChangeNotifier {
   String? _selectedPluginId;
   final Map<String, PluginSession> _sessions = <String, PluginSession>{};
   PluginHostViewState _viewState = const PluginHostViewState();
+  bool _fullscreen = false;
   int _openSequence = 0;
 
   List<PluginCatalogItem> get plugins => _plugins;
   bool get loading => _loading;
   String? get selectedPluginId => _selectedPluginId;
   PluginHostViewState get viewState => _viewState;
-  PluginSession? get activeSession => _selectedPluginId == null
-      ? null
-      : _sessions[_selectedPluginId];
+  bool get isFullscreen => _fullscreen;
+  bool get isFullscreenActive =>
+      _fullscreen && _viewState.focusedPluginId != null;
+  PluginSession? get activeSession =>
+      _selectedPluginId == null ? null : _sessions[_selectedPluginId];
 
   PluginCatalogItem? get selectedPlugin {
     for (final plugin in _plugins) {
@@ -79,7 +82,26 @@ class PluginHostController extends ChangeNotifier {
   void debugSetViewState(PluginHostViewState state) {
     _viewState = state;
     _selectedPluginId = state.focusedPluginId;
+    if (state.focusedPluginId == null) {
+      _fullscreen = false;
+    }
     notifyListeners();
+  }
+
+  void enterFullscreen() {
+    _setFullscreen(true);
+  }
+
+  void exitFullscreen() {
+    _setFullscreen(false);
+  }
+
+  void toggleFullscreen() {
+    _setFullscreen(!_fullscreen);
+  }
+
+  void debugSetFullscreen(bool value) {
+    _setFullscreen(value);
   }
 
   Future<void> openPlugin(String pluginId) async {
@@ -160,6 +182,7 @@ class PluginHostController extends ChangeNotifier {
     if (_selectedPluginId == pluginId) {
       _selectedPluginId = null;
       _viewState = const PluginHostViewState();
+      _fullscreen = false;
     }
     notifyListeners();
   }
@@ -175,7 +198,9 @@ class PluginHostController extends ChangeNotifier {
   }
 
   String _displayNameFor(String pluginId) {
-    final plugin = _plugins.where((item) => item.manifest?.id == pluginId).firstOrNull;
+    final plugin = _plugins
+        .where((item) => item.manifest?.id == pluginId)
+        .firstOrNull;
     return plugin?.manifest?.name ?? pluginId;
   }
 
@@ -194,7 +219,9 @@ class PluginHostController extends ChangeNotifier {
   }
 
   _PluginLaunchContext? _prepareLaunchContext(String pluginId) {
-    final plugin = _plugins.where((item) => item.manifest?.id == pluginId).firstOrNull;
+    final plugin = _plugins
+        .where((item) => item.manifest?.id == pluginId)
+        .firstOrNull;
     if (plugin == null || plugin.manifest == null) {
       _failToOpenPlugin(
         pluginId: pluginId,
@@ -234,6 +261,14 @@ class PluginHostController extends ChangeNotifier {
       pythonExecutable: pythonExecutable,
       runtimeRoot: runtimeRoot,
     );
+  }
+
+  void _setFullscreen(bool value) {
+    if (_fullscreen == value) {
+      return;
+    }
+    _fullscreen = value;
+    notifyListeners();
   }
 }
 

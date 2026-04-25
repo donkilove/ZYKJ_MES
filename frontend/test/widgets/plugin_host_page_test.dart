@@ -8,6 +8,7 @@ import 'package:mes_client/features/plugin_host/models/plugin_manifest.dart';
 import 'package:mes_client/features/plugin_host/models/plugin_session.dart';
 import 'package:mes_client/features/plugin_host/presentation/plugin_host_controller.dart';
 import 'package:mes_client/features/plugin_host/presentation/plugin_host_page.dart';
+import 'package:mes_client/features/plugin_host/presentation/widgets/plugin_host_sidebar.dart';
 import 'package:mes_client/features/plugin_host/presentation/widgets/plugin_host_workspace.dart';
 import 'package:mes_client/features/plugin_host/services/plugin_catalog_service.dart';
 import 'package:mes_client/features/plugin_host/services/plugin_process_service.dart';
@@ -242,6 +243,55 @@ void main() {
     expect(find.text('WEBVIEW:http://127.0.0.1:43125/'), findsOneWidget);
     expect(find.widgetWithText(TextButton, '关闭插件'), findsOneWidget);
     expect(find.widgetWithText(TextButton, '重启插件'), findsOneWidget);
+  });
+
+  testWidgets('活动会话时点击全屏按钮会隐藏插件选择栏并可退出全屏', (tester) async {
+    final runtimeEnv = _createRuntimeEnvironment();
+    addTearDown(runtimeEnv.dispose);
+    final controller = PluginHostController(
+      catalogService: _StubCatalogService(),
+      processService: _StubProcessService(),
+      runtimeLocator: _StubRuntimeLocator(
+        runtimeRoot: runtimeEnv.runtimeRoot.path,
+        pluginRoot: runtimeEnv.pluginRoot.path,
+      ),
+    );
+    controller.debugInjectSession(
+      PluginSession(
+        pluginId: 'serial_assistant',
+        process: null,
+        pid: 456,
+        entryUrl: Uri.parse('http://127.0.0.1:43125/'),
+        heartbeatUrl: Uri.parse('http://127.0.0.1:43125/__heartbeat__'),
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PluginHostPage(
+            controller: controller,
+            webviewBuilder: (entryUrl) => Text('WEBVIEW:$entryUrl'),
+          ),
+        ),
+      ),
+    );
+    await _pumpForCatalogLoad(tester);
+
+    expect(find.byType(PluginHostSidebar), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '全屏'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, '全屏'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PluginHostSidebar), findsNothing);
+    expect(find.widgetWithText(TextButton, '退出全屏'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, '退出全屏'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PluginHostSidebar), findsOneWidget);
+    expect(find.widgetWithText(TextButton, '全屏'), findsOneWidget);
   });
 
   testWidgets('父级重建时不会重复执行活动插件的 webviewBuilder', (tester) async {

@@ -23,7 +23,12 @@ class _PluginHostPageState extends State<PluginHostPage> {
   @override
   void initState() {
     super.initState();
-    unawaited(widget.controller.loadCatalog());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      unawaited(widget.controller.loadCatalog());
+    });
   }
 
   @override
@@ -31,7 +36,18 @@ class _PluginHostPageState extends State<PluginHostPage> {
     return AnimatedBuilder(
       animation: widget.controller,
       builder: (context, _) {
+        final isFullscreen = widget.controller.isFullscreenActive;
+        if (isFullscreen) {
+          return KeyedSubtree(
+            key: const ValueKey('plugin-host-page-fullscreen'),
+            child: PluginHostWorkspace(
+              controller: widget.controller,
+              webviewBuilder: widget.webviewBuilder,
+            ),
+          );
+        }
         return Row(
+          key: const ValueKey('plugin-host-page-default'),
           children: [
             SizedBox(
               width: 300,
