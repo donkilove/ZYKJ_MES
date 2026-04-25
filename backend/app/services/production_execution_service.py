@@ -453,11 +453,15 @@ def submit_first_article(
     test_value: str | None,
     result: str,
     participant_user_ids: list[int] | None,
-    verification_code: str,
+    verification_code: str | None,
     remark: str | None,
     operator: User,
     effective_operator_user_id: int | None = None,
     assist_authorization_id: int | None = None,
+    skip_verification_code: bool = False,
+    reviewer_user_id: int | None = None,
+    reviewed_at=None,
+    review_remark: str | None = None,
 ) -> tuple[ProductionOrder, ProductionOrderProcess, ProductionSubOrder]:
     order, process_row = _lock_order_and_process(
         db,
@@ -518,9 +522,13 @@ def submit_first_article(
     if not _is_start_gate_allowed(db, order=order, process_row=process_row):
         raise ValueError("Current process is blocked by pipeline start gate")
 
-    code_row = _get_today_verification_code(db, operator_user_id=operator.id)
-    if verification_code.strip() != code_row.code:
-        raise ValueError("Invalid verification code")
+    normalized_verification_code = (verification_code or "").strip()
+    if skip_verification_code:
+        normalized_verification_code = normalized_verification_code or "SCAN_REVIEW"
+    else:
+        code_row = _get_today_verification_code(db, operator_user_id=operator.id)
+        if normalized_verification_code != code_row.code:
+            raise ValueError("Invalid verification code")
 
     normalized_result = _normalize_first_article_result(result)
     template_row = None
@@ -560,11 +568,14 @@ def submit_first_article(
         operator_user_id=operator.id,
         template_id=template_row.id if template_row else None,
         verification_date=date.today(),
-        verification_code=verification_code.strip(),
+        verification_code=normalized_verification_code,
         result=normalized_result,
         check_content=normalized_check_content,
         test_value=normalized_test_value,
         remark=(remark or "").strip() or None,
+        reviewer_user_id=reviewer_user_id,
+        reviewed_at=reviewed_at,
+        review_remark=(review_remark or "").strip() or None,
     )
     db.add(first_article_row)
     db.flush()

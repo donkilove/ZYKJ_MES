@@ -42,6 +42,7 @@ from app.core.authz_catalog import (
     PERM_PROD_STATS_OPERATORS,
     PERM_PROD_STATS_OVERVIEW,
     PERM_PROD_STATS_PROCESSES,
+    PERM_QUALITY_FIRST_ARTICLES_SCAN_REVIEW,
 )
 from app.core.production_constants import (
     ORDER_STATUS_ALL,
@@ -78,6 +79,11 @@ from app.schemas.production import (
     FirstArticleParticipantOptionItem,
     FirstArticleParticipantOptionListResult,
     FirstArticleRequest,
+    FirstArticleReviewSessionCreateRequest,
+    FirstArticleReviewSessionDetail,
+    FirstArticleReviewSessionRefreshRequest,
+    FirstArticleReviewSessionResult,
+    FirstArticleReviewSessionSubmitRequest,
     FirstArticleTemplateItem,
     FirstArticleTemplateListResult,
     MyOrderContextResult,
@@ -137,6 +143,13 @@ from app.services.assist_authorization_service import (
 from app.services.production_execution_service import (
     end_production,
     submit_first_article,
+)
+from app.services.first_article_review_service import (
+    create_first_article_review_session,
+    get_first_article_review_session_detail,
+    get_first_article_review_session_status,
+    refresh_first_article_review_session,
+    submit_first_article_review_result,
 )
 from app.services.production_order_service import (
     can_user_access_order_detail,
@@ -934,6 +947,135 @@ def submit_first_article_api(
     )
 
 
+@router.post(
+    "/orders/{order_id}/first-article/review-sessions",
+    response_model=ApiResponse[FirstArticleReviewSessionResult],
+    status_code=status.HTTP_201_CREATED,
+)
+def create_first_article_review_session_api(
+    order_id: int,
+    payload: FirstArticleReviewSessionCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(PERM_PROD_EXECUTION_FIRST_ARTICLE)),
+) -> ApiResponse[FirstArticleReviewSessionResult]:
+    try:
+        result = create_first_article_review_session(
+            db,
+            order_id=order_id,
+            order_process_id=payload.order_process_id,
+            pipeline_instance_id=payload.pipeline_instance_id,
+            template_id=payload.template_id,
+            check_content=payload.check_content,
+            test_value=payload.test_value,
+            participant_user_ids=payload.participant_user_ids,
+            assist_authorization_id=payload.assist_authorization_id,
+            operator=current_user,
+        )
+    except Exception as error:
+        db.rollback()
+        _raise_service_error(error)
+    return success_response(
+        _to_first_article_review_session_result(result),
+        message="created",
+    )
+
+
+@router.get(
+    "/orders/{order_id}/first-article/review-sessions/{session_id}/status",
+    response_model=ApiResponse[FirstArticleReviewSessionResult],
+)
+def get_first_article_review_session_status_api(
+    order_id: int,
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(PERM_PROD_EXECUTION_FIRST_ARTICLE)),
+) -> ApiResponse[FirstArticleReviewSessionResult]:
+    try:
+        result = get_first_article_review_session_status(
+            db,
+            session_id=session_id,
+            operator=current_user,
+        )
+    except Exception as error:
+        db.rollback()
+        _raise_service_error(error)
+    return success_response(_to_first_article_review_session_result(result))
+
+
+@router.post(
+    "/orders/{order_id}/first-article/review-sessions/{session_id}/refresh",
+    response_model=ApiResponse[FirstArticleReviewSessionResult],
+)
+def refresh_first_article_review_session_api(
+    order_id: int,
+    session_id: int,
+    payload: FirstArticleReviewSessionRefreshRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(PERM_PROD_EXECUTION_FIRST_ARTICLE)),
+) -> ApiResponse[FirstArticleReviewSessionResult]:
+    try:
+        result = refresh_first_article_review_session(
+            db,
+            session_id=session_id,
+            check_content=payload.check_content,
+            test_value=payload.test_value,
+            participant_user_ids=payload.participant_user_ids,
+            operator=current_user,
+        )
+    except Exception as error:
+        db.rollback()
+        _raise_service_error(error)
+    return success_response(
+        _to_first_article_review_session_result(result),
+        message="refreshed",
+    )
+
+
+@router.get(
+    "/first-article/review-sessions/detail",
+    response_model=ApiResponse[FirstArticleReviewSessionDetail],
+)
+def get_first_article_review_session_detail_api(
+    token: str = Query(min_length=16, max_length=256),
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+) -> ApiResponse[FirstArticleReviewSessionDetail]:
+    try:
+        result = get_first_article_review_session_detail(db, token=token)
+    except Exception as error:
+        db.rollback()
+        _raise_service_error(error)
+    return success_response(_to_first_article_review_session_detail(result))
+
+
+@router.post(
+    "/first-article/review-sessions/submit",
+    response_model=ApiResponse[FirstArticleReviewSessionResult],
+)
+def submit_first_article_review_session_api(
+    payload: FirstArticleReviewSessionSubmitRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_permission(PERM_QUALITY_FIRST_ARTICLES_SCAN_REVIEW)
+    ),
+) -> ApiResponse[FirstArticleReviewSessionResult]:
+    try:
+        result = submit_first_article_review_result(
+            db,
+            token=payload.token,
+            review_result=payload.review_result,
+            review_remark=payload.review_remark,
+            reviewer=current_user,
+        )
+    except Exception as error:
+        db.rollback()
+        _raise_service_error(error)
+    return success_response(
+        _to_first_article_review_session_result(result),
+        message="submitted",
+    )
+
+
 @router.get(
     "/orders/{order_id}/first-article/templates",
     response_model=ApiResponse[FirstArticleTemplateListResult],
@@ -1681,6 +1823,43 @@ def _to_pipeline_instance_item(row: object) -> PipelineInstanceItem:
         invalidated_at=row.invalidated_at,
         created_at=row.created_at,
         updated_at=row.updated_at,
+    )
+
+
+def _to_first_article_review_session_result(
+    result: object,
+) -> FirstArticleReviewSessionResult:
+    return FirstArticleReviewSessionResult(
+        session_id=result.session_id,
+        review_url=result.review_url,
+        expires_at=result.expires_at,
+        status=result.status,
+        first_article_record_id=result.first_article_record_id,
+        reviewer_user_id=result.reviewer_user_id,
+        reviewed_at=result.reviewed_at,
+        review_remark=result.review_remark,
+    )
+
+
+def _to_first_article_review_session_detail(
+    result: object,
+) -> FirstArticleReviewSessionDetail:
+    return FirstArticleReviewSessionDetail(
+        session_id=result.session_id,
+        status=result.status,
+        expires_at=result.expires_at,
+        order_id=result.order_id,
+        order_code=result.order_code,
+        product_name=result.product_name,
+        order_process_id=result.order_process_id,
+        process_name=result.process_name,
+        operator_user_id=result.operator_user_id,
+        operator_username=result.operator_username,
+        template_id=result.template_id,
+        check_content=result.check_content,
+        test_value=result.test_value,
+        participant_user_ids=result.participant_user_ids,
+        review_remark=result.review_remark,
     )
 
 
