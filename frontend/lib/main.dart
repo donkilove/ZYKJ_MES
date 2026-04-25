@@ -11,6 +11,7 @@ import 'package:mes_client/core/ui/foundation/mes_theme.dart';
 import 'package:mes_client/features/auth/services/auth_service.dart';
 import 'package:mes_client/features/misc/presentation/force_change_password_page.dart';
 import 'package:mes_client/features/misc/presentation/login_page.dart';
+import 'package:mes_client/features/production/presentation/first_article_scan_review_mobile_page.dart';
 import 'package:mes_client/features/settings/presentation/software_settings_controller.dart';
 import 'package:mes_client/features/settings/services/software_settings_service.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_page.dart';
@@ -24,6 +25,17 @@ typedef SoftwareSettingsServiceFactory =
 
 Future<void> main([List<String> args = const []]) async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  final uri = Uri.base;
+  if (uri.path == '/first-article-review') {
+    runApp(
+      FirstArticleScanReviewMobileApp(
+        baseUrl: defaultApiBaseUrl,
+        token: uri.queryParameters['token'] ?? '',
+      ),
+    );
+    return;
+  }
 
   final softwareSettingsController =
       await bootstrapSoftwareSettingsController();
