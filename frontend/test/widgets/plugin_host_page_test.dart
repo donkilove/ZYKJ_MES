@@ -8,6 +8,7 @@ import 'package:mes_client/features/plugin_host/models/plugin_manifest.dart';
 import 'package:mes_client/features/plugin_host/models/plugin_session.dart';
 import 'package:mes_client/features/plugin_host/presentation/plugin_host_controller.dart';
 import 'package:mes_client/features/plugin_host/presentation/plugin_host_page.dart';
+import 'package:mes_client/features/plugin_host/presentation/widgets/plugin_host_workspace.dart';
 import 'package:mes_client/features/plugin_host/services/plugin_catalog_service.dart';
 import 'package:mes_client/features/plugin_host/services/plugin_process_service.dart';
 import 'package:mes_client/features/plugin_host/services/plugin_runtime_locator.dart';
@@ -242,6 +243,136 @@ void main() {
     expect(find.widgetWithText(TextButton, '关闭插件'), findsOneWidget);
     expect(find.widgetWithText(TextButton, '重启插件'), findsOneWidget);
   });
+
+  testWidgets('父级重建时不会重复执行活动插件的 webviewBuilder', (tester) async {
+    final controller = PluginHostController(
+      catalogService: _StubCatalogService(),
+      processService: _StubProcessService(),
+      runtimeLocator: _StubRuntimeLocator(
+        runtimeRoot: Directory.systemTemp.path,
+        pluginRoot: Directory.systemTemp.path,
+      ),
+    );
+    controller.debugInjectSession(
+      PluginSession(
+        pluginId: 'serial_assistant',
+        process: null,
+        pid: 456,
+        entryUrl: Uri.parse('http://127.0.0.1:43125/'),
+        heartbeatUrl: Uri.parse('http://127.0.0.1:43125/__heartbeat__'),
+      ),
+    );
+
+    var buildCount = 0;
+    StateSetter? triggerParentRebuild;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setState) {
+            triggerParentRebuild = setState;
+            return Scaffold(
+              body: PluginHostWorkspace(
+                controller: controller,
+                webviewBuilder: (entryUrl) {
+                  buildCount += 1;
+                  return Text('WEBVIEW:$entryUrl');
+                },
+              ),
+            );
+          },
+        ),
+      ),
+    );
+
+    expect(buildCount, 1);
+
+    triggerParentRebuild!.call(() {});
+    await tester.pump();
+
+    expect(buildCount, 1);
+  });
+
+  testWidgets('插件会话变化时即使地址相同也会重建 WebView 子树', (tester) async {
+    final controller = PluginHostController(
+      catalogService: _StubCatalogService(),
+      processService: _StubProcessService(),
+      runtimeLocator: _StubRuntimeLocator(
+        runtimeRoot: Directory.systemTemp.path,
+        pluginRoot: Directory.systemTemp.path,
+      ),
+    );
+    controller.debugInjectSession(
+      PluginSession(
+        pluginId: 'serial_assistant',
+        process: null,
+        pid: 456,
+        entryUrl: Uri.parse('http://127.0.0.1:43125/'),
+        heartbeatUrl: Uri.parse('http://127.0.0.1:43125/__heartbeat__'),
+      ),
+    );
+
+    var initCount = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AnimatedBuilder(
+            animation: controller,
+            builder: (context, _) {
+              return PluginHostWorkspace(
+                controller: controller,
+                webviewBuilder: (entryUrl) {
+                  return _TrackedWebview(
+                    label: 'WEBVIEW:$entryUrl',
+                    onInit: () {
+                      initCount += 1;
+                    },
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(initCount, 1);
+
+    controller.debugInjectSession(
+      PluginSession(
+        pluginId: 'serial_assistant',
+        process: null,
+        pid: 789,
+        entryUrl: Uri.parse('http://127.0.0.1:43125/'),
+        heartbeatUrl: Uri.parse('http://127.0.0.1:43125/__heartbeat__'),
+      ),
+    );
+    await tester.pump();
+
+    expect(initCount, 2);
+  });
+}
+
+class _TrackedWebview extends StatefulWidget {
+  const _TrackedWebview({required this.label, required this.onInit});
+
+  final String label;
+  final VoidCallback onInit;
+
+  @override
+  State<_TrackedWebview> createState() => _TrackedWebviewState();
+}
+
+class _TrackedWebviewState extends State<_TrackedWebview> {
+  @override
+  void initState() {
+    super.initState();
+    widget.onInit();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(widget.label);
+  }
 }
 
 class _StubCatalogService extends PluginCatalogService {
@@ -306,13 +437,11 @@ class _CountingProcessService extends PluginProcessService {
 }
 
 class _StubRuntimeLocator extends PluginRuntimeLocator {
-  _StubRuntimeLocator({
-    required this.runtimeRoot,
-    required this.pluginRoot,
-  }) : super(
-         executablePath: r'C:\ZYKJ_MES\mes_client.exe',
-         environment: const {},
-       );
+  _StubRuntimeLocator({required this.runtimeRoot, required this.pluginRoot})
+    : super(
+        executablePath: r'C:\ZYKJ_MES\mes_client.exe',
+        environment: const {},
+      );
 
   final String runtimeRoot;
   final String pluginRoot;

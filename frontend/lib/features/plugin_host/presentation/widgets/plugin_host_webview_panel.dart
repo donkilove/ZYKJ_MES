@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:webview_all/webview_all.dart';
 
@@ -16,13 +18,30 @@ class _PluginHostWebviewPanelState extends State<PluginHostWebviewPanel> {
   @override
   void initState() {
     super.initState();
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..loadRequest(widget.entryUrl);
+    _controller = WebViewController();
+    unawaited(_initializeWebview());
+  }
+
+  @override
+  void didUpdateWidget(covariant PluginHostWebviewPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.entryUrl == widget.entryUrl) {
+      return;
+    }
+    unawaited(_controller.loadRequest(widget.entryUrl));
+  }
+
+  Future<void> _initializeWebview() async {
+    await _controller.setJavaScriptMode(JavaScriptMode.unrestricted);
+    await _controller.setBackgroundColor(Colors.transparent);
+    await _controller.loadRequest(widget.entryUrl);
   }
 
   @override
   Widget build(BuildContext context) {
-    return WebViewWidget(controller: _controller);
+    return ColoredBox(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: RepaintBoundary(child: WebViewWidget(controller: _controller)),
+    );
   }
 }

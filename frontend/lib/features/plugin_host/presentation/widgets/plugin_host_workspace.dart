@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:mes_client/features/plugin_host/presentation/plugin_host_controller.dart';
+import 'package:mes_client/features/plugin_host/models/plugin_session.dart';
 import 'package:mes_client/features/plugin_host/models/plugin_host_view_state.dart';
+import 'package:mes_client/features/plugin_host/presentation/plugin_host_controller.dart';
 
-class PluginHostWorkspace extends StatelessWidget {
+class PluginHostWorkspace extends StatefulWidget {
   const PluginHostWorkspace({
     super.key,
     required this.controller,
@@ -13,9 +14,19 @@ class PluginHostWorkspace extends StatelessWidget {
   final Widget Function(Uri entryUrl) webviewBuilder;
 
   @override
+  State<PluginHostWorkspace> createState() => _PluginHostWorkspaceState();
+}
+
+class _PluginHostWorkspaceState extends State<PluginHostWorkspace> {
+  String? _cachedSessionKey;
+  Widget? _cachedWebview;
+
+  @override
   Widget build(BuildContext context) {
+    final controller = widget.controller;
     final viewState = controller.viewState;
     if (viewState.phase == PluginHostPhase.starting) {
+      _clearCachedWebview();
       return _PluginHostStatusPanel(
         title: viewState.statusTitle,
         message: viewState.statusMessage,
@@ -34,6 +45,7 @@ class PluginHostWorkspace extends StatelessWidget {
     }
 
     if (viewState.phase == PluginHostPhase.failed) {
+      _clearCachedWebview();
       return _PluginHostStatusPanel(
         title: viewState.statusTitle,
         message: viewState.errorMessage ?? viewState.statusMessage,
@@ -63,10 +75,12 @@ class PluginHostWorkspace extends StatelessWidget {
 
     final activeSession = controller.activeSession;
     if (activeSession != null) {
-      final content = webviewBuilder(activeSession.entryUrl);
+      final content = _resolveWebview(activeSession);
+      final workspaceBackground = Theme.of(context).scaffoldBackgroundColor;
       return Padding(
         padding: const EdgeInsets.all(16),
         child: Card(
+          clipBehavior: Clip.antiAlias,
           child: Column(
             children: [
               Padding(
@@ -97,13 +111,19 @@ class PluginHostWorkspace extends StatelessWidget {
                 ),
               ),
               const Divider(height: 1),
-              Expanded(child: content),
+              Expanded(
+                child: ColoredBox(
+                  color: workspaceBackground,
+                  child: RepaintBoundary(child: content),
+                ),
+              ),
             ],
           ),
         ),
       );
     }
 
+    _clearCachedWebview();
     final selectedPlugin = controller.selectedPlugin;
     if (selectedPlugin == null) {
       return const Center(child: Text('选择一个插件以打开工作区'));
@@ -131,6 +151,26 @@ class PluginHostWorkspace extends StatelessWidget {
       ),
     );
   }
+
+  Widget _resolveWebview(PluginSession activeSession) {
+    final sessionKey =
+        '${activeSession.pluginId}:${activeSession.pid}:${activeSession.entryUrl}';
+    if (_cachedSessionKey == sessionKey && _cachedWebview != null) {
+      return _cachedWebview!;
+    }
+
+    _cachedSessionKey = sessionKey;
+    _cachedWebview = KeyedSubtree(
+      key: ValueKey('plugin-host-webview-$sessionKey'),
+      child: widget.webviewBuilder(activeSession.entryUrl),
+    );
+    return _cachedWebview!;
+  }
+
+  void _clearCachedWebview() {
+    _cachedSessionKey = null;
+    _cachedWebview = null;
+  }
 }
 
 class _PluginHostStatusPanel extends StatelessWidget {
@@ -156,10 +196,7 @@ class _PluginHostStatusPanel extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
+                Text(title, style: Theme.of(context).textTheme.headlineSmall),
                 const SizedBox(height: 12),
                 Text(message),
                 if (actions.isNotEmpty) ...[
