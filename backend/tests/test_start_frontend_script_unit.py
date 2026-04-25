@@ -25,8 +25,6 @@ class StartFrontendScriptUnitTest(unittest.TestCase):
             os.environ,
             {
                 "PATH": "test-path",
-                "MES_PLUGIN_ROOT": r"D:\external\plugins",
-                "MES_PYTHON_RUNTIME_DIR": r"D:\external\runtime",
             },
             clear=True,
         ):
@@ -41,6 +39,22 @@ class StartFrontendScriptUnitTest(unittest.TestCase):
             env["MES_PYTHON_RUNTIME_DIR"],
             str(start_frontend.ROOT_DIR / "plugins" / "runtime" / "python312"),
         )
+
+    def test_build_subprocess_env_respects_existing_plugin_runtime_override(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "PATH": "test-path",
+                "MES_PLUGIN_ROOT": r"D:\external\plugins",
+                "MES_PYTHON_RUNTIME_DIR": r"D:\external\runtime",
+            },
+            clear=True,
+        ):
+            env = start_frontend.build_subprocess_env()
+
+        self.assertEqual(env["PATH"], "test-path")
+        self.assertEqual(env["MES_PLUGIN_ROOT"], r"D:\external\plugins")
+        self.assertEqual(env["MES_PYTHON_RUNTIME_DIR"], r"D:\external\runtime")
 
     @patch("start_frontend.run_command")
     @patch("start_frontend.bootstrap_admin")

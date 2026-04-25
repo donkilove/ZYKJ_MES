@@ -40,6 +40,7 @@
 4. 解释器作为仓库内容直接提交，不依赖初始化脚本动态下载
 5. 插件私有依赖继续保持在各插件目录的 `vendor/` 下
 6. 宿主在缺少解释器或插件目录时给出明确错误提示
+7. 在 Python embeddable runtime 下，插件 `launcher.py` 负责显式组装 `sys.path`，宿主只传插件目录信息，不再把 `PYTHONPATH` 当成主加载机制
 
 ### 2.2 非目标
 
@@ -146,6 +147,19 @@ plugins/
 1. `MES_PYTHON_RUNTIME_DIR` 作为调试覆盖
 
 但正式交付口径只认仓库内固定解释器目录。
+
+### 6.2.1 插件依赖装配方式
+
+由于 Python embeddable runtime 处于隔离模式，宿主不再把 `PYTHONPATH` 作为主依赖装配机制。
+
+统一口径改为：
+
+1. 宿主启动前传递：
+   - `MES_PLUGIN_DIR`
+   - `MES_PLUGIN_VENDOR_DIR`
+   - `MES_PLUGIN_APP_DIR`
+2. 插件 `launcher.py` 自行把这些目录插入 `sys.path`
+3. 插件私有依赖继续放在各插件目录的 `vendor/` 下
 
 ### 6.3 废弃规则
 

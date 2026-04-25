@@ -11,7 +11,7 @@
     "mode": "embedded"
   },
   "runtime": {
-    "python": "3.14",
+    "python": "3.12",
     "arch": "win_amd64"
   },
   "dependencies": {

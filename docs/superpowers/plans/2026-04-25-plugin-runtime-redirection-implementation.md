@@ -4,7 +4,7 @@
 
 **Goal:** 将插件宿主的 Python 运行时从 `frontend/build/.../runtime/python` 的临时推断改为仓库内固定的 `plugins/runtime/python312/python.exe`，并让 `serial_assistant` 在不依赖环境变量的情况下稳定启动。
 
-**Architecture:** 宿主侧把“插件目录”和“解释器路径”都收敛为仓库内固定路径，只保留环境变量作为调试覆盖；仓库结构方面将 Python 3.12 embeddable runtime 直接纳入 `plugins/runtime/python312/`。最后补齐宿主错误提示与验证留痕，确保解释器缺失时不再冒出神秘 `ProcessException`。
+**Architecture:** 宿主侧把“插件目录”和“解释器路径”都收敛为仓库内固定路径，只保留环境变量作为调试覆盖；仓库结构方面将 Python 3.12 embeddable runtime 直接纳入 `plugins/runtime/python312/`。由于 embeddable runtime 处于隔离模式，宿主不再依赖 `PYTHONPATH`，而是显式传递 `MES_PLUGIN_DIR` / `MES_PLUGIN_VENDOR_DIR` / `MES_PLUGIN_APP_DIR`，由插件 `launcher.py` 自行组装 `sys.path`。最后补齐宿主错误提示与验证留痕，确保解释器缺失时不再冒出神秘 `ProcessException`。
 
 **Tech Stack:** Flutter、Dart、`flutter_test`、Python 3.12.10 embeddable package、PowerShell、`pytest`
 

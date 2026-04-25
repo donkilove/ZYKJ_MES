@@ -19,6 +19,7 @@ python -m pytest backend/tests/test_start_frontend_script_unit.py plugins/serial
   - 启动脚本已注入固定插件根目录和固定运行时目录
   - 仓库内置 Python 3.12 解释器可直接启动 `serial_assistant/launcher.py`
   - `launcher.py` 已能输出合法 `ready` payload
+  - `launcher.py` 已改为在 embeddable runtime 下自行组装 `sys.path`
 
 ## 2. Flutter 目标测试
 
@@ -75,7 +76,8 @@ Pop-Location
 
 1. 固定运行时目录口径已经打通。
 2. 宿主路径定位、错误提示和运行级插件启动都可验证。
-3. 运行时重定向任务已满足交付标准。
+3. 在 embeddable runtime 下，插件依赖装配已改为“宿主传目录信息 + launcher 自行组装 sys.path”。
+4. 运行时重定向任务已满足交付标准。
 
 ## 6. 迁移说明
 
