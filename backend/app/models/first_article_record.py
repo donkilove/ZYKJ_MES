@@ -1,6 +1,6 @@
-from datetime import date
+from datetime import date, datetime
 
-from sqlalchemy import Date, ForeignKey, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -36,10 +36,21 @@ class FirstArticleRecord(Base, TimestampMixin):
     check_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     test_value: Mapped[str | None] = mapped_column(Text, nullable=True)
     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewer_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sys_user.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    review_remark: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     order = relationship("ProductionOrder", back_populates="first_article_records")
     order_process = relationship("ProductionOrderProcess", back_populates="first_article_records")
-    operator = relationship("User")
+    operator = relationship("User", foreign_keys=[operator_user_id])
+    reviewer = relationship("User", foreign_keys=[reviewer_user_id])
     template = relationship("FirstArticleTemplate")
     participants = relationship(
         "FirstArticleParticipant",

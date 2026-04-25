@@ -7,6 +7,7 @@ from app.models.equipment_rule import EquipmentRule
 from app.models.equipment_runtime_parameter import EquipmentRuntimeParameter
 from app.models.first_article_participant import FirstArticleParticipant
 from app.models.first_article_record import FirstArticleRecord
+from app.models.first_article_review_session import FirstArticleReviewSession
 from app.models.first_article_template import FirstArticleTemplate
 from app.models.maintenance_item import MaintenanceItem
 from app.models.maintenance_plan import MaintenancePlan
@@ -95,6 +96,7 @@ __all__ = [
     "RepairCause",
     "RepairReturnRoute",
     "FirstArticleRecord",
+    "FirstArticleReviewSession",
     "FirstArticleTemplate",
     "DailyVerificationCode",
     "ProductionRecord",

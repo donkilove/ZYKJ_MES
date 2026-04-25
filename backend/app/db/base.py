@@ -5,6 +5,7 @@ from app.models.daily_verification_code import DailyVerificationCode
 from app.models.first_article_participant import FirstArticleParticipant
 from app.models.equipment import Equipment
 from app.models.first_article_record import FirstArticleRecord
+from app.models.first_article_review_session import FirstArticleReviewSession
 from app.models.first_article_template import FirstArticleTemplate
 from app.models.maintenance_item import MaintenanceItem
 from app.models.maintenance_plan import MaintenancePlan
@@ -85,6 +86,7 @@ __all__ = [
     "RepairReturnRoute",
     "FirstArticleParticipant",
     "FirstArticleRecord",
+    "FirstArticleReviewSession",
     "FirstArticleTemplate",
     "DailyVerificationCode",
     "ProductionRecord",

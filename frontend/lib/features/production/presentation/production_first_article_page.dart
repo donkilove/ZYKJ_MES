@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
@@ -32,15 +35,14 @@ class _ProductionFirstArticlePageState
   late final DateTime _firstArticleTime;
   final TextEditingController _checkContentController = TextEditingController();
   final TextEditingController _testValueController = TextEditingController();
-  final TextEditingController _verificationCodeController =
-      TextEditingController();
-  final TextEditingController _remarkController = TextEditingController();
 
   bool _loading = false;
   bool _submitting = false;
   String _message = '';
-  String _result = 'passed';
+  String? _reviewRejectMessage;
   FirstArticleTemplateItem? _selectedTemplate;
+  FirstArticleReviewSessionResult? _reviewSession;
+  Timer? _reviewPollTimer;
   List<FirstArticleTemplateItem> _templates = const [];
   List<FirstArticleParticipantOptionItem> _participantOptions = const [];
   List<FirstArticleParticipantOptionItem> _selectedParticipants = const [];
@@ -55,10 +57,9 @@ class _ProductionFirstArticlePageState
 
   @override
   void dispose() {
+    _reviewPollTimer?.cancel();
     _checkContentController.dispose();
     _testValueController.dispose();
-    _verificationCodeController.dispose();
-    _remarkController.dispose();
     super.dispose();
   }
 
@@ -319,11 +320,9 @@ class _ProductionFirstArticlePageState
     });
   }
 
-  Future<void> _submit() async {
+  Future<void> _startScanReview() async {
     final checkContent = _checkContentController.text.trim();
     final testValue = _testValueController.text.trim();
-    final verificationCode = _verificationCodeController.text.trim();
-    final remark = _remarkController.text.trim();
     if (checkContent.isEmpty) {
       ScaffoldMessenger.of(
         context,
@@ -336,40 +335,32 @@ class _ProductionFirstArticlePageState
       ).showSnackBar(const SnackBar(content: Text('请输入首件测试值')));
       return;
     }
-    if (verificationCode.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请输入首件检验码')));
-      return;
-    }
 
     setState(() {
       _submitting = true;
       _message = '';
     });
     try {
-      await _service.submitFirstArticle(
+      final result = await _service.createFirstArticleReviewSession(
         orderId: widget.order.orderId,
-        request: FirstArticleSubmitRequestInput(
-          orderProcessId: widget.order.currentProcessId,
-          pipelineInstanceId: widget.order.pipelineInstanceId,
-          templateId: _selectedTemplate?.id,
-          checkContent: checkContent,
-          testValue: testValue,
-          result: _result,
-          participantUserIds: _selectedParticipants
-              .map((item) => item.id)
-              .toList(),
-          verificationCode: verificationCode,
-          remark: remark.isEmpty ? null : remark,
-          effectiveOperatorUserId: widget.order.operatorUserId,
-          assistAuthorizationId: widget.order.assistAuthorizationId,
-        ),
+        orderProcessId: widget.order.currentProcessId,
+        pipelineInstanceId: widget.order.pipelineInstanceId,
+        templateId: _selectedTemplate?.id,
+        checkContent: checkContent,
+        testValue: testValue,
+        participantUserIds: _selectedParticipants
+            .map((item) => item.id)
+            .toList(),
+        assistAuthorizationId: widget.order.assistAuthorizationId,
       );
       if (!mounted) {
         return;
       }
-      Navigator.of(context).pop(true);
+      setState(() {
+        _reviewSession = result;
+        _reviewRejectMessage = null;
+      });
+      _startReviewPolling();
     } catch (error) {
       if (!mounted) {
         return;
@@ -379,7 +370,7 @@ class _ProductionFirstArticlePageState
         return;
       }
       setState(() {
-        _message = '提交首件失败：${_errorMessage(error)}';
+        _message = '发起扫码复核失败：${_errorMessage(error)}';
       });
     } finally {
       if (mounted) {
@@ -387,6 +378,135 @@ class _ProductionFirstArticlePageState
           _submitting = false;
         });
       }
+    }
+  }
+
+  Future<void> _refreshScanReview() async {
+    final session = _reviewSession;
+    if (session == null) {
+      return;
+    }
+    final checkContent = _checkContentController.text.trim();
+    final testValue = _testValueController.text.trim();
+    if (checkContent.isEmpty || testValue.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请先填写首件内容和测试值')));
+      return;
+    }
+
+    setState(() {
+      _submitting = true;
+      _message = '';
+    });
+    try {
+      final result = await _service.refreshFirstArticleReviewSession(
+        orderId: widget.order.orderId,
+        sessionId: session.sessionId,
+        request: FirstArticleReviewSessionRefreshInput(
+          checkContent: checkContent,
+          testValue: testValue,
+          participantUserIds: _selectedParticipants
+              .map((item) => item.id)
+              .toList(),
+        ),
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _reviewSession = result;
+      });
+      _startReviewPolling();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      setState(() {
+        _message = '刷新二维码失败：${_errorMessage(error)}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+        });
+      }
+    }
+  }
+
+  void _startReviewPolling() {
+    _reviewPollTimer?.cancel();
+    _reviewPollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      _loadReviewSessionStatus();
+    });
+  }
+
+  void _stopReviewPolling() {
+    _reviewPollTimer?.cancel();
+    _reviewPollTimer = null;
+  }
+
+  Future<void> _loadReviewSessionStatus() async {
+    final session = _reviewSession;
+    if (session == null) {
+      return;
+    }
+    try {
+      final result = await _service.getFirstArticleReviewSessionStatus(
+        orderId: widget.order.orderId,
+        sessionId: session.sessionId,
+      );
+      if (!mounted) {
+        return;
+      }
+      if (result.status == 'approved') {
+        _stopReviewPolling();
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop(true);
+          return;
+        }
+        setState(() {
+          _reviewSession = result;
+          _message = '首件扫码复核已通过';
+        });
+        return;
+      }
+      if (result.status == 'rejected') {
+        _stopReviewPolling();
+        setState(() {
+          _reviewSession = null;
+          _reviewRejectMessage = result.reviewRemark ?? '质检复核不合格，请修改后重新发起';
+        });
+        return;
+      }
+      if (result.status == 'expired' || result.status == 'cancelled') {
+        _stopReviewPolling();
+        setState(() {
+          _reviewSession = result;
+          _message = result.status == 'expired'
+              ? '二维码已失效，请点击刷新二维码'
+              : '复核会话已取消，请刷新二维码';
+        });
+        return;
+      }
+      setState(() {
+        _reviewSession = result;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      setState(() {
+        _message = '查询复核状态失败：${_errorMessage(error)}';
+      });
     }
   }
 
@@ -400,6 +520,57 @@ class _ProductionFirstArticlePageState
           isDense: true,
         ),
         child: Text(value.isEmpty ? '-' : value),
+      ),
+    );
+  }
+
+  Widget _buildScanReviewPanel() {
+    final session = _reviewSession;
+    if (session == null) {
+      return const SizedBox.shrink();
+    }
+    final reviewUrl = session.reviewUrl ?? '';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('等待质检扫码复核', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            if (reviewUrl.isNotEmpty) ...[
+              Center(
+                child: QrImageView(
+                  data: reviewUrl,
+                  version: QrVersions.auto,
+                  size: 240,
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            SelectableText(reviewUrl.isEmpty ? '-' : reviewUrl),
+            const SizedBox(height: 12),
+            Text('当前状态：${session.status}'),
+            Text('有效期至：${_formatDateTime(session.expiresAt)}'),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _submitting ? null : _refreshScanReview,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('刷新二维码'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _submitting ? null : _loadReviewSessionStatus,
+                  icon: const Icon(Icons.fact_check_outlined),
+                  label: const Text('查看复核状态'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -426,6 +597,16 @@ class _ProductionFirstArticlePageState
                             padding: const EdgeInsets.only(bottom: 12),
                             child: Text(
                               _message,
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            ),
+                          ),
+                        if (_reviewRejectMessage != null)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Text(
+                              _reviewRejectMessage!,
                               style: TextStyle(
                                 color: Theme.of(context).colorScheme.error,
                               ),
@@ -565,52 +746,23 @@ class _ProductionFirstArticlePageState
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  '检验结果',
+                                  '扫码复核',
                                   style: Theme.of(
                                     context,
                                   ).textTheme.titleMedium,
                                 ),
                                 const SizedBox(height: 12),
-                                SegmentedButton<String>(
-                                  segments: const [
-                                    ButtonSegment<String>(
-                                      value: 'passed',
-                                      label: Text('合格'),
-                                    ),
-                                    ButtonSegment<String>(
-                                      value: 'failed',
-                                      label: Text('不合格'),
-                                    ),
-                                  ],
-                                  selected: {_result},
-                                  onSelectionChanged: (selection) {
-                                    setState(() {
-                                      _result = selection.first;
-                                    });
-                                  },
-                                ),
-                                const SizedBox(height: 12),
-                                TextField(
-                                  controller: _verificationCodeController,
-                                  decoration: const InputDecoration(
-                                    labelText: '首件检验码',
-                                    border: OutlineInputBorder(),
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                TextField(
-                                  controller: _remarkController,
-                                  maxLines: 3,
-                                  decoration: const InputDecoration(
-                                    labelText: '备注',
-                                    border: OutlineInputBorder(),
-                                    alignLabelWithHint: true,
-                                  ),
+                                Text(
+                                  _reviewSession == null
+                                      ? '操作员填写首件内容和测试值后发起扫码复核，由质检员扫码判定。'
+                                      : '请质检员扫码核对并提交复核结果。',
                                 ),
                               ],
                             ),
                           ),
                         ),
+                        const SizedBox(height: 12),
+                        _buildScanReviewPanel(),
                         const SizedBox(height: 16),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.end,
@@ -623,8 +775,10 @@ class _ProductionFirstArticlePageState
                             ),
                             const SizedBox(width: 12),
                             FilledButton(
-                              onPressed: _submitting ? null : _submit,
-                              child: Text(_submitting ? '提交中...' : '提交首件'),
+                              onPressed: _submitting || _reviewSession != null
+                                  ? null
+                                  : _startScanReview,
+                              child: Text(_submitting ? '提交中...' : '发起扫码复核'),
                             ),
                           ],
                         ),

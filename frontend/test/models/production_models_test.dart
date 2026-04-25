@@ -311,6 +311,68 @@ void main() {
     expect(request.toJson()['participant_user_ids'], [8, 9]);
   });
 
+  test('首件扫码复核模型解析会话结果与详情', () {
+    final result = FirstArticleReviewSessionResult.fromJson({
+      'session_id': 7,
+      'review_url': '/first-article-review?token=abc',
+      'expires_at': '2026-04-25T12:05:00Z',
+      'status': 'pending',
+      'first_article_record_id': null,
+      'reviewer_user_id': null,
+      'reviewed_at': null,
+      'review_remark': null,
+    });
+    final reviewed = FirstArticleReviewSessionResult.fromJson({
+      'session_id': 8,
+      'review_url': null,
+      'expires_at': '2026-04-25T12:05:00Z',
+      'status': 'approved',
+      'first_article_record_id': 99,
+      'reviewer_user_id': 3,
+      'reviewed_at': '2026-04-25T12:02:00Z',
+      'review_remark': '参数一致',
+    });
+    final detail = FirstArticleReviewSessionDetail.fromJson({
+      'session_id': 7,
+      'status': 'pending',
+      'expires_at': '2026-04-25T12:05:00Z',
+      'order_id': 1,
+      'order_code': 'PO-1',
+      'product_name': '产品A',
+      'order_process_id': 11,
+      'process_name': '切割',
+      'operator_user_id': 8,
+      'operator_username': 'worker',
+      'template_id': 501,
+      'check_content': '外观无划伤',
+      'test_value': '长度 10.01',
+      'participant_user_ids': [8, 9],
+      'review_remark': null,
+    });
+    const refresh = FirstArticleReviewSessionRefreshInput(
+      checkContent: '外观无划伤',
+      testValue: '长度 10.01',
+      participantUserIds: [8, 9],
+    );
+    const submit = FirstArticleReviewSubmitInput(
+      token: 'scan-token',
+      reviewResult: 'failed',
+      reviewRemark: '长度偏差',
+    );
+
+    expect(result.sessionId, 7);
+    expect(result.reviewUrl, '/first-article-review?token=abc');
+    expect(result.status, 'pending');
+    expect(reviewed.firstArticleRecordId, 99);
+    expect(reviewed.reviewerUserId, 3);
+    expect(reviewed.reviewedAt, isNotNull);
+    expect(detail.orderCode, 'PO-1');
+    expect(detail.processName, '切割');
+    expect(detail.participantUserIds, [8, 9]);
+    expect(refresh.toJson()['participant_user_ids'], [8, 9]);
+    expect(submit.toJson()['review_result'], 'failed');
+  });
+
   test(
     'production data query models parse today/unfinished/manual payloads',
     () {

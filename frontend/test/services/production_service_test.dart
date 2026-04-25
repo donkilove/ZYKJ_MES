@@ -159,6 +159,47 @@ Map<String, dynamic> _scrapStatJson({
   };
 }
 
+Map<String, dynamic> _firstArticleReviewSessionJson({
+  int id = 88,
+  String status = 'pending',
+  String? reviewUrl = '/first-article-review?token=abc',
+  int? firstArticleRecordId,
+  int? reviewerUserId,
+  String? reviewedAt,
+  String? reviewRemark,
+}) {
+  return {
+    'session_id': id,
+    'review_url': reviewUrl,
+    'expires_at': '2026-04-25T12:05:00Z',
+    'status': status,
+    'first_article_record_id': firstArticleRecordId,
+    'reviewer_user_id': reviewerUserId,
+    'reviewed_at': reviewedAt,
+    'review_remark': reviewRemark,
+  };
+}
+
+Map<String, dynamic> _firstArticleReviewSessionDetailJson() {
+  return {
+    'session_id': 88,
+    'status': 'pending',
+    'expires_at': '2026-04-25T12:05:00Z',
+    'order_id': 1,
+    'order_code': 'PO-1',
+    'product_name': 'Product-A',
+    'order_process_id': 11,
+    'process_name': 'Cut',
+    'operator_user_id': 8,
+    'operator_username': 'worker',
+    'template_id': 501,
+    'check_content': '首件内容',
+    'test_value': '9.86',
+    'participant_user_ids': [8, 9],
+    'review_remark': null,
+  };
+}
+
 void main() {
   group('ProductionService', () {
     test(
@@ -476,6 +517,69 @@ void main() {
                   'status': 'ok',
                   'message': 'first article done',
                 },
+              },
+            );
+          },
+          'POST /production/orders/1/first-article/review-sessions': (request) {
+            final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+            expect(body['order_process_id'], 11);
+            expect(body['pipeline_instance_id'], 301);
+            expect(body['template_id'], 501);
+            expect(body['check_content'], '首件内容');
+            expect(body['test_value'], '9.86');
+            expect(body['participant_user_ids'], [8, 9]);
+            expect(body['assist_authorization_id'], 99);
+            return TestResponse.json(
+              201,
+              body: {'data': _firstArticleReviewSessionJson()},
+            );
+          },
+          'GET /production/orders/1/first-article/review-sessions/88/status':
+              (_) => TestResponse.json(
+                200,
+                body: {
+                  'data': _firstArticleReviewSessionJson(status: 'pending'),
+                },
+              ),
+          'POST /production/orders/1/first-article/review-sessions/88/refresh':
+              (request) {
+                final body =
+                    jsonDecode(request.bodyText) as Map<String, dynamic>;
+                expect(body['check_content'], '首件内容-刷新');
+                expect(body['test_value'], '9.90');
+                expect(body['participant_user_ids'], [8]);
+                return TestResponse.json(
+                  200,
+                  body: {
+                    'data': _firstArticleReviewSessionJson(
+                      reviewUrl: '/first-article-review?token=refreshed',
+                    ),
+                  },
+                );
+              },
+          'GET /production/first-article/review-sessions/detail': (request) {
+            expect(request.uri.queryParameters['token'], 'scan-token');
+            return TestResponse.json(
+              200,
+              body: {'data': _firstArticleReviewSessionDetailJson()},
+            );
+          },
+          'POST /production/first-article/review-sessions/submit': (request) {
+            final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+            expect(body['token'], 'scan-token');
+            expect(body['review_result'], 'passed');
+            expect(body['review_remark'], '参数一致');
+            return TestResponse.json(
+              200,
+              body: {
+                'data': _firstArticleReviewSessionJson(
+                  status: 'approved',
+                  reviewUrl: null,
+                  firstArticleRecordId: 77,
+                  reviewerUserId: 3,
+                  reviewedAt: '2026-04-25T12:02:00Z',
+                  reviewRemark: '参数一致',
+                ),
               },
             );
           },
@@ -1000,6 +1104,40 @@ void main() {
             assistAuthorizationId: 99,
           ),
         );
+        final reviewSession = await service.createFirstArticleReviewSession(
+          orderId: 1,
+          orderProcessId: 11,
+          pipelineInstanceId: 301,
+          templateId: 501,
+          checkContent: '首件内容',
+          testValue: '9.86',
+          participantUserIds: const [8, 9],
+          assistAuthorizationId: 99,
+        );
+        final reviewStatus = await service.getFirstArticleReviewSessionStatus(
+          orderId: 1,
+          sessionId: 88,
+        );
+        final refreshedReviewSession = await service
+            .refreshFirstArticleReviewSession(
+              orderId: 1,
+              sessionId: 88,
+              request: const FirstArticleReviewSessionRefreshInput(
+                checkContent: '首件内容-刷新',
+                testValue: '9.90',
+                participantUserIds: [8],
+              ),
+            );
+        final reviewDetail = await service.getFirstArticleReviewSessionDetail(
+          token: 'scan-token',
+        );
+        final submittedReview = await service.submitFirstArticleReviewResult(
+          request: const FirstArticleReviewSubmitInput(
+            token: 'scan-token',
+            reviewResult: 'passed',
+            reviewRemark: '参数一致',
+          ),
+        );
         final endProduction = await service.endProduction(
           orderId: 1,
           orderProcessId: 11,
@@ -1119,6 +1257,14 @@ void main() {
         expect(firstArticleParameters.items.single.name, '长度');
         expect(orderEvents.items.single.eventType, 'order_deleted');
         expect(firstArticle.message, 'first article done');
+        expect(reviewSession.sessionId, 88);
+        expect(reviewStatus.status, 'pending');
+        expect(
+          refreshedReviewSession.reviewUrl,
+          '/first-article-review?token=refreshed',
+        );
+        expect(reviewDetail.testValue, '9.86');
+        expect(submittedReview.firstArticleRecordId, 77);
         expect(endProduction.message, 'end production done');
         expect(overview.totalOrders, 10);
         expect(processStats.single.processName, 'Cut');
@@ -1142,7 +1288,7 @@ void main() {
         expect(repairSummary.items.single.phenomenon, '毛刺');
         expect(completedRepair.status, 'completed');
         expect(repairExport.fileName, 'repair.csv');
-        expect(server.requests.length, 37);
+        expect(server.requests.length, 42);
       },
     );
 

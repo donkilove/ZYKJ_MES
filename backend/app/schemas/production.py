@@ -298,6 +298,75 @@ class FirstArticleRequest(BaseModel):
         return deduped
 
 
+class FirstArticleReviewSessionCreateRequest(BaseModel):
+    order_process_id: int = Field(gt=0)
+    pipeline_instance_id: int | None = Field(default=None, gt=0)
+    template_id: int | None = Field(default=None, gt=0)
+    check_content: str = Field(min_length=1, max_length=4000)
+    test_value: str = Field(min_length=1, max_length=4000)
+    participant_user_ids: list[int] = Field(default_factory=list)
+    assist_authorization_id: int | None = Field(default=None, gt=0)
+
+    @field_validator("participant_user_ids")
+    @classmethod
+    def validate_participant_user_ids(cls, value: list[int]) -> list[int]:
+        return FirstArticleRequest.validate_participant_user_ids(value)
+
+
+class FirstArticleReviewSessionRefreshRequest(BaseModel):
+    check_content: str = Field(min_length=1, max_length=4000)
+    test_value: str = Field(min_length=1, max_length=4000)
+    participant_user_ids: list[int] = Field(default_factory=list)
+
+    @field_validator("participant_user_ids")
+    @classmethod
+    def validate_participant_user_ids(cls, value: list[int]) -> list[int]:
+        return FirstArticleRequest.validate_participant_user_ids(value)
+
+
+class FirstArticleReviewSessionSubmitRequest(BaseModel):
+    token: str = Field(min_length=16, max_length=256)
+    review_result: str = Field(min_length=1, max_length=32)
+    review_remark: str | None = Field(default=None, max_length=1024)
+
+    @field_validator("review_result")
+    @classmethod
+    def validate_review_result(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"passed", "failed"}:
+            raise ValueError("review_result must be passed or failed")
+        return normalized
+
+
+class FirstArticleReviewSessionResult(BaseModel):
+    session_id: int
+    review_url: str | None = None
+    expires_at: datetime
+    status: str
+    first_article_record_id: int | None = None
+    reviewer_user_id: int | None = None
+    reviewed_at: datetime | None = None
+    review_remark: str | None = None
+
+
+class FirstArticleReviewSessionDetail(BaseModel):
+    session_id: int
+    status: str
+    expires_at: datetime
+    order_id: int
+    order_code: str
+    product_name: str
+    order_process_id: int
+    process_name: str
+    operator_user_id: int
+    operator_username: str
+    template_id: int | None = None
+    check_content: str
+    test_value: str
+    participant_user_ids: list[int] = Field(default_factory=list)
+    review_remark: str | None = None
+
+
 class FirstArticleTemplateItem(BaseModel):
     id: int
     product_id: int
