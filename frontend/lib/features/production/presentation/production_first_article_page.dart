@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
@@ -39,6 +42,7 @@ class _ProductionFirstArticlePageState
   String? _reviewRejectMessage;
   FirstArticleTemplateItem? _selectedTemplate;
   FirstArticleReviewSessionResult? _reviewSession;
+  Timer? _reviewPollTimer;
   List<FirstArticleTemplateItem> _templates = const [];
   List<FirstArticleParticipantOptionItem> _participantOptions = const [];
   List<FirstArticleParticipantOptionItem> _selectedParticipants = const [];
@@ -53,6 +57,7 @@ class _ProductionFirstArticlePageState
 
   @override
   void dispose() {
+    _reviewPollTimer?.cancel();
     _checkContentController.dispose();
     _testValueController.dispose();
     super.dispose();
@@ -355,6 +360,7 @@ class _ProductionFirstArticlePageState
         _reviewSession = result;
         _reviewRejectMessage = null;
       });
+      _startReviewPolling();
     } catch (error) {
       if (!mounted) {
         return;
@@ -411,6 +417,7 @@ class _ProductionFirstArticlePageState
       setState(() {
         _reviewSession = result;
       });
+      _startReviewPolling();
     } catch (error) {
       if (!mounted) {
         return;
@@ -431,6 +438,18 @@ class _ProductionFirstArticlePageState
     }
   }
 
+  void _startReviewPolling() {
+    _reviewPollTimer?.cancel();
+    _reviewPollTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      _loadReviewSessionStatus();
+    });
+  }
+
+  void _stopReviewPolling() {
+    _reviewPollTimer?.cancel();
+    _reviewPollTimer = null;
+  }
+
   Future<void> _loadReviewSessionStatus() async {
     final session = _reviewSession;
     if (session == null) {
@@ -445,13 +464,32 @@ class _ProductionFirstArticlePageState
         return;
       }
       if (result.status == 'approved') {
-        Navigator.of(context).pop(true);
+        _stopReviewPolling();
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop(true);
+          return;
+        }
+        setState(() {
+          _reviewSession = result;
+          _message = '首件扫码复核已通过';
+        });
         return;
       }
       if (result.status == 'rejected') {
+        _stopReviewPolling();
         setState(() {
           _reviewSession = null;
           _reviewRejectMessage = result.reviewRemark ?? '质检复核不合格，请修改后重新发起';
+        });
+        return;
+      }
+      if (result.status == 'expired' || result.status == 'cancelled') {
+        _stopReviewPolling();
+        setState(() {
+          _reviewSession = result;
+          _message = result.status == 'expired'
+              ? '二维码已失效，请点击刷新二维码'
+              : '复核会话已取消，请刷新二维码';
         });
         return;
       }
@@ -491,6 +529,7 @@ class _ProductionFirstArticlePageState
     if (session == null) {
       return const SizedBox.shrink();
     }
+    final reviewUrl = session.reviewUrl ?? '';
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -499,7 +538,17 @@ class _ProductionFirstArticlePageState
           children: [
             Text('等待质检扫码复核', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 12),
-            SelectableText(session.reviewUrl ?? '-'),
+            if (reviewUrl.isNotEmpty) ...[
+              Center(
+                child: QrImageView(
+                  data: reviewUrl,
+                  version: QrVersions.auto,
+                  size: 240,
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            SelectableText(reviewUrl.isEmpty ? '-' : reviewUrl),
             const SizedBox(height: 12),
             Text('当前状态：${session.status}'),
             Text('有效期至：${_formatDateTime(session.expiresAt)}'),

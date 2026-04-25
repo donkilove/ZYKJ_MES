@@ -4,6 +4,7 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/production_first_article_page.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 class _FakeProductionFirstArticleService extends ProductionService {
   _FakeProductionFirstArticleService()
@@ -14,6 +15,17 @@ class _FakeProductionFirstArticleService extends ProductionService {
       FirstArticleReviewSessionResult(
         sessionId: 88,
         reviewUrl: '/first-article-review?token=abc',
+        expiresAt: DateTime.parse('2026-04-25T12:05:00Z'),
+        status: 'pending',
+        firstArticleRecordId: null,
+        reviewerUserId: null,
+        reviewedAt: null,
+        reviewRemark: null,
+      );
+  FirstArticleReviewSessionResult statusResult =
+      FirstArticleReviewSessionResult(
+        sessionId: 88,
+        reviewUrl: null,
         expiresAt: DateTime.parse('2026-04-25T12:05:00Z'),
         status: 'pending',
         firstArticleRecordId: null,
@@ -111,6 +123,14 @@ class _FakeProductionFirstArticleService extends ProductionService {
       assistAuthorizationId: assistAuthorizationId,
     );
     return reviewSessionResult;
+  }
+
+  @override
+  Future<FirstArticleReviewSessionResult> getFirstArticleReviewSessionStatus({
+    required int orderId,
+    required int sessionId,
+  }) async {
+    return statusResult;
   }
 }
 
@@ -232,9 +252,10 @@ void main() {
 
     await tester.ensureVisible(find.widgetWithText(FilledButton, '发起扫码复核'));
     await tester.tap(find.widgetWithText(FilledButton, '发起扫码复核'));
-    await tester.pumpAndSettle();
+    await tester.pump();
 
     expect(find.text('等待质检扫码复核'), findsOneWidget);
+    expect(find.byType(QrImageView), findsOneWidget);
     expect(find.text('刷新二维码'), findsOneWidget);
     expect(find.text('/first-article-review?token=abc'), findsOneWidget);
     expect(service.lastReviewDraft, isNotNull);
@@ -244,5 +265,20 @@ void main() {
     expect(service.lastReviewDraft?.participantUserIds, [8, 9]);
     expect(service.lastReviewDraft?.pipelineInstanceId, 501);
     expect(service.lastReviewDraft?.assistAuthorizationId, 99);
+
+    service.statusResult = FirstArticleReviewSessionResult(
+      sessionId: 88,
+      reviewUrl: null,
+      expiresAt: DateTime.parse('2026-04-25T12:05:00Z'),
+      status: 'approved',
+      firstArticleRecordId: 77,
+      reviewerUserId: 3,
+      reviewedAt: DateTime.parse('2026-04-25T12:02:00Z'),
+      reviewRemark: null,
+    );
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pump();
+
+    expect(find.text('首件扫码复核已通过'), findsOneWidget);
   });
 }
