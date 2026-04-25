@@ -5,7 +5,7 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE_DIR / "vendor"))
-sys.path.insert(0, str(BASE_DIR / "app"))
+sys.path.insert(0, str(BASE_DIR))
 
 from app.server import start_server  # noqa: E402
 
