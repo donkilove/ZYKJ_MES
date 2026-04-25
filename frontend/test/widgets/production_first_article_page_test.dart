@@ -9,7 +9,18 @@ class _FakeProductionFirstArticleService extends ProductionService {
   _FakeProductionFirstArticleService()
     : super(AppSession(baseUrl: '', accessToken: ''));
 
-  FirstArticleSubmitRequestInput? lastRequest;
+  _ReviewDraft? lastReviewDraft;
+  FirstArticleReviewSessionResult reviewSessionResult =
+      FirstArticleReviewSessionResult(
+        sessionId: 88,
+        reviewUrl: '/first-article-review?token=abc',
+        expiresAt: DateTime.parse('2026-04-25T12:05:00Z'),
+        status: 'pending',
+        firstArticleRecordId: null,
+        reviewerUserId: null,
+        reviewedAt: null,
+        reviewRemark: null,
+      );
 
   @override
   Future<FirstArticleTemplateListResult> listFirstArticleTemplates({
@@ -79,17 +90,50 @@ class _FakeProductionFirstArticleService extends ProductionService {
   }
 
   @override
-  Future<ProductionActionResult> submitFirstArticle({
+  Future<FirstArticleReviewSessionResult> createFirstArticleReviewSession({
     required int orderId,
-    required FirstArticleSubmitRequestInput request,
+    required int orderProcessId,
+    required int? pipelineInstanceId,
+    required int? templateId,
+    required String checkContent,
+    required String testValue,
+    required List<int> participantUserIds,
+    required int? assistAuthorizationId,
   }) async {
-    lastRequest = request;
-    return ProductionActionResult(
+    lastReviewDraft = _ReviewDraft(
       orderId: orderId,
-      status: 'ok',
-      message: 'ok',
+      orderProcessId: orderProcessId,
+      pipelineInstanceId: pipelineInstanceId,
+      templateId: templateId,
+      checkContent: checkContent,
+      testValue: testValue,
+      participantUserIds: participantUserIds,
+      assistAuthorizationId: assistAuthorizationId,
     );
+    return reviewSessionResult;
   }
+}
+
+class _ReviewDraft {
+  const _ReviewDraft({
+    required this.orderId,
+    required this.orderProcessId,
+    required this.pipelineInstanceId,
+    required this.templateId,
+    required this.checkContent,
+    required this.testValue,
+    required this.participantUserIds,
+    required this.assistAuthorizationId,
+  });
+
+  final int orderId;
+  final int orderProcessId;
+  final int? pipelineInstanceId;
+  final int? templateId;
+  final String checkContent;
+  final String testValue;
+  final List<int> participantUserIds;
+  final int? assistAuthorizationId;
 }
 
 MyOrderItem _buildOrder() {
@@ -135,7 +179,7 @@ MyOrderItem _buildOrder() {
 }
 
 void main() {
-  testWidgets('独立首件录入页支持模板带出参数查看参与人选择与提交', (tester) async {
+  testWidgets('独立首件录入页发起扫码复核并显示等待状态', (tester) async {
     final service = _FakeProductionFirstArticleService();
     await tester.binding.setSurfaceSize(const Size(1200, 1400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -183,22 +227,22 @@ void main() {
     expect(find.text('worker (张三)'), findsOneWidget);
     expect(find.text('helper (李四)'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('不合格'));
-    await tester.tap(find.text('不合格'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.widgetWithText(TextField, '首件检验码'), 'code-fa2');
-    await tester.enterText(find.widgetWithText(TextField, '备注'), '首件备注');
-    await tester.ensureVisible(find.widgetWithText(FilledButton, '提交首件'));
-    await tester.tap(find.widgetWithText(FilledButton, '提交首件'));
+    expect(find.text('首件检验码'), findsNothing);
+    expect(find.text('不合格'), findsNothing);
+
+    await tester.ensureVisible(find.widgetWithText(FilledButton, '发起扫码复核'));
+    await tester.tap(find.widgetWithText(FilledButton, '发起扫码复核'));
     await tester.pumpAndSettle();
 
-    expect(service.lastRequest, isNotNull);
-    expect(service.lastRequest?.templateId, 7);
-    expect(service.lastRequest?.checkContent, '模板检验内容');
-    expect(service.lastRequest?.testValue, '9.86');
-    expect(service.lastRequest?.result, 'failed');
-    expect(service.lastRequest?.participantUserIds, [8, 9]);
-    expect(service.lastRequest?.verificationCode, 'code-fa2');
-    expect(service.lastRequest?.remark, '首件备注');
+    expect(find.text('等待质检扫码复核'), findsOneWidget);
+    expect(find.text('刷新二维码'), findsOneWidget);
+    expect(find.text('/first-article-review?token=abc'), findsOneWidget);
+    expect(service.lastReviewDraft, isNotNull);
+    expect(service.lastReviewDraft?.templateId, 7);
+    expect(service.lastReviewDraft?.checkContent, '模板检验内容');
+    expect(service.lastReviewDraft?.testValue, '9.86');
+    expect(service.lastReviewDraft?.participantUserIds, [8, 9]);
+    expect(service.lastReviewDraft?.pipelineInstanceId, 501);
+    expect(service.lastReviewDraft?.assistAuthorizationId, 99);
   });
 }
