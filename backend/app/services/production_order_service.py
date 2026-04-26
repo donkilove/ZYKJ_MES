@@ -556,39 +556,6 @@ def ensure_sub_orders_visible_quantity(
         )
         return True
 
-    # Backfill newly assigned operators for historical orders.
-    existing_operator_ids = {row.operator_user_id for row in rows}
-    operator_users = _list_operator_users_by_process_code(db, process_row.process_code)
-    missing_operator_users = [
-        user for user in operator_users if user.id not in existing_operator_ids
-    ]
-    if missing_operator_users:
-        for user in missing_operator_users:
-            db.add(
-                ProductionSubOrder(
-                    order_process_id=process_row.id,
-                    operator_user_id=user.id,
-                    assigned_quantity=0,
-                    completed_quantity=0,
-                    status=SUB_ORDER_STATUS_DONE,
-                    is_visible=False,
-                )
-            )
-        db.flush()
-        rows = (
-            db.execute(
-                select(ProductionSubOrder)
-                .where(ProductionSubOrder.order_process_id == process_row.id)
-                .order_by(
-                    ProductionSubOrder.operator_user_id.asc(),
-                    ProductionSubOrder.id.asc(),
-                )
-            )
-            .scalars()
-            .all()
-        )
-        changed = True
-
     assigned_total = sum(row.assigned_quantity for row in rows)
     if target > assigned_total:
         delta = target - assigned_total
@@ -663,7 +630,7 @@ def _backfill_historical_release_quantity(
     return True
 
 
-def _backfill_operator_sub_orders(
+def _backfill_historical_release_sub_orders(
     db: Session,
     *,
     operator_user: User,
@@ -1752,13 +1719,18 @@ def _build_my_order_item(
                 order_process_id=process_row.id,
             )
         first_article_base = (
-            process_row.status in {PROCESS_STATUS_PENDING, PROCESS_STATUS_PARTIAL}
+            process_row.status
+            in {
+                PROCESS_STATUS_PENDING,
+                PROCESS_STATUS_IN_PROGRESS,
+                PROCESS_STATUS_PARTIAL,
+            }
             and sub_order.status == SUB_ORDER_STATUS_PENDING
             and max_producible > 0
             and (not pipeline_process_selected or pipeline_instance is not None)
         )
         end_production_base = (
-            process_row.status == PROCESS_STATUS_IN_PROGRESS
+            process_row.status in {PROCESS_STATUS_IN_PROGRESS, PROCESS_STATUS_PARTIAL}
             and sub_order.status == SUB_ORDER_STATUS_IN_PROGRESS
             and max_producible > 0
             and (not pipeline_process_selected or pipeline_instance is not None)
@@ -1885,7 +1857,7 @@ def _collect_my_order_items(
         if proxy_operator is None:
             raise ValueError("proxy_operator_user_id is invalid")
         # 代理视角需要按目标操作员的工序范围执行同一套历史放行回填。
-        if _backfill_operator_sub_orders(db, operator_user=proxy_operator):
+        if _backfill_historical_release_sub_orders(db, operator_user=proxy_operator):
             db.commit()
         stmt = (
             select(ProductionSubOrder)
@@ -2012,7 +1984,11 @@ def _collect_my_order_items(
             can_first_article = (
                 assist_row.first_article_used_at is None
                 and process_row.status
-                in {PROCESS_STATUS_PENDING, PROCESS_STATUS_PARTIAL}
+                in {
+                    PROCESS_STATUS_PENDING,
+                    PROCESS_STATUS_IN_PROGRESS,
+                    PROCESS_STATUS_PARTIAL,
+                }
                 and sub_order.status == SUB_ORDER_STATUS_PENDING
                 and max_producible > 0
                 and is_pipeline_start_allowed_for_process(
@@ -2021,7 +1997,8 @@ def _collect_my_order_items(
             )
             can_end_production = (
                 assist_row.end_production_used_at is None
-                and process_row.status == PROCESS_STATUS_IN_PROGRESS
+                and process_row.status
+                in {PROCESS_STATUS_IN_PROGRESS, PROCESS_STATUS_PARTIAL}
                 and sub_order.status == SUB_ORDER_STATUS_IN_PROGRESS
                 and max_producible > 0
                 and is_pipeline_end_allowed_for_process(
@@ -2042,8 +2019,8 @@ def _collect_my_order_items(
                 )
             )
     else:
-        # Historical orders may have missing sub-order rows if operators were added later.
-        if _backfill_operator_sub_orders(db, operator_user=current_user):
+        # Historical orders may need release quantity backfill for existing sub-orders.
+        if _backfill_historical_release_sub_orders(db, operator_user=current_user):
             db.commit()
 
         stmt = (
