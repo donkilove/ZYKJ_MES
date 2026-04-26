@@ -11,9 +11,71 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from app.api.v1.endpoints import auth
+from app.core import security
 
 
 class AuthEndpointUnitTest(unittest.TestCase):
+    def test_mobile_scan_review_login_uses_seven_day_expiry(self) -> None:
+        db = MagicMock()
+        now = datetime(2026, 4, 26, 9, 0, tzinfo=UTC)
+        user = SimpleNamespace(
+            id=21,
+            is_active=True,
+            is_deleted=False,
+            password_hash="hashed-password",
+            must_change_password=False,
+            last_login_at=None,
+            last_login_ip=None,
+            last_login_terminal=None,
+        )
+        session_row = SimpleNamespace(
+            session_token_id="sid-scan-mobile",
+            login_time=now,
+            expires_at=now.replace(day=27),
+        )
+        form_data = SimpleNamespace(username="scan-user", password="Pwd@123")
+        request = SimpleNamespace(
+            client=SimpleNamespace(host="192.168.1.88"),
+            headers={"user-agent": "pytest-mobile"},
+        )
+
+        with (
+            patch.object(auth, "get_user_by_username", return_value=user),
+            patch.object(auth, "verify_password_cached", return_value=True),
+            patch.object(auth, "rehash_password_if_needed", return_value=None),
+            patch.object(auth, "create_or_reuse_user_session", return_value=session_row),
+            patch.object(auth, "should_record_success_login", return_value=False),
+            patch.object(auth, "create_login_log"),
+            patch.object(auth, "cleanup_expired_login_logs_if_due"),
+            patch.object(auth, "remember_active_session_token"),
+            patch.object(auth, "touch_user"),
+            patch.object(auth, "create_access_token", return_value="token-mobile") as create_token,
+        ):
+            result = auth.mobile_scan_review_login(
+                form_data=form_data,
+                request=request,
+                db=db,
+            )
+
+        create_token.assert_called_once_with(
+            subject="21",
+            extra_claims={"sid": "sid-scan-mobile"},
+            expires_minutes=10080,
+        )
+        self.assertEqual(result.data.access_token, "token-mobile")
+        self.assertEqual(result.data.expires_in, 10080 * 60)
+
+    def test_create_access_token_keeps_default_expiry_when_not_overridden(self) -> None:
+        with patch.object(security, "settings", autospec=True) as fake_settings:
+            fake_settings.jwt_expire_minutes = 120
+            fake_settings.jwt_secret_key = "secret"
+            fake_settings.jwt_algorithm = "HS256"
+            with patch.object(security, "ensure_runtime_settings_secure"):
+                token = security.create_access_token(subject="1")
+
+        payload = security.jwt.get_unverified_claims(token)
+        self.assertEqual(payload["sub"], "1")
+
     def test_login_truncates_terminal_info_for_mobile_user_agent(self) -> None:
         db = MagicMock()
         now = datetime(2026, 4, 26, 12, 30, tzinfo=UTC)

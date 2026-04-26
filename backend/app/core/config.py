@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     jwt_secret_key: str = "replace_with_a_strong_secret"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 120
+    mobile_scan_review_jwt_expire_minutes: int = 10080
 
     model_config = SettingsConfigDict(
         env_file=str(DEFAULT_ENV_FILE),

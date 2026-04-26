@@ -74,11 +74,33 @@ def _to_registration_item(request: RegistrationRequest) -> RegistrationRequestIt
     )
 
 
-@router.post("/login", response_model=ApiResponse[LoginResult])
-def login(
+def _build_login_success_response(
+    *,
+    user: User,
+    session_row: object,
+    expires_minutes: int,
+) -> ApiResponse[LoginResult]:
+    token = create_access_token(
+        subject=str(user.id),
+        extra_claims={"sid": session_row.session_token_id},
+        expires_minutes=expires_minutes,
+    )
+    return success_response(
+        LoginResult(
+            access_token=token,
+            token_type="bearer",
+            expires_in=expires_minutes * 60,
+            must_change_password=user.must_change_password,
+        )
+    )
+
+
+def _login_with_expiry(
+    *,
     form_data: OAuth2PasswordRequestForm = Depends(),
-    request: Request = None,
-    db: Session = Depends(get_db),
+    request: Request | None,
+    db: Session,
+    expires_minutes: int,
 ) -> ApiResponse[LoginResult]:
     username = form_data.username.strip()
     ip_address = request.client.host if request and request.client else None
@@ -191,17 +213,38 @@ def login(
     )
 
     touch_user(user.id)
-    token = create_access_token(
-        subject=str(user.id),
-        extra_claims={"sid": session_row.session_token_id},
+    return _build_login_success_response(
+        user=user,
+        session_row=session_row,
+        expires_minutes=expires_minutes,
     )
-    return success_response(
-        LoginResult(
-            access_token=token,
-            token_type="bearer",
-            expires_in=settings.jwt_expire_minutes * 60,
-            must_change_password=user.must_change_password,
-        )
+
+
+@router.post("/login", response_model=ApiResponse[LoginResult])
+def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    request: Request = None,
+    db: Session = Depends(get_db),
+) -> ApiResponse[LoginResult]:
+    return _login_with_expiry(
+        form_data=form_data,
+        request=request,
+        db=db,
+        expires_minutes=settings.jwt_expire_minutes,
+    )
+
+
+@router.post("/mobile-scan-review-login", response_model=ApiResponse[LoginResult])
+def mobile_scan_review_login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    request: Request = None,
+    db: Session = Depends(get_db),
+) -> ApiResponse[LoginResult]:
+    return _login_with_expiry(
+        form_data=form_data,
+        request=request,
+        db=db,
+        expires_minutes=settings.mobile_scan_review_jwt_expire_minutes,
     )
 
 

@@ -52,9 +52,15 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def create_access_token(subject: str, extra_claims: dict[str, Any] | None = None) -> str:
+def create_access_token(
+    subject: str,
+    extra_claims: dict[str, Any] | None = None,
+    *,
+    expires_minutes: int | None = None,
+) -> str:
     ensure_runtime_settings_secure()
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
+    resolved_minutes = expires_minutes or settings.jwt_expire_minutes
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=resolved_minutes)
     payload: dict[str, Any] = {"sub": subject, "exp": expires_at}
     if extra_claims:
         payload.update(extra_claims)
