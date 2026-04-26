@@ -167,10 +167,7 @@ class _FirstArticleScanReviewMobilePageState
     }
     try {
       await _loadDetailWithSession(
-        AppSession(
-          baseUrl: widget.baseUrl,
-          accessToken: saved.accessToken,
-        ),
+        AppSession(baseUrl: widget.baseUrl, accessToken: saved.accessToken),
         clearOnAuthFailure: true,
       );
     } catch (error) {
@@ -220,15 +217,16 @@ class _FirstArticleScanReviewMobilePageState
         baseUrl: widget.baseUrl,
         accessToken: loginResult.token,
       );
-      await _loadDetailWithSession(
-        session,
-        clearOnAuthFailure: false,
-      );
+      await _loadDetailWithSession(session, clearOnAuthFailure: false);
       await _loginStorage.write(
         ScanReviewMobileLoginState(
           accessToken: loginResult.token,
           expiresAt: DateTime.now().add(
-            Duration(seconds: loginResult.expiresIn > 0 ? loginResult.expiresIn : 7 * 24 * 60 * 60),
+            Duration(
+              seconds: loginResult.expiresIn > 0
+                  ? loginResult.expiresIn
+                  : 7 * 24 * 60 * 60,
+            ),
           ),
           username: username,
         ),

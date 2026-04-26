@@ -27,22 +27,22 @@ class AuthService {
       username: username,
       password: password,
     );
-    return (
-      token: result.token,
-      mustChangePassword: result.mustChangePassword,
-    );
+    return (token: result.token, mustChangePassword: result.mustChangePassword);
   }
 
-  Future<({String token, bool mustChangePassword, int expiresIn})> _performLogin(
+  Future<({String token, bool mustChangePassword, int expiresIn})>
+  _performLogin(
     Uri uri, {
     required String username,
     required String password,
   }) async {
-    final response = await http.post(
-      uri,
-      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-      body: {'username': username, 'password': password},
-    ).timeout(const Duration(seconds: 30));
+    final response = await http
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          body: {'username': username, 'password': password},
+        )
+        .timeout(const Duration(seconds: 30));
 
     final decoded = _decodeBody(response.body);
     if (response.statusCode != 200) {
@@ -57,7 +57,8 @@ class AuthService {
     if (token == null || token.isEmpty) {
       throw ApiException('登录失败：缺少访问令牌', response.statusCode);
     }
-    final mustChangePassword = (data?['must_change_password'] as bool?) ?? false;
+    final mustChangePassword =
+        (data?['must_change_password'] as bool?) ?? false;
     final expiresIn = (data?['expires_in'] as int?) ?? 0;
     return (
       token: token,
@@ -72,11 +73,13 @@ class AuthService {
     required String password,
   }) async {
     final uri = Uri.parse('$baseUrl/auth/register');
-    final response = await http.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'account': account, 'password': password}),
-    ).timeout(const Duration(seconds: 30));
+    final response = await http
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'account': account, 'password': password}),
+        )
+        .timeout(const Duration(seconds: 30));
 
     final decoded = _decodeBody(response.body);
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -89,10 +92,9 @@ class AuthService {
 
   Future<List<String>> listAccounts({required String baseUrl}) async {
     final uri = Uri.parse('$baseUrl/auth/accounts');
-    final response = await http.get(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-    ).timeout(const Duration(seconds: 30));
+    final response = await http
+        .get(uri, headers: {'Content-Type': 'application/json'})
+        .timeout(const Duration(seconds: 30));
 
     final decoded = _decodeBody(response.body);
     if (response.statusCode != 200) {
@@ -116,13 +118,15 @@ class AuthService {
     required String accessToken,
   }) async {
     final uri = Uri.parse('$baseUrl/auth/me');
-    final response = await http.get(
-      uri,
-      headers: {
-        'Authorization': 'Bearer $accessToken',
-        'Content-Type': 'application/json',
-      },
-    ).timeout(const Duration(seconds: 30));
+    final response = await http
+        .get(
+          uri,
+          headers: {
+            'Authorization': 'Bearer $accessToken',
+            'Content-Type': 'application/json',
+          },
+        )
+        .timeout(const Duration(seconds: 30));
 
     final decoded = _decodeBody(response.body);
     if (response.statusCode != 200) {
@@ -144,13 +148,15 @@ class AuthService {
     required String accessToken,
   }) async {
     final uri = Uri.parse('$baseUrl/auth/logout');
-    final response = await http.post(
-      uri,
-      headers: {
-        'Authorization': 'Bearer $accessToken',
-        'Content-Type': 'application/json',
-      },
-    ).timeout(const Duration(seconds: 30));
+    final response = await http
+        .post(
+          uri,
+          headers: {
+            'Authorization': 'Bearer $accessToken',
+            'Content-Type': 'application/json',
+          },
+        )
+        .timeout(const Duration(seconds: 30));
 
     final decoded = _decodeBody(response.body);
     if (response.statusCode < 200 || response.statusCode >= 300) {
