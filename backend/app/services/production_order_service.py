@@ -19,6 +19,7 @@ from app.core.production_constants import (
     PROCESS_STATUS_IN_PROGRESS,
     PROCESS_STATUS_PARTIAL,
     PROCESS_STATUS_PENDING,
+    REPAIR_STATUS_IN_REPAIR,
     SUB_ORDER_STATUS_DONE,
     SUB_ORDER_STATUS_IN_PROGRESS,
     SUB_ORDER_STATUS_PENDING,
@@ -34,10 +35,12 @@ from app.core.authz_catalog import (
 )
 from app.core.rbac import ROLE_OPERATOR, ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN
 from app.models.process import Process
+from app.models.first_article_review_session import FirstArticleReviewSession
 from app.models.order_sub_order_pipeline_instance import OrderSubOrderPipelineInstance
 from app.models.production_assist_authorization import ProductionAssistAuthorization
 from app.models.process_stage import ProcessStage
 from app.models.product import Product
+from app.models.repair_order import RepairOrder
 from app.models.role import Role
 from app.models.supplier import Supplier
 from app.models.product_process_template import ProductProcessTemplate
@@ -1634,6 +1637,26 @@ def complete_order_manually(
 ) -> ProductionOrder:
     if order.status == ORDER_STATUS_COMPLETED:
         return order
+
+    # 4C：订单还有 in_repair 维修单时拒绝手工完工，避免维修回流与手工收口互相打架。
+    pending_repairs = (
+        db.execute(
+            select(RepairOrder.repair_order_code)
+            .where(
+                RepairOrder.source_order_id == order.id,
+                RepairOrder.status == REPAIR_STATUS_IN_REPAIR,
+            )
+            .order_by(RepairOrder.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    if pending_repairs:
+        raise RuntimeError(
+            "Order has in-progress repair orders that must be completed first: "
+            + ", ".join(pending_repairs)
+        )
+
     rows = (
         db.execute(
             select(ProductionOrderProcess)
@@ -1657,6 +1680,12 @@ def complete_order_manually(
     order.status = ORDER_STATUS_COMPLETED
     order.current_process_code = None
 
+    cascaded = _cascade_close_order_relations(
+        db,
+        order_id=order.id,
+        reason="order_completed_manual",
+    )
+
     add_order_event_log(
         db,
         order_id=order.id,
@@ -1664,6 +1693,15 @@ def complete_order_manually(
         event_title="订单手工完工",
         event_detail=f"订单 {order.order_code} 已被手工标记为完工。",
         operator_user_id=operator.id,
+        payload={
+            "cancelled_review_session_ids": cascaded["cancelled_review_session_ids"],
+            "consumed_assist_authorization_ids": cascaded[
+                "consumed_assist_authorization_ids"
+            ],
+            "invalidated_pipeline_instance_count": cascaded[
+                "invalidated_pipeline_instance_count"
+            ],
+        },
     )
     db.commit()
     db.refresh(order)
@@ -1676,6 +1714,70 @@ def complete_order_manually(
         summary=f"订单 {order.order_code} 已被手工标记完工，请核对收尾数据。",
     )
     return order
+
+
+def _cascade_close_order_relations(
+    db: Session,
+    *,
+    order_id: int,
+    reason: str,
+) -> dict[str, object]:
+    now = datetime.now(UTC)
+
+    # 1A：把仍 pending 的首件扫码会话置为 cancelled，避免会话依然能被扫码提交。
+    review_session_ids = list(
+        db.execute(
+            select(FirstArticleReviewSession.id)
+            .where(
+                FirstArticleReviewSession.order_id == order_id,
+                FirstArticleReviewSession.status == "pending",
+            )
+            .order_by(FirstArticleReviewSession.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    if review_session_ids:
+        db.execute(
+            update(FirstArticleReviewSession)
+            .where(FirstArticleReviewSession.id.in_(review_session_ids))
+            .values(status="cancelled", updated_at=now)
+        )
+
+    # 2A：把 approved 但未 consumed 的代班授权置为 consumed，避免授权挂死阻塞重挂。
+    assist_authorization_ids = list(
+        db.execute(
+            select(ProductionAssistAuthorization.id)
+            .where(
+                ProductionAssistAuthorization.order_id == order_id,
+                ProductionAssistAuthorization.status == ASSIST_STATUS_APPROVED,
+            )
+            .order_by(ProductionAssistAuthorization.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    if assist_authorization_ids:
+        db.execute(
+            update(ProductionAssistAuthorization)
+            .where(
+                ProductionAssistAuthorization.id.in_(assist_authorization_ids)
+            )
+            .values(status=ASSIST_STATUS_CONSUMED, consumed_at=now, updated_at=now)
+        )
+
+    # 3A：直接复用既有 helper 失活仍生效的并行实例。
+    invalidated_count = _invalidate_pipeline_instances_for_order(
+        db,
+        order_id=order_id,
+        reason=reason,
+    )
+
+    return {
+        "cancelled_review_session_ids": review_session_ids,
+        "consumed_assist_authorization_ids": assist_authorization_ids,
+        "invalidated_pipeline_instance_count": invalidated_count,
+    }
 
 
 def _build_my_order_item(
