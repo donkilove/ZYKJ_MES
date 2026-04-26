@@ -245,6 +245,7 @@
 
           <div class="actions">
             <button id="reload-button" class="secondary" type="button">重新加载</button>
+            <button id="switch-account-button" class="secondary" type="button">切换账号</button>
             <button id="submit-button" type="button">提交复核</button>
           </div>
         </section>
@@ -252,13 +253,21 @@
     </main>
 
     <script>
+      const STORAGE_KEYS = {
+        accessToken: "firstArticleScanReview.accessToken",
+        expiresAt: "firstArticleScanReview.expiresAt",
+        username: "firstArticleScanReview.username",
+      };
       const token = new URLSearchParams(window.location.search).get("token") || "";
       const messageNode = document.getElementById("message");
       const loginForm = document.getElementById("login-form");
       const loginButton = document.getElementById("login-button");
       const reviewPanel = document.getElementById("review-panel");
       const reloadButton = document.getElementById("reload-button");
+      const switchAccountButton = document.getElementById("switch-account-button");
       const submitButton = document.getElementById("submit-button");
+      const usernameInput = document.getElementById("username");
+      const passwordInput = document.getElementById("password");
       const remarkInput = document.getElementById("remark");
       let accessToken = "";
       let submitted = false;
@@ -282,6 +291,42 @@
         loginForm.classList.toggle("hidden", show);
       }
 
+      function isAuthError(error) {
+        return error && (error.statusCode === 401 || error.statusCode === 403);
+      }
+
+      function saveLoginState({ accessToken, expiresIn, username }) {
+        const expiresAt = Date.now() + Number(expiresIn || 0) * 1000;
+        localStorage.setItem(STORAGE_KEYS.accessToken, accessToken);
+        localStorage.setItem(STORAGE_KEYS.expiresAt, String(expiresAt));
+        localStorage.setItem(STORAGE_KEYS.username, username || "");
+      }
+
+      function clearLoginState() {
+        localStorage.removeItem(STORAGE_KEYS.accessToken);
+        localStorage.removeItem(STORAGE_KEYS.expiresAt);
+        localStorage.removeItem(STORAGE_KEYS.username);
+        accessToken = "";
+        submitted = false;
+        showReviewPanel(false);
+      }
+
+      function restoreLoginState() {
+        const savedToken = localStorage.getItem(STORAGE_KEYS.accessToken) || "";
+        const rawExpiresAt = localStorage.getItem(STORAGE_KEYS.expiresAt) || "";
+        const expiresAt = Number(rawExpiresAt);
+        if (!savedToken || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+          clearLoginState();
+          return false;
+        }
+        accessToken = savedToken;
+        const savedUsername = localStorage.getItem(STORAGE_KEYS.username) || "";
+        if (savedUsername) {
+          usernameInput.value = savedUsername;
+        }
+        return true;
+      }
+
       async function requestJson(url, options) {
         const init = Object.assign({ method: "GET" }, options || {});
         const headers = Object.assign({}, init.headers || {});
@@ -297,7 +342,9 @@
             (payload && payload.detail) ||
             (payload && payload.message) ||
             "请求失败";
-          throw new Error(detail);
+          const error = new Error(detail);
+          error.statusCode = response.status;
+          throw error;
         }
         return payload && Object.prototype.hasOwnProperty.call(payload, "data")
           ? payload.data
@@ -320,9 +367,13 @@
           document.getElementById("operator-name").textContent = detail.operator_username || "-";
           document.getElementById("check-content").textContent = detail.check_content || "-";
           document.getElementById("test-value").textContent = detail.test_value || "-";
+          submitted = false;
           setMessage("", "success");
           showReviewPanel(true);
         } catch (error) {
+          if (isAuthError(error)) {
+            clearLoginState();
+          }
           setMessage(error.message || "加载复核信息失败", "error");
         } finally {
           setBusy(false);
@@ -341,7 +392,7 @@
         body.set("username", document.getElementById("username").value.trim());
         body.set("password", document.getElementById("password").value);
         try {
-          const result = await requestJson("/api/v1/auth/login", {
+          const result = await requestJson("/api/v1/auth/mobile-scan-review-login", {
             method: "POST",
             headers: {
               "Content-Type": "application/x-www-form-urlencoded",
@@ -352,6 +403,11 @@
             throw new Error("请先在主系统修改密码后再复核");
           }
           accessToken = result.access_token || "";
+          saveLoginState({
+            accessToken,
+            expiresIn: result.expires_in,
+            username: body.get("username") || "",
+          });
           await loadDetail();
         } catch (error) {
           accessToken = "";
@@ -365,6 +421,12 @@
           return;
         }
         loadDetail();
+      });
+
+      switchAccountButton.addEventListener("click", () => {
+        clearLoginState();
+        passwordInput.value = "";
+        setMessage("", "success");
       });
 
       submitButton.addEventListener("click", async () => {
@@ -390,14 +452,29 @@
           setMessage("复核已提交", "success");
           setBusy(false);
         } catch (error) {
+          if (isAuthError(error)) {
+            clearLoginState();
+            setMessage("登录已失效，请重新登录后再提交", "error");
+            setBusy(false);
+            return;
+          }
           setMessage(error.message || "提交复核失败", "error");
           setBusy(false);
         }
       });
 
-      if (!token) {
-        setMessage("扫码链接缺少复核令牌", "error");
+      async function bootstrapPage() {
+        if (!token) {
+          setMessage("扫码链接缺少复核令牌", "error");
+          return;
+        }
+        if (!restoreLoginState()) {
+          return;
+        }
+        await loadDetail();
       }
+
+      bootstrapPage();
     </script>
   </body>
 </html>

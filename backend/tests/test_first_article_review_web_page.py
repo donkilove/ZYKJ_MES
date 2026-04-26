@@ -27,7 +27,7 @@ class FirstArticleReviewWebPageTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertIn("text/html", response.headers.get("content-type", ""))
         self.assertIn("首件扫码复核", response.text)
-        self.assertIn("/api/v1/auth/login", response.text)
+        self.assertIn("/api/v1/auth/mobile-scan-review-login", response.text)
 
     def test_build_first_article_review_url_uses_backend_origin(self) -> None:
         request = Request(
@@ -102,6 +102,16 @@ class FirstArticleReviewWebPageTest(unittest.TestCase):
                 ),
                 "http://192.168.1.54:8000/first-article-review?token=abc",
             )
+
+    def test_first_article_review_page_contains_persistent_login_hooks(self) -> None:
+        client = TestClient(app)
+        response = client.get("/first-article-review?token=abc")
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertIn("/api/v1/auth/mobile-scan-review-login", response.text)
+        self.assertIn("localStorage", response.text)
+        self.assertIn("firstArticleScanReview.accessToken", response.text)
+        self.assertIn("switch-account-button", response.text)
 
 
 if __name__ == "__main__":
