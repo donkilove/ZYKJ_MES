@@ -651,7 +651,7 @@ Future<void> _pumpPage(
   await tester.pumpWidget(
     MaterialApp(
       home: Scaffold(
-        body: LegacyLegacyUserManagementPage(
+        body: UserManagementPage(
           session: AppSession(baseUrl: 'http://test', accessToken: 'token'),
           onLogout: onLogout ?? () {},
           canCreateUser: canCreateUser,
@@ -2564,7 +2564,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: LegacyLegacyUserManagementPage(
+          body: UserManagementPage(
             session: AppSession(baseUrl: 'http://test', accessToken: 'token'),
             onLogout: () {
               logoutCalls += 1;

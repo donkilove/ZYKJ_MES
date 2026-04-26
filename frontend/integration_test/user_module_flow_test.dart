@@ -169,8 +169,8 @@ void main() {
               },
               preferredTabCode: 'account_settings',
               tabPageBuilder: (tabCode, child) {
-                if (child is LegacyLegacyUserManagementPage) {
-                  return LegacyLegacyUserManagementPage(
+                if (child is UserManagementPage) {
+                  return UserManagementPage(
                     session: child.session,
                     onLogout: child.onLogout,
                     canCreateUser: child.canCreateUser,

@@ -90,7 +90,7 @@ void main() {
       '功能权限配置',
     ]);
     expect(capturedChildren, {
-      'user_management': LegacyLegacyUserManagementPage,
+      'user_management': UserManagementPage,
       'registration_approval': RegistrationApprovalPage,
       'role_management': RoleManagementPage,
       'audit_log': AuditLogPage,
@@ -257,7 +257,7 @@ void main() {
   });
 
   testWidgets('用户管理页存在时会透传跳转到角色管理回调', (tester) async {
-    LegacyLegacyUserManagementPage? userManagementPage;
+    UserManagementPage? userManagementPage;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -269,7 +269,7 @@ void main() {
             capabilityCodes: const <String>{},
             preferredTabCode: 'user_management',
             tabPageBuilder: (tabCode, child) {
-              if (child is LegacyLegacyUserManagementPage) {
+              if (child is UserManagementPage) {
                 userManagementPage = child;
               }
               return Center(child: Text('tab:$tabCode'));
@@ -290,7 +290,7 @@ void main() {
   });
 
   testWidgets('角色管理页签不可见时不提供用户管理跳转回调', (tester) async {
-    LegacyLegacyUserManagementPage? userManagementPage;
+    UserManagementPage? userManagementPage;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -302,7 +302,7 @@ void main() {
             capabilityCodes: const <String>{},
             preferredTabCode: 'user_management',
             tabPageBuilder: (tabCode, child) {
-              if (child is LegacyLegacyUserManagementPage) {
+              if (child is UserManagementPage) {
                 userManagementPage = child;
               }
               return Center(child: Text('tab:$tabCode'));

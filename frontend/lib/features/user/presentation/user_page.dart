@@ -165,7 +165,7 @@ class _UserPageState extends State<UserPage> {
               title: '用户管理',
               child: _buildTabChild(
                 code,
-                LegacyLegacyUserManagementPage(
+                UserManagementPage(
                   session: widget.session,
                   onLogout: widget.onLogout,
                   canCreateUser: _canCreateUser,

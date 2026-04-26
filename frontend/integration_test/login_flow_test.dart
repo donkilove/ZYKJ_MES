@@ -146,7 +146,7 @@ void main() {
       userService: userService,
       homeBuilder: (session) {
         return Scaffold(
-          body: LegacyLegacyUserManagementPage(
+          body: UserManagementPage(
             session: session,
             onLogout: () {},
             canCreateUser: true,
@@ -230,7 +230,7 @@ void main() {
               return const Scaffold(body: Center(child: Text('已退出登录态')));
             }
             return Scaffold(
-              body: LegacyLegacyUserManagementPage(
+              body: UserManagementPage(
                 session: session,
                 onLogout: () {
                   setState(() {
@@ -932,7 +932,7 @@ void main() {
       userService: userService,
       homeBuilder: (session) {
         return Scaffold(
-          body: LegacyLegacyUserManagementPage(
+          body: UserManagementPage(
             session: session,
             onLogout: () {},
             canCreateUser: true,

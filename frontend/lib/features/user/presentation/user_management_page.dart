@@ -30,8 +30,8 @@ typedef UserExportFileSaver =
       required String format,
     });
 
-class LegacyLegacyUserManagementPage extends StatefulWidget {
-  const LegacyLegacyUserManagementPage({
+class UserManagementPage extends StatefulWidget {
+  const UserManagementPage({
     super.key,
     required this.session,
     required this.onLogout,
@@ -65,12 +65,12 @@ class LegacyLegacyUserManagementPage extends StatefulWidget {
   final bool isCurrentTabVisible;
 
   @override
-  State<LegacyLegacyUserManagementPage> createState() =>
-      _LegacyLegacyUserManagementPageState();
+  State<UserManagementPage> createState() =>
+      _UserManagementPageState();
 }
 
-class _LegacyLegacyUserManagementPageState
-    extends State<LegacyLegacyUserManagementPage> {
+class _UserManagementPageState
+    extends State<UserManagementPage> {
   static const String _roleSystemAdmin = 'system_admin';
   static const String _deletedScopeActive = 'active';
   static const String _deletedScopeDeleted = 'deleted';
@@ -170,7 +170,7 @@ class _LegacyLegacyUserManagementPageState
   }
 
   @override
-  void didUpdateWidget(covariant LegacyLegacyUserManagementPage oldWidget) {
+  void didUpdateWidget(covariant UserManagementPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.isCurrentTabVisible && !oldWidget.isCurrentTabVisible) {
       _currentOnlineRefreshDelay = _onlineRefreshInterval;
