@@ -10,7 +10,7 @@ import 'package:mes_client/core/services/export_file_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 import 'package:mes_client/core/widgets/locked_form_dialog.dart';
-import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_create_dialog.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_edit_dialog.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_export_task_dialog.dart';
@@ -1016,7 +1016,7 @@ class _UserManagementPageState
         myUserId: _myUserId,
         onAction: _handleUserAction,
       ),
-      pagination: SimplePaginationBar(
+      pagination: MesPaginationBar(
         page: _userPage,
         totalPages: _userTotalPages,
         total: _total,
