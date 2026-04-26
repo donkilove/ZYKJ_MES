@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/auth/services/auth_service.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
+import 'package:mes_client/features/production/presentation/scan_review_mobile_login_storage.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 
 class FirstArticleScanReviewMobileApp extends StatelessWidget {
@@ -34,6 +37,7 @@ class FirstArticleScanReviewMobilePage extends StatefulWidget {
     required this.token,
     this.authService,
     this.productionServiceFactory,
+    this.loginStorage,
   });
 
   final String baseUrl;
@@ -41,6 +45,7 @@ class FirstArticleScanReviewMobilePage extends StatefulWidget {
   final AuthService? authService;
   final ProductionService Function(AppSession session)?
   productionServiceFactory;
+  final ScanReviewMobileLoginStorage? loginStorage;
 
   @override
   State<FirstArticleScanReviewMobilePage> createState() =>
@@ -54,6 +59,8 @@ class _FirstArticleScanReviewMobilePageState
   final TextEditingController _remarkController = TextEditingController();
 
   late final AuthService _authService;
+  late final ScanReviewMobileLoginStorage _loginStorage;
+  AppSession? _session;
   ProductionService? _productionService;
   FirstArticleReviewSessionDetail? _detail;
   String _reviewResult = 'passed';
@@ -66,9 +73,13 @@ class _FirstArticleScanReviewMobilePageState
   void initState() {
     super.initState();
     _authService = widget.authService ?? AuthService();
+    _loginStorage =
+        widget.loginStorage ?? SharedPreferencesScanReviewMobileLoginStorage();
     if (widget.token.trim().isEmpty) {
       _message = '扫码链接缺少复核令牌';
+      return;
     }
+    unawaited(_restoreLoginState());
   }
 
   @override
@@ -86,6 +97,97 @@ class _FirstArticleScanReviewMobilePageState
     return error.toString();
   }
 
+  bool _isAuthFailure(Object error) {
+    return error is ApiException &&
+        (error.statusCode == 401 || error.statusCode == 403);
+  }
+
+  Future<void> _clearLoginState({String message = ''}) async {
+    await _loginStorage.clear();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _session = null;
+      _productionService = null;
+      _detail = null;
+      _loggedIn = false;
+      _submitted = false;
+      _loading = false;
+      _message = message;
+      _reviewResult = 'passed';
+      _remarkController.clear();
+      _passwordController.clear();
+    });
+  }
+
+  Future<void> _loadDetailWithSession(
+    AppSession session, {
+    required bool clearOnAuthFailure,
+  }) async {
+    final service =
+        widget.productionServiceFactory?.call(session) ??
+        ProductionService(session);
+    try {
+      final detail = await service.getFirstArticleReviewSessionDetail(
+        token: widget.token,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _session = session;
+        _productionService = service;
+        _detail = detail;
+        _loggedIn = true;
+        _submitted = false;
+        _message = '';
+      });
+    } catch (error) {
+      if (clearOnAuthFailure && _isAuthFailure(error)) {
+        await _clearLoginState(message: '登录已失效，请重新登录');
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _restoreLoginState() async {
+    final saved = await _loginStorage.read();
+    if (saved == null || widget.token.trim().isEmpty) {
+      return;
+    }
+    if ((saved.username ?? '').trim().isNotEmpty) {
+      _usernameController.text = saved.username!.trim();
+    }
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _message = '';
+      });
+    }
+    try {
+      await _loadDetailWithSession(
+        AppSession(
+          baseUrl: widget.baseUrl,
+          accessToken: saved.accessToken,
+        ),
+        clearOnAuthFailure: true,
+      );
+    } catch (error) {
+      if (!_isAuthFailure(error) && mounted) {
+        setState(() {
+          _message = _errorMessage(error);
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
+
   Future<void> _loginAndLoadDetail() async {
     final username = _usernameController.text.trim();
     final password = _passwordController.text;
@@ -100,7 +202,7 @@ class _FirstArticleScanReviewMobilePageState
       _message = '';
     });
     try {
-      final loginResult = await _authService.login(
+      final loginResult = await _authService.mobileScanReviewLogin(
         baseUrl: widget.baseUrl,
         username: username,
         password: password,
@@ -118,20 +220,19 @@ class _FirstArticleScanReviewMobilePageState
         baseUrl: widget.baseUrl,
         accessToken: loginResult.token,
       );
-      final service =
-          widget.productionServiceFactory?.call(session) ??
-          ProductionService(session);
-      final detail = await service.getFirstArticleReviewSessionDetail(
-        token: widget.token,
+      await _loadDetailWithSession(
+        session,
+        clearOnAuthFailure: false,
       );
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _productionService = service;
-        _detail = detail;
-        _loggedIn = true;
-      });
+      await _loginStorage.write(
+        ScanReviewMobileLoginState(
+          accessToken: loginResult.token,
+          expiresAt: DateTime.now().add(
+            Duration(seconds: loginResult.expiresIn > 0 ? loginResult.expiresIn : 7 * 24 * 60 * 60),
+          ),
+          username: username,
+        ),
+      );
     } catch (error) {
       if (!mounted) {
         return;
@@ -174,6 +275,10 @@ class _FirstArticleScanReviewMobilePageState
         _message = '复核已提交';
       });
     } catch (error) {
+      if (_isAuthFailure(error)) {
+        await _clearLoginState(message: '登录已失效，请重新登录后再提交');
+        return;
+      }
       if (!mounted) {
         return;
       }
@@ -278,6 +383,13 @@ class _FirstArticleScanReviewMobilePageState
           ),
         ),
         const SizedBox(height: 16),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: _loading ? null : () => _clearLoginState(),
+            child: const Text('切换账号'),
+          ),
+        ),
         FilledButton(
           onPressed: _loading || _submitted ? null : _submitReview,
           child: Text(_loading ? '提交中...' : '提交复核'),

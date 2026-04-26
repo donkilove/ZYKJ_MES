@@ -6,12 +6,38 @@ import 'package:mes_client/core/models/current_user.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 
 class AuthService {
+  Future<({String token, bool mustChangePassword, int expiresIn})>
+  mobileScanReviewLogin({
+    required String baseUrl,
+    required String username,
+    required String password,
+  }) async {
+    final uri = Uri.parse('$baseUrl/auth/mobile-scan-review-login');
+    return _performLogin(uri, username: username, password: password);
+  }
+
   Future<({String token, bool mustChangePassword})> login({
     required String baseUrl,
     required String username,
     required String password,
   }) async {
     final uri = Uri.parse('$baseUrl/auth/login');
+    final result = await _performLogin(
+      uri,
+      username: username,
+      password: password,
+    );
+    return (
+      token: result.token,
+      mustChangePassword: result.mustChangePassword,
+    );
+  }
+
+  Future<({String token, bool mustChangePassword, int expiresIn})> _performLogin(
+    Uri uri, {
+    required String username,
+    required String password,
+  }) async {
     final response = await http.post(
       uri,
       headers: {'Content-Type': 'application/x-www-form-urlencoded'},
@@ -32,7 +58,12 @@ class AuthService {
       throw ApiException('登录失败：缺少访问令牌', response.statusCode);
     }
     final mustChangePassword = (data?['must_change_password'] as bool?) ?? false;
-    return (token: token, mustChangePassword: mustChangePassword);
+    final expiresIn = (data?['expires_in'] as int?) ?? 0;
+    return (
+      token: token,
+      mustChangePassword: mustChangePassword,
+      expiresIn: expiresIn,
+    );
   }
 
   Future<void> register({
