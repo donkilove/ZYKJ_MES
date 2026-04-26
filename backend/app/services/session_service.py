@@ -32,6 +32,7 @@ _SESSION_ACTIVE_LOCAL_CACHE_LOCK = RLock()
 _SUCCESS_LOGIN_LOG_LOCAL_CACHE: dict[str, float] = {}
 _SUCCESS_LOGIN_LOG_LOCAL_CACHE_LOCK = RLock()
 _SUCCESS_LOGIN_LOG_MIN_INTERVAL_SECONDS = 60
+_TERMINAL_INFO_MAX_LENGTH = 255
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +127,13 @@ def _now_utc() -> datetime:
     return datetime.now(UTC)
 
 
+def normalize_terminal_info(value: str | None) -> str | None:
+    text = (value or "").strip()
+    if not text:
+        return None
+    return text[:_TERMINAL_INFO_MAX_LENGTH]
+
+
 def _session_expire_at() -> datetime:
     return _now_utc() + timedelta(seconds=settings.session_max_seconds)
 
@@ -196,6 +204,7 @@ def should_record_success_login(
     terminal_info: str | None,
     min_interval_seconds: int = _SUCCESS_LOGIN_LOG_MIN_INTERVAL_SECONDS,
 ) -> bool:
+    terminal_info = normalize_terminal_info(terminal_info)
     cache_key = f"{user_id}|{ip_address or '-'}|{terminal_info or '-'}"
     interval_seconds = max(1, min_interval_seconds)
     now_monotonic = time.monotonic()
@@ -218,6 +227,7 @@ def create_login_log(
     failure_reason: str | None = None,
     session_token_id: str | None = None,
 ) -> LoginLog:
+    terminal_info = normalize_terminal_info(terminal_info)
     row = LoginLog(
         login_time=_now_utc(),
         username=username,
@@ -239,6 +249,7 @@ def create_user_session(
     ip_address: str | None,
     terminal_info: str | None,
 ) -> UserSession:
+    terminal_info = normalize_terminal_info(terminal_info)
     session_token_id = uuid4().hex
     row = UserSession(
         session_token_id=session_token_id,
@@ -263,6 +274,7 @@ def get_reusable_active_session(
     ip_address: str | None,
     terminal_info: str | None,
 ) -> UserSession | None:
+    terminal_info = normalize_terminal_info(terminal_info)
     now = _now_utc()
     stmt = (
         select(UserSession)
@@ -288,6 +300,7 @@ def create_or_reuse_user_session(
     ip_address: str | None,
     terminal_info: str | None,
 ) -> UserSession:
+    terminal_info = normalize_terminal_info(terminal_info)
     row = get_reusable_active_session(
         db,
         user_id=user.id,

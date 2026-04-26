@@ -40,6 +40,7 @@ from app.services.session_service import (
     create_login_log,
     create_or_reuse_user_session,
     mark_session_logout,
+    normalize_terminal_info,
     remember_active_session_token,
     should_record_success_login,
 )
@@ -81,7 +82,9 @@ def login(
 ) -> ApiResponse[LoginResult]:
     username = form_data.username.strip()
     ip_address = request.client.host if request and request.client else None
-    terminal_info = request.headers.get("user-agent") if request else None
+    terminal_info = normalize_terminal_info(
+        request.headers.get("user-agent") if request else None
+    )
 
     user = get_user_by_username(
         db,

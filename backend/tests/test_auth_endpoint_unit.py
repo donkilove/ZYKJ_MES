@@ -14,6 +14,55 @@ from app.api.v1.endpoints import auth
 
 
 class AuthEndpointUnitTest(unittest.TestCase):
+    def test_login_truncates_terminal_info_for_mobile_user_agent(self) -> None:
+        db = MagicMock()
+        now = datetime(2026, 4, 26, 12, 30, tzinfo=UTC)
+        user = SimpleNamespace(
+            id=11,
+            is_active=True,
+            is_deleted=False,
+            password_hash="hashed-password",
+            must_change_password=False,
+            last_login_at=None,
+            last_login_ip=None,
+            last_login_terminal=None,
+        )
+        session_row = SimpleNamespace(
+            session_token_id="sid-mobile",
+            login_time=now,
+            expires_at=now.replace(hour=14),
+            terminal_info=None,
+        )
+        long_user_agent = "MicroMessenger/" + ("A" * 400)
+        form_data = SimpleNamespace(username="mobile", password="Pwd@123")
+        request = SimpleNamespace(
+            client=SimpleNamespace(host="192.168.1.88"),
+            headers={"user-agent": long_user_agent},
+        )
+
+        with (
+            patch.object(auth, "get_user_by_username", return_value=user),
+            patch.object(auth, "verify_password_cached", return_value=True),
+            patch.object(auth, "rehash_password_if_needed", return_value=None),
+            patch.object(auth, "create_or_reuse_user_session", return_value=session_row),
+            patch.object(auth, "should_record_success_login", return_value=True),
+            patch.object(auth, "create_login_log") as create_login_log,
+            patch.object(auth, "cleanup_expired_login_logs_if_due"),
+            patch.object(auth, "remember_active_session_token"),
+            patch.object(auth, "touch_user"),
+            patch.object(auth, "create_access_token", return_value="token-mobile"),
+        ):
+            result = auth.login(form_data=form_data, request=request, db=db)
+
+        self.assertEqual(result.data.access_token, "token-mobile")
+        self.assertEqual(len(user.last_login_terminal), 255)
+        self.assertTrue(user.last_login_terminal.startswith("MicroMessenger/"))
+        create_login_log.assert_called_once()
+        self.assertEqual(
+            create_login_log.call_args.kwargs["terminal_info"],
+            user.last_login_terminal,
+        )
+
     def test_login_success_uses_throttled_log_cleanup_helper(self) -> None:
         db = MagicMock()
         now = datetime(2026, 4, 9, 1, 0, tzinfo=UTC)
