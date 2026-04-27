@@ -11,6 +11,7 @@ import 'package:mes_client/features/production/services/production_service.dart'
 import 'package:mes_client/features/quality/services/repair_scrap_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 
@@ -348,172 +349,160 @@ class _ProductionScrapStatisticsPageState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CrudPageHeader(
-            title: '报废统计',
-            onRefresh: _loading ? null : _loadItems,
+    final filtersToolbar = Wrap(
+      runSpacing: 8,
+      spacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        SizedBox(
+          width: 240,
+          child: TextField(
+            controller: _keywordController,
+            decoration: const InputDecoration(
+              labelText: '关键词（订单/原因/工序名称）',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            onSubmitted: (_) => _loadItems(page: 1),
           ),
-          Wrap(
-            runSpacing: 8,
-            spacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              SizedBox(
-                width: 240,
-                child: TextField(
-                  controller: _keywordController,
-                  decoration: const InputDecoration(
-                    labelText: '关键词（订单/原因/工序名称）',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadItems(page: 1),
-                ),
+        ),
+        SizedBox(
+          width: 220,
+          child: TextField(
+            controller: _productNameController,
+            decoration: const InputDecoration(
+              labelText: '产品名称（精确）',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            onSubmitted: (_) => _loadItems(page: 1),
+          ),
+        ),
+        SizedBox(
+          width: 180,
+          child: TextField(
+            controller: _processCodeController,
+            decoration: const InputDecoration(
+              labelText: '工序编码（精确）',
+              hintText: '关键词已支持工序名称',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            onSubmitted: (_) => _loadItems(page: 1),
+          ),
+        ),
+        SizedBox(
+          width: 140,
+          child: DropdownButtonFormField<String>(
+            initialValue: _progress,
+            decoration: const InputDecoration(
+              labelText: '进度',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            items: const [
+              DropdownMenuItem(value: 'all', child: Text('全部')),
+              DropdownMenuItem(
+                value: 'pending_apply',
+                child: Text('待处理'),
               ),
-              SizedBox(
-                width: 220,
-                child: TextField(
-                  controller: _productNameController,
-                  decoration: const InputDecoration(
-                    labelText: '产品名称（精确）',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadItems(page: 1),
-                ),
-              ),
-              SizedBox(
-                width: 180,
-                child: TextField(
-                  controller: _processCodeController,
-                  decoration: const InputDecoration(
-                    labelText: '工序编码（精确）',
-                    hintText: '关键词已支持工序名称',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadItems(page: 1),
-                ),
-              ),
-              SizedBox(
-                width: 140,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _progress,
-                  decoration: const InputDecoration(
-                    labelText: '进度',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'all', child: Text('全部')),
-                    DropdownMenuItem(
-                      value: 'pending_apply',
-                      child: Text('待处理'),
-                    ),
-                    DropdownMenuItem(value: 'applied', child: Text('已处理')),
-                  ],
-                  onChanged: (value) {
-                    if (value == null) {
-                      return;
-                    }
-                    setState(() {
-                      _progress = value;
-                      _page = 1;
-                    });
-                  },
-                ),
-              ),
-              OutlinedButton(
-                onPressed: _loading ? null : () => _pickDate(isStart: true),
-                child: Text(
-                  _startDate == null ? '开始日期' : _formatDate(_startDate!),
-                ),
-              ),
-              OutlinedButton(
-                onPressed: _loading ? null : () => _pickDate(isStart: false),
-                child: Text(_endDate == null ? '结束日期' : _formatDate(_endDate!)),
-              ),
-              FilledButton.icon(
-                onPressed: _loading ? null : () => _loadItems(page: 1),
-                icon: const Icon(Icons.search),
-                label: const Text('查询'),
-              ),
-              FilledButton.tonalIcon(
-                onPressed: (!widget.canExport || _exporting) ? null : _export,
-                icon: const Icon(Icons.download),
-                label: const Text('导出CSV'),
-              ),
+              DropdownMenuItem(value: 'applied', child: Text('已处理')),
             ],
+            onChanged: (value) {
+              if (value == null) {
+                return;
+              }
+              setState(() {
+                _progress = value;
+                _page = 1;
+              });
+            },
           ),
-          const SizedBox(height: 8),
-          Text('总数：$_total', style: theme.textTheme.titleMedium),
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                _message,
-                style: TextStyle(color: theme.colorScheme.error),
-              ),
+        ),
+        OutlinedButton(
+          onPressed: _loading ? null : () => _pickDate(isStart: true),
+          child: Text(
+            _startDate == null ? '开始日期' : _formatDate(_startDate!),
+          ),
+        ),
+        OutlinedButton(
+          onPressed: _loading ? null : () => _pickDate(isStart: false),
+          child: Text(_endDate == null ? '结束日期' : _formatDate(_endDate!)),
+        ),
+        FilledButton.icon(
+          onPressed: _loading ? null : () => _loadItems(page: 1),
+          icon: const Icon(Icons.search),
+          label: const Text('查询'),
+        ),
+        FilledButton.tonalIcon(
+          onPressed: (!widget.canExport || _exporting) ? null : _export,
+          icon: const Icon(Icons.download),
+          label: const Text('导出CSV'),
+        ),
+      ],
+    );
+
+    return MesCrudPageScaffold(
+      header: CrudPageHeader(
+        title: '报废统计',
+        onRefresh: _loading ? null : _loadItems,
+      ),
+      filters: filtersToolbar,
+      banner: _message.isEmpty
+          ? null
+          : Text(
+              _message,
+              style: TextStyle(color: theme.colorScheme.error),
             ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: CrudListTableSection(
-              cardKey: const ValueKey('productionScrapStatisticsListCard'),
-              loading: _loading,
-              isEmpty: _items.isEmpty,
-              emptyText: '暂无报废统计数据',
-              enableUnifiedHeaderStyle: true,
-              child: DataTable(
-                columns: [
-                  UnifiedListTableHeaderStyle.column(context, '订单号'),
-                  UnifiedListTableHeaderStyle.column(context, '产品'),
-                  UnifiedListTableHeaderStyle.column(context, '工序'),
-                  UnifiedListTableHeaderStyle.column(context, '报废原因'),
-                  UnifiedListTableHeaderStyle.column(context, '数量'),
-                  UnifiedListTableHeaderStyle.column(context, '进度'),
-                  UnifiedListTableHeaderStyle.column(context, '最近报废时间'),
-                  UnifiedListTableHeaderStyle.column(context, '处理时间'),
-                  UnifiedListTableHeaderStyle.column(context, '操作'),
-                ],
-                rows: _items
-                    .map(
-                      (item) => DataRow(
-                        cells: [
-                          DataCell(Text(item.orderCode ?? '-')),
-                          DataCell(Text(item.productName ?? '-')),
-                          DataCell(Text(item.processName ?? '-')),
-                          DataCell(Text(item.scrapReason)),
-                          DataCell(Text('${item.scrapQuantity}')),
-                          DataCell(Text(scrapProgressLabel(item.progress))),
-                          DataCell(Text(_formatDateTime(item.lastScrapTime))),
-                          DataCell(Text(_formatDateTime(item.appliedAt))),
-                          DataCell(
-                            TextButton(
-                              onPressed: () => _showDetail(item),
-                              child: const Text('详情'),
-                            ),
-                          ),
-                        ],
+      content: CrudListTableSection(
+        cardKey: const ValueKey('productionScrapStatisticsListCard'),
+        loading: _loading,
+        isEmpty: _items.isEmpty,
+        emptyText: '暂无报废统计数据',
+        enableUnifiedHeaderStyle: true,
+        child: DataTable(
+          columns: [
+            UnifiedListTableHeaderStyle.column(context, '订单号'),
+            UnifiedListTableHeaderStyle.column(context, '产品'),
+            UnifiedListTableHeaderStyle.column(context, '工序'),
+            UnifiedListTableHeaderStyle.column(context, '报废原因'),
+            UnifiedListTableHeaderStyle.column(context, '数量'),
+            UnifiedListTableHeaderStyle.column(context, '进度'),
+            UnifiedListTableHeaderStyle.column(context, '最近报废时间'),
+            UnifiedListTableHeaderStyle.column(context, '处理时间'),
+            UnifiedListTableHeaderStyle.column(context, '操作'),
+          ],
+          rows: _items
+              .map(
+                (item) => DataRow(
+                  cells: [
+                    DataCell(Text(item.orderCode ?? '-')),
+                    DataCell(Text(item.productName ?? '-')),
+                    DataCell(Text(item.processName ?? '-')),
+                    DataCell(Text(item.scrapReason)),
+                    DataCell(Text('${item.scrapQuantity}')),
+                    DataCell(Text(scrapProgressLabel(item.progress))),
+                    DataCell(Text(_formatDateTime(item.lastScrapTime))),
+                    DataCell(Text(_formatDateTime(item.appliedAt))),
+                    DataCell(
+                      TextButton(
+                        onPressed: () => _showDetail(item),
+                        child: const Text('详情'),
                       ),
-                    )
-                    .toList(),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          MesPaginationBar(
-            page: _page,
-            totalPages: _totalPages,
-            total: _total,
-            loading: _loading,
-            onPrevious: () => _loadItems(page: _page - 1),
-            onNext: () => _loadItems(page: _page + 1),
-          ),
-        ],
+                    ),
+                  ],
+                ),
+              )
+              .toList(),
+        ),
+      ),
+      pagination: MesPaginationBar(
+        page: _page,
+        totalPages: _totalPages,
+        total: _total,
+        loading: _loading,
+        onPrevious: () => _loadItems(page: _page - 1),
+        onNext: () => _loadItems(page: _page + 1),
       ),
     );
   }
