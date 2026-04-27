@@ -7,6 +7,7 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 
@@ -464,266 +465,247 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
     const statusFilterWidth = 140.0;
     const desktopSearchMinWidth = 320.0;
 
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: CrudPageHeader(
-                  title: '设备台账',
-                  onRefresh: _loading
-                      ? null
-                      : () => _loadItems(
-                          page: _page,
-                          reloadOwners: widget.canWrite,
-                        ),
+    final filtersToolbar = LayoutBuilder(
+      builder: (context, constraints) {
+        final keywordField = TextField(
+          controller: _keywordController,
+          decoration: const InputDecoration(
+            labelText: '搜索设备编号/名称/型号/位置/负责人',
+            border: OutlineInputBorder(),
+          ),
+          onSubmitted: (_) => _loadItems(page: 1),
+        );
+        final locationFilter = SizedBox(
+          width: constraints.maxWidth < locationFilterWidth
+              ? constraints.maxWidth
+              : locationFilterWidth,
+          child: TextField(
+            controller: _locationFilterController,
+            decoration: const InputDecoration(
+              labelText: '位置筛选',
+              border: OutlineInputBorder(),
+            ),
+            onSubmitted: (_) => _loadItems(page: 1),
+          ),
+        );
+        final ownerFilter = SizedBox(
+          width: constraints.maxWidth < ownerFilterWidth
+              ? constraints.maxWidth
+              : ownerFilterWidth,
+          child: DropdownButtonFormField<String?>(
+            initialValue: _ownerFilterName,
+            isExpanded: true,
+            items: [
+              DropdownMenuItem<String?>(
+                value: null,
+                child: _buildOwnerDropdownText(_allOwnersLabel),
+              ),
+              ..._ownerOptions.map(
+                (entry) => DropdownMenuItem<String?>(
+                  value: entry.username,
+                  child: _buildOwnerDropdownText(entry.displayName),
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 12),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final keywordField = TextField(
-                controller: _keywordController,
-                decoration: const InputDecoration(
-                  labelText: '搜索设备编号/名称/型号/位置/负责人',
-                  border: OutlineInputBorder(),
+            selectedItemBuilder: (context) {
+              return [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: _buildOwnerDropdownText(_allOwnersLabel),
                 ),
-                onSubmitted: (_) => _loadItems(page: 1),
-              );
-              final locationFilter = SizedBox(
-                width: constraints.maxWidth < locationFilterWidth
-                    ? constraints.maxWidth
-                    : locationFilterWidth,
-                child: TextField(
-                  controller: _locationFilterController,
-                  decoration: const InputDecoration(
-                    labelText: '位置筛选',
-                    border: OutlineInputBorder(),
+                ..._ownerOptions.map(
+                  (entry) => Align(
+                    alignment: Alignment.centerLeft,
+                    child: _buildOwnerDropdownText(entry.displayName),
                   ),
-                  onSubmitted: (_) => _loadItems(page: 1),
-                ),
-              );
-              final ownerFilter = SizedBox(
-                width: constraints.maxWidth < ownerFilterWidth
-                    ? constraints.maxWidth
-                    : ownerFilterWidth,
-                child: DropdownButtonFormField<String?>(
-                  initialValue: _ownerFilterName,
-                  isExpanded: true,
-                  items: [
-                    DropdownMenuItem<String?>(
-                      value: null,
-                      child: _buildOwnerDropdownText(_allOwnersLabel),
-                    ),
-                    ..._ownerOptions.map(
-                      (entry) => DropdownMenuItem<String?>(
-                        value: entry.username,
-                        child: _buildOwnerDropdownText(entry.displayName),
-                      ),
-                    ),
-                  ],
-                  selectedItemBuilder: (context) {
-                    return [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: _buildOwnerDropdownText(_allOwnersLabel),
-                      ),
-                      ..._ownerOptions.map(
-                        (entry) => Align(
-                          alignment: Alignment.centerLeft,
-                          child: _buildOwnerDropdownText(entry.displayName),
-                        ),
-                      ),
-                    ];
-                  },
-                  onChanged: (value) {
-                    setState(() => _ownerFilterName = value);
-                  },
-                  decoration: const InputDecoration(
-                    labelText: '负责人',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-              );
-              final statusFilter = SizedBox(
-                width: constraints.maxWidth < statusFilterWidth
-                    ? constraints.maxWidth
-                    : statusFilterWidth,
-                child: DropdownButtonFormField<bool?>(
-                  initialValue: _enabledFilter,
-                  items: const [
-                    DropdownMenuItem<bool?>(value: null, child: Text('全部状态')),
-                    DropdownMenuItem<bool?>(value: true, child: Text('启用')),
-                    DropdownMenuItem<bool?>(value: false, child: Text('停用')),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _enabledFilter = value);
-                  },
-                  decoration: const InputDecoration(
-                    labelText: '状态',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-              );
-              final toolbarButtons = <Widget>[
-                FilledButton.icon(
-                  onPressed: _loading ? null : () => _loadItems(page: 1),
-                  icon: const Icon(Icons.search),
-                  label: const Text('搜索'),
-                ),
-                FilledButton.icon(
-                  onPressed: (_loading || !widget.canWrite)
-                      ? null
-                      : () => _showEditDialog(),
-                  icon: const Icon(Icons.add),
-                  label: const Text('新增设备'),
                 ),
               ];
-              final desktopToolbarMinWidth =
-                  desktopSearchMinWidth +
-                  locationFilterWidth +
-                  ownerFilterWidth +
-                  statusFilterWidth +
-                  240 +
-                  (5 * toolbarSpacing);
+            },
+            onChanged: (value) {
+              setState(() => _ownerFilterName = value);
+            },
+            decoration: const InputDecoration(
+              labelText: '负责人',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+          ),
+        );
+        final statusFilter = SizedBox(
+          width: constraints.maxWidth < statusFilterWidth
+              ? constraints.maxWidth
+              : statusFilterWidth,
+          child: DropdownButtonFormField<bool?>(
+            initialValue: _enabledFilter,
+            items: const [
+              DropdownMenuItem<bool?>(value: null, child: Text('全部状态')),
+              DropdownMenuItem<bool?>(value: true, child: Text('启用')),
+              DropdownMenuItem<bool?>(value: false, child: Text('停用')),
+            ],
+            onChanged: (value) {
+              setState(() => _enabledFilter = value);
+            },
+            decoration: const InputDecoration(
+              labelText: '状态',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+          ),
+        );
+        final toolbarButtons = <Widget>[
+          FilledButton.icon(
+            onPressed: _loading ? null : () => _loadItems(page: 1),
+            icon: const Icon(Icons.search),
+            label: const Text('搜索'),
+          ),
+          FilledButton.icon(
+            onPressed: (_loading || !widget.canWrite)
+                ? null
+                : () => _showEditDialog(),
+            icon: const Icon(Icons.add),
+            label: const Text('新增设备'),
+          ),
+        ];
+        final desktopToolbarMinWidth =
+            desktopSearchMinWidth +
+            locationFilterWidth +
+            ownerFilterWidth +
+            statusFilterWidth +
+            240 +
+            (5 * toolbarSpacing);
 
-              if (constraints.maxWidth >= desktopToolbarMinWidth) {
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(child: keywordField),
-                    const SizedBox(width: toolbarSpacing),
-                    locationFilter,
-                    const SizedBox(width: toolbarSpacing),
-                    ownerFilter,
-                    const SizedBox(width: toolbarSpacing),
-                    statusFilter,
-                    const SizedBox(width: toolbarSpacing),
-                    Wrap(
-                      spacing: toolbarSpacing,
-                      runSpacing: 8,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: toolbarButtons,
-                    ),
-                  ],
-                );
-              }
-
-              return Wrap(
+        if (constraints.maxWidth >= desktopToolbarMinWidth) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: keywordField),
+              const SizedBox(width: toolbarSpacing),
+              locationFilter,
+              const SizedBox(width: toolbarSpacing),
+              ownerFilter,
+              const SizedBox(width: toolbarSpacing),
+              statusFilter,
+              const SizedBox(width: toolbarSpacing),
+              Wrap(
                 spacing: toolbarSpacing,
                 runSpacing: 8,
                 crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  SizedBox(width: constraints.maxWidth, child: keywordField),
-                  locationFilter,
-                  ownerFilter,
-                  statusFilter,
-                  ...toolbarButtons,
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          Text('总数: $_total', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 12),
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                _message,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
+                children: toolbarButtons,
+              ),
+            ],
+          );
+        }
+
+        return Wrap(
+          spacing: toolbarSpacing,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SizedBox(width: constraints.maxWidth, child: keywordField),
+            locationFilter,
+            ownerFilter,
+            statusFilter,
+            ...toolbarButtons,
+          ],
+        );
+      },
+    );
+
+    return MesCrudPageScaffold(
+      header: CrudPageHeader(
+        title: '设备台账',
+        onRefresh: _loading
+            ? null
+            : () => _loadItems(
+                page: _page,
+                reloadOwners: widget.canWrite,
+              ),
+      ),
+      filters: filtersToolbar,
+      banner: _message.isEmpty
+          ? null
+          : Text(
+              _message,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.error,
               ),
             ),
-          Expanded(
-            child: CrudListTableSection(
-              loading: _loading,
-              isEmpty: _items.isEmpty,
-              emptyText: '暂无设备',
-              enableUnifiedHeaderStyle: true,
-              child: DataTable(
-                columns: const [
-                  DataColumn(label: Text('设备编号')),
-                  DataColumn(label: Text('设备名称')),
-                  DataColumn(label: Text('型号')),
-                  DataColumn(label: Text('位置')),
-                  DataColumn(label: Text('负责人')),
-                  DataColumn(label: Text('状态')),
-                  DataColumn(label: Text('创建时间')),
-                  DataColumn(label: Text('更新时间')),
-                  DataColumn(label: Text('操作')),
-                ],
-                rows: _items.map((item) {
-                  return DataRow(
-                    cells: [
-                      DataCell(Text(item.code)),
-                      DataCell(Text(item.name)),
-                      DataCell(Text(item.model.isEmpty ? '-' : item.model)),
-                      DataCell(
-                        Text(item.location.isEmpty ? '-' : item.location),
+      content: CrudListTableSection(
+        loading: _loading,
+        isEmpty: _items.isEmpty,
+        emptyText: '暂无设备',
+        enableUnifiedHeaderStyle: true,
+        child: DataTable(
+          columns: const [
+            DataColumn(label: Text('设备编号')),
+            DataColumn(label: Text('设备名称')),
+            DataColumn(label: Text('型号')),
+            DataColumn(label: Text('位置')),
+            DataColumn(label: Text('负责人')),
+            DataColumn(label: Text('状态')),
+            DataColumn(label: Text('创建时间')),
+            DataColumn(label: Text('更新时间')),
+            DataColumn(label: Text('操作')),
+          ],
+          rows: _items.map((item) {
+            return DataRow(
+              cells: [
+                DataCell(Text(item.code)),
+                DataCell(Text(item.name)),
+                DataCell(Text(item.model.isEmpty ? '-' : item.model)),
+                DataCell(
+                  Text(item.location.isEmpty ? '-' : item.location),
+                ),
+                DataCell(
+                  Text(item.ownerName.isEmpty ? '-' : item.ownerName),
+                ),
+                DataCell(Text(item.isEnabled ? '启用' : '停用')),
+                DataCell(Text(_formatDateTime(item.createdAt))),
+                DataCell(Text(_formatDateTime(item.updatedAt))),
+                DataCell(
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextButton(
+                        onPressed: widget.canWrite
+                            ? () => _showEditDialog(item: item)
+                            : null,
+                        child: const Text('编辑'),
                       ),
-                      DataCell(
-                        Text(item.ownerName.isEmpty ? '-' : item.ownerName),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: widget.canWrite
+                            ? () => _toggleItem(item)
+                            : null,
+                        child: Text(item.isEnabled ? '停用' : '启用'),
                       ),
-                      DataCell(Text(item.isEnabled ? '启用' : '停用')),
-                      DataCell(Text(_formatDateTime(item.createdAt))),
-                      DataCell(Text(_formatDateTime(item.updatedAt))),
-                      DataCell(
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            TextButton(
-                              onPressed: widget.canWrite
-                                  ? () => _showEditDialog(item: item)
-                                  : null,
-                              child: const Text('编辑'),
-                            ),
-                            const SizedBox(width: 8),
-                            TextButton(
-                              onPressed: widget.canWrite
-                                  ? () => _toggleItem(item)
-                                  : null,
-                              child: Text(item.isEnabled ? '停用' : '启用'),
-                            ),
-                            const SizedBox(width: 8),
-                            TextButton(
-                              onPressed: widget.canWrite
-                                  ? () => _deleteItem(item)
-                                  : null,
-                              child: const Text('删除'),
-                            ),
-                            const SizedBox(width: 8),
-                            TextButton(
-                              onPressed: () => _showDetailDialog(item),
-                              child: const Text('详情'),
-                            ),
-                          ],
-                        ),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: widget.canWrite
+                            ? () => _deleteItem(item)
+                            : null,
+                        child: const Text('删除'),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: () => _showDetailDialog(item),
+                        child: const Text('详情'),
                       ),
                     ],
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          MesPaginationBar(
-            page: _page,
-            totalPages: _totalPages,
-            total: _total,
-            loading: _loading,
-            onPrevious: () => _loadItems(page: _page - 1),
-            onNext: () => _loadItems(page: _page + 1),
-          ),
-        ],
+                  ),
+                ),
+              ],
+            );
+          }).toList(),
+        ),
+      ),
+      pagination: MesPaginationBar(
+        page: _page,
+        totalPages: _totalPages,
+        total: _total,
+        loading: _loading,
+        onPrevious: () => _loadItems(page: _page - 1),
+        onNext: () => _loadItems(page: _page + 1),
       ),
     );
   }
