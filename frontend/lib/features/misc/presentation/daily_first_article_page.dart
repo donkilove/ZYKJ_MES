@@ -10,7 +10,7 @@ import 'package:mes_client/features/quality/services/quality_service.dart';
 import 'package:mes_client/core/widgets/adaptive_table_container.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
-import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/features/misc/presentation/first_article_disposition_page.dart';
 
 class DailyFirstArticlePage extends StatefulWidget {
@@ -506,7 +506,7 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                SimplePaginationBar(
+                MesPaginationBar(
                   page: _page,
                   totalPages: _totalPages,
                   total: _total,
