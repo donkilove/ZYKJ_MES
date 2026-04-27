@@ -8,7 +8,7 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
-import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 
 class ProductionAssistRecordsPage extends StatefulWidget {
@@ -473,7 +473,7 @@ class _ProductionAssistRecordsPageState
             ),
           ),
           const SizedBox(height: 12),
-          SimplePaginationBar(
+          MesPaginationBar(
             page: _page,
             totalPages: _totalPages,
             total: _total,
