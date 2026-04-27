@@ -8,6 +8,7 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 
@@ -290,198 +291,191 @@ class _ProductionAssistRecordsPageState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CrudPageHeader(title: '代班记录', onRefresh: _loading ? null : _loadRows),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              SizedBox(
-                width: 160,
-                child: TextField(
-                  controller: _orderCodeController,
-                  decoration: const InputDecoration(
-                    labelText: '订单号',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadRows(page: 1),
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 160,
-                child: TextField(
-                  controller: _processNameController,
-                  decoration: const InputDecoration(
-                    labelText: '工序名称',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadRows(page: 1),
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 140,
-                child: TextField(
-                  controller: _requesterController,
-                  decoration: const InputDecoration(
-                    labelText: '发起人',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadRows(page: 1),
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 140,
-                child: TextField(
-                  controller: _helperController,
-                  decoration: const InputDecoration(
-                    labelText: '代班人',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadRows(page: 1),
-                ),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.date_range, size: 16),
-                label: Text(
-                  '创建时间：${_createdAtFrom == null ? '不限' : _formatDate(_createdAtFrom!)} ~ ${_createdAtTo == null ? '不限' : _formatDate(_createdAtTo!)}',
-                ),
-                onPressed: () async {
-                  final ctx = context;
-                  final from = await _pickDate(ctx, _createdAtFrom);
-                  if (from == null || !mounted) return;
-                  // ignore: use_build_context_synchronously
-                  final to = await _pickDate(ctx, _createdAtTo ?? from);
-                  if (!mounted) return;
-                  setState(() {
-                    _createdAtFrom = from;
-                    _createdAtTo = to;
-                  });
-                  _loadRows(page: 1);
-                },
-              ),
-              if (_createdAtFrom != null || _createdAtTo != null) ...[
-                const SizedBox(width: 4),
-                TextButton.icon(
-                  icon: const Icon(Icons.clear, size: 16),
-                  label: const Text('清除'),
-                  onPressed: () {
-                    setState(() {
-                      _createdAtFrom = null;
-                      _createdAtTo = null;
-                    });
-                    _loadRows(page: 1);
-                  },
-                ),
-              ],
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: _loading ? null : () => _loadRows(page: 1),
-                icon: const Icon(Icons.search, size: 16),
-                label: const Text('查询'),
-              ),
-            ],
+    final filtersToolbar = Row(
+      children: [
+        SizedBox(
+          width: 160,
+          child: TextField(
+            controller: _orderCodeController,
+            decoration: const InputDecoration(
+              labelText: '订单号',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            onSubmitted: (_) => _loadRows(page: 1),
           ),
-          const SizedBox(height: 12),
-          Text('总数：$_total', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 12),
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                _message,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 160,
+          child: TextField(
+            controller: _processNameController,
+            decoration: const InputDecoration(
+              labelText: '工序名称',
+              border: OutlineInputBorder(),
+              isDense: true,
             ),
-          if (!widget.canViewRecords)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                '当前账号无查看权限。',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            ),
-          Expanded(
-            child: CrudListTableSection(
-              cardKey: const ValueKey('productionAssistRecordsListCard'),
-              loading: _loading,
-              isEmpty: _items.isEmpty,
-              emptyText: '暂无代班记录',
-              enableUnifiedHeaderStyle: true,
-              child: DataTable(
-                columns: [
-                  UnifiedListTableHeaderStyle.column(context, '订单号'),
-                  UnifiedListTableHeaderStyle.column(context, '工序'),
-                  UnifiedListTableHeaderStyle.column(context, '目标操作员'),
-                  UnifiedListTableHeaderStyle.column(context, '发起人'),
-                  UnifiedListTableHeaderStyle.column(context, '代班人'),
-                  UnifiedListTableHeaderStyle.column(context, '状态'),
-                  UnifiedListTableHeaderStyle.column(context, '处理人'),
-                  UnifiedListTableHeaderStyle.column(context, '处理时间'),
-                  UnifiedListTableHeaderStyle.column(context, '创建时间'),
-                  UnifiedListTableHeaderStyle.column(context, '操作'),
-                ],
-                rows: _items.map((item) {
-                  return DataRow(
-                    cells: [
-                      DataCell(Text(item.orderCode)),
-                      DataCell(Text(item.processName)),
-                      DataCell(Text(item.targetOperatorUsername)),
-                      DataCell(Text(item.requesterUsername)),
-                      DataCell(Text(item.helperUsername)),
-                      DataCell(
-                        Text(assistAuthorizationStatusLabel(item.status)),
-                      ),
-                      DataCell(Text(item.reviewerUsername ?? '-')),
-                      DataCell(
-                        Text(
-                          item.reviewedAt != null
-                              ? _formatDateTime(item.reviewedAt!)
-                              : '-',
-                        ),
-                      ),
-                      DataCell(Text(_formatDateTime(item.createdAt))),
-                      DataCell(
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            TextButton(
-                              onPressed: () => _showDetail(context, item),
-                              child: const Text('详情'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                }).toList(),
-              ),
-            ),
+            onSubmitted: (_) => _loadRows(page: 1),
           ),
-          const SizedBox(height: 12),
-          MesPaginationBar(
-            page: _page,
-            totalPages: _totalPages,
-            total: _total,
-            loading: _loading,
-            onPrevious: () => _loadRows(page: _page - 1),
-            onNext: () => _loadRows(page: _page + 1),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 140,
+          child: TextField(
+            controller: _requesterController,
+            decoration: const InputDecoration(
+              labelText: '发起人',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            onSubmitted: (_) => _loadRows(page: 1),
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 140,
+          child: TextField(
+            controller: _helperController,
+            decoration: const InputDecoration(
+              labelText: '代班人',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            onSubmitted: (_) => _loadRows(page: 1),
+          ),
+        ),
+        const SizedBox(width: 8),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.date_range, size: 16),
+          label: Text(
+            '创建时间：${_createdAtFrom == null ? '不限' : _formatDate(_createdAtFrom!)} ~ ${_createdAtTo == null ? '不限' : _formatDate(_createdAtTo!)}',
+          ),
+          onPressed: () async {
+            final ctx = context;
+            final from = await _pickDate(ctx, _createdAtFrom);
+            if (from == null || !mounted) return;
+            // ignore: use_build_context_synchronously
+            final to = await _pickDate(ctx, _createdAtTo ?? from);
+            if (!mounted) return;
+            setState(() {
+              _createdAtFrom = from;
+              _createdAtTo = to;
+            });
+            _loadRows(page: 1);
+          },
+        ),
+        if (_createdAtFrom != null || _createdAtTo != null) ...[
+          const SizedBox(width: 4),
+          TextButton.icon(
+            icon: const Icon(Icons.clear, size: 16),
+            label: const Text('清除'),
+            onPressed: () {
+              setState(() {
+                _createdAtFrom = null;
+                _createdAtTo = null;
+              });
+              _loadRows(page: 1);
+            },
           ),
         ],
+        const SizedBox(width: 8),
+        FilledButton.icon(
+          onPressed: _loading ? null : () => _loadRows(page: 1),
+          icon: const Icon(Icons.search, size: 16),
+          label: const Text('查询'),
+        ),
+      ],
+    );
+
+    final bannerWidgets = <Widget>[
+      if (_message.isNotEmpty)
+        Text(
+          _message,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.error,
+          ),
+        ),
+      if (!widget.canViewRecords)
+        Text(
+          '当前账号无查看权限。',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.error,
+          ),
+        ),
+    ];
+
+    return MesCrudPageScaffold(
+      header: CrudPageHeader(title: '代班记录', onRefresh: _loading ? null : _loadRows),
+      filters: filtersToolbar,
+      banner: bannerWidgets.isEmpty
+          ? null
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: bannerWidgets,
+            ),
+      content: CrudListTableSection(
+        cardKey: const ValueKey('productionAssistRecordsListCard'),
+        loading: _loading,
+        isEmpty: _items.isEmpty,
+        emptyText: '暂无代班记录',
+        enableUnifiedHeaderStyle: true,
+        child: DataTable(
+          columns: [
+            UnifiedListTableHeaderStyle.column(context, '订单号'),
+            UnifiedListTableHeaderStyle.column(context, '工序'),
+            UnifiedListTableHeaderStyle.column(context, '目标操作员'),
+            UnifiedListTableHeaderStyle.column(context, '发起人'),
+            UnifiedListTableHeaderStyle.column(context, '代班人'),
+            UnifiedListTableHeaderStyle.column(context, '状态'),
+            UnifiedListTableHeaderStyle.column(context, '处理人'),
+            UnifiedListTableHeaderStyle.column(context, '处理时间'),
+            UnifiedListTableHeaderStyle.column(context, '创建时间'),
+            UnifiedListTableHeaderStyle.column(context, '操作'),
+          ],
+          rows: _items.map((item) {
+            return DataRow(
+              cells: [
+                DataCell(Text(item.orderCode)),
+                DataCell(Text(item.processName)),
+                DataCell(Text(item.targetOperatorUsername)),
+                DataCell(Text(item.requesterUsername)),
+                DataCell(Text(item.helperUsername)),
+                DataCell(
+                  Text(assistAuthorizationStatusLabel(item.status)),
+                ),
+                DataCell(Text(item.reviewerUsername ?? '-')),
+                DataCell(
+                  Text(
+                    item.reviewedAt != null
+                        ? _formatDateTime(item.reviewedAt!)
+                        : '-',
+                  ),
+                ),
+                DataCell(Text(_formatDateTime(item.createdAt))),
+                DataCell(
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextButton(
+                        onPressed: () => _showDetail(context, item),
+                        child: const Text('详情'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          }).toList(),
+        ),
+      ),
+      pagination: MesPaginationBar(
+        page: _page,
+        totalPages: _totalPages,
+        total: _total,
+        loading: _loading,
+        onPrevious: () => _loadRows(page: _page - 1),
+        onNext: () => _loadRows(page: _page + 1),
       ),
     );
   }
