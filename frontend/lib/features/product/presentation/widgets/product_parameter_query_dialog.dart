@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/widgets/adaptive_table_container.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_summary_header.dart';
@@ -19,10 +20,10 @@ class ProductParameterQueryDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return KeyedSubtree(
       key: const ValueKey('product-parameter-query-dialog'),
-      child: AlertDialog(
+      child: MesDialog(
         title: Text('产品参数 - ${result.productName}'),
+        width: 1000,
         content: SizedBox(
-          width: 1000,
           height: 520,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 
 class ProductParameterHistorySnapshotDialog extends StatelessWidget {
@@ -13,10 +14,10 @@ class ProductParameterHistorySnapshotDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return MesDialog(
       title: const Text('变更前后快照'),
+      width: 680,
       content: SizedBox(
-        width: 680,
         height: 400,
         child: SingleChildScrollView(
           child: Column(

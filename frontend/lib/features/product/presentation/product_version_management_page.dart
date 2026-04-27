@@ -4,6 +4,8 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_action_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_list_detail_shell.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_selector_panel.dart';
@@ -284,19 +286,13 @@ class _ProductVersionManagementPageState
     if (product == null) return;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => MesActionDialog(
         title: const Text('确认生效'),
-        content: Text('确认将版本 ${rev.versionLabel} 设为生效版本？\n生效后，当前生效版本将自动变为已失效。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('确认生效'),
-          ),
-        ],
+        content: Text(
+          '确认将版本 ${rev.versionLabel} 设为生效版本？\n生效后，当前生效版本将自动变为已失效。',
+        ),
+        confirmLabel: '确认生效',
+        onConfirm: () => Navigator.pop(ctx, true),
       ),
     );
     if (confirmed != true) return;
@@ -321,20 +317,14 @@ class _ProductVersionManagementPageState
     if (product == null) return;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => MesActionDialog(
         title: const Text('确认停用'),
-        content: Text('确认停用版本 ${rev.versionLabel}？停用后不可直接恢复，如需再次使用请复制出新草稿。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('确认停用'),
-          ),
-        ],
+        content: Text(
+          '确认停用版本 ${rev.versionLabel}？停用后不可直接恢复，如需再次使用请复制出新草稿。',
+        ),
+        confirmLabel: '确认停用',
+        isDestructive: true,
+        onConfirm: () => Navigator.pop(ctx, true),
       ),
     );
     if (confirmed != true) return;
@@ -364,20 +354,12 @@ class _ProductVersionManagementPageState
     if (product == null) return;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => MesActionDialog(
         title: const Text('确认删除'),
         content: Text('确认删除草稿版本 ${rev.versionLabel}？此操作不可撤销。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('确认删除'),
-          ),
-        ],
+        confirmLabel: '确认删除',
+        isDestructive: true,
+        onConfirm: () => Navigator.pop(ctx, true),
       ),
     );
     if (confirmed != true) return;
@@ -398,28 +380,22 @@ class _ProductVersionManagementPageState
   Future<void> _showVersionDetail(ProductVersionItem rev) async {
     await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => MesDialog(
         title: Text('版本详情 - ${rev.versionLabel}'),
-        content: SizedBox(
-          width: 400,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _detailRow('版本号', rev.versionLabel),
-                _detailRow(
-                  '状态',
-                  _statusLabels[rev.lifecycleStatus] ?? rev.lifecycleStatus,
-                ),
-                _detailRow('变更摘要', rev.note ?? '-'),
-                _detailRow('来源版本', rev.sourceVersionLabel ?? '-'),
-                _detailRow('创建人', rev.createdByUsername ?? '-'),
-                _detailRow('创建时间', _formatDate(rev.createdAt)),
-                if (rev.updatedAt != null)
-                  _detailRow('最后更新', _formatDate(rev.updatedAt!)),
-              ],
-            ),
-          ),
+        width: 400,
+        scrollable: true,
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _detailRow('版本号', rev.versionLabel),
+            _detailRow('状态', _statusLabels[rev.lifecycleStatus] ?? rev.lifecycleStatus),
+            _detailRow('变更摘要', rev.note ?? '-'),
+            _detailRow('来源版本', rev.sourceVersionLabel ?? '-'),
+            _detailRow('创建人', rev.createdByUsername ?? '-'),
+            _detailRow('创建时间', _formatDate(rev.createdAt)),
+            if (rev.updatedAt != null) _detailRow('最后更新', _formatDate(rev.updatedAt!)),
+          ],
         ),
         actions: [
           FilledButton(
@@ -456,18 +432,16 @@ class _ProductVersionManagementPageState
     final controller = TextEditingController(text: rev.note ?? '');
     final result = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => MesDialog(
         title: Text('编辑备注 - ${rev.versionLabel}'),
-        content: SizedBox(
-          width: 400,
-          child: TextField(
-            controller: controller,
-            maxLength: 256,
-            maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: '版本备注',
-              border: OutlineInputBorder(),
-            ),
+        width: 400,
+        content: TextField(
+          controller: controller,
+          maxLength: 256,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            labelText: '版本备注',
+            border: OutlineInputBorder(),
           ),
         ),
         actions: [

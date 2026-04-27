@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_action_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
@@ -249,35 +251,33 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     final confirmed = await showMesLockedFormDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
+        return MesDialog(
           title: Text(title),
-          content: SizedBox(
-            width: 520,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '存在 ${impact.totalOrders} 条未完工订单（待开工 ${impact.pendingOrders}，生产中 ${impact.inProgressOrders}）。',
+          width: 520,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '存在 ${impact.totalOrders} 条未完工订单（待开工 ${impact.pendingOrders}，生产中 ${impact.inProgressOrders}）。',
+              ),
+              const SizedBox(height: 8),
+              const Text('继续操作将按你的确认强制执行。'),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 180,
+                child: ListView(
+                  children: impact.items
+                      .take(20)
+                      .map(
+                        (item) => Text(
+                          '${item.orderCode} / ${item.orderStatus} ${item.reason ?? ''}',
+                        ),
+                      )
+                      .toList(),
                 ),
-                const SizedBox(height: 8),
-                const Text('继续操作将按你的确认强制执行。'),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 180,
-                  child: ListView(
-                    children: impact.items
-                        .take(20)
-                        .map(
-                          (item) => Text(
-                            '${item.orderCode} / ${item.orderStatus} ${item.reason ?? ''}',
-                          ),
-                        )
-                        .toList(),
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
           actions: [
             TextButton(
@@ -301,26 +301,24 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     final result = await showMesLockedFormDialog<String>(
       context: context,
       builder: (context) {
-        return AlertDialog(
+        return MesDialog(
           title: const Text('停用产品'),
+          width: 420,
           content: Form(
             key: formKey,
-            child: SizedBox(
-              width: 420,
-              child: TextFormField(
-                controller: reasonController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: '停用原因',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return '请输入停用原因';
-                  }
-                  return null;
-                },
+            child: TextFormField(
+              controller: reasonController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: '停用原因',
+                border: OutlineInputBorder(),
               ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return '请输入停用原因';
+                }
+                return null;
+              },
             ),
           ),
           actions: [
@@ -509,22 +507,13 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
       final confirmed = await showMesLockedFormDialog<bool>(
         context: context,
         builder: (context) {
-          return AlertDialog(
+          return MesActionDialog(
             title: Text(title),
-            content: SizedBox(width: 420, child: Text(content)),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                style: confirmColor == null
-                    ? null
-                    : FilledButton.styleFrom(backgroundColor: confirmColor),
-                onPressed: () => Navigator.of(context).pop(true),
-                child: Text(confirmText),
-              ),
-            ],
+            width: 420,
+            content: Text(content),
+            confirmLabel: confirmText,
+            isDestructive: confirmColor != null,
+            onConfirm: () => Navigator.of(context).pop(true),
           );
         },
       );
@@ -713,17 +702,15 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                               final newNote =
                                   await showMesLockedFormDialog<String?>(
                                 context: context,
-                                builder: (ctx) => AlertDialog(
+                                builder: (ctx) => MesDialog(
                                   title: Text('编辑 ${item.displayVersion} 备注'),
-                                  content: SizedBox(
-                                    width: 360,
-                                    child: TextField(
-                                      controller: noteController,
-                                      maxLength: 256,
-                                      decoration: const InputDecoration(
-                                        labelText: '版本备注',
-                                        border: OutlineInputBorder(),
-                                      ),
+                                  width: 360,
+                                  content: TextField(
+                                    controller: noteController,
+                                    maxLength: 256,
+                                    decoration: const InputDecoration(
+                                      labelText: '版本备注',
+                                      border: OutlineInputBorder(),
                                     ),
                                   ),
                                   actions: [
@@ -1154,71 +1141,69 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setLocalState) {
-            return AlertDialog(
+            return MesDialog(
               title: const Text('编辑产品'),
+              width: 420,
               content: Form(
                 key: formKey,
                 autovalidateMode: AutovalidateMode.onUserInteraction,
-                child: SizedBox(
-                  width: 420,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _buildReadonlyStatusField(
-                          label: '当前状态',
-                          value: _lifecycleLabel(product.lifecycleStatus),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildReadonlyStatusField(
+                        label: '当前状态',
+                        value: _lifecycleLabel(product.lifecycleStatus),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: nameController,
+                        maxLength: 128,
+                        maxLengthEnforcement: MaxLengthEnforcement.none,
+                        decoration: const InputDecoration(
+                          labelText: '产品名称',
+                          hintText: '请输入 1-128 个字符，提交时自动去除首尾空格',
+                          border: OutlineInputBorder(),
                         ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: nameController,
-                          maxLength: 128,
-                          maxLengthEnforcement: MaxLengthEnforcement.none,
-                          decoration: const InputDecoration(
-                            labelText: '产品名称',
-                            hintText: '请输入 1-128 个字符，提交时自动去除首尾空格',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: _validateProductName,
+                        validator: _validateProductName,
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedCategory,
+                        decoration: const InputDecoration(
+                          labelText: '产品分类',
+                          border: OutlineInputBorder(),
                         ),
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<String>(
-                          initialValue: selectedCategory,
-                          decoration: const InputDecoration(
-                            labelText: '产品分类',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: _validateProductCategory,
-                          items: _productCategoryOptions
-                              .map(
-                                (category) => DropdownMenuItem<String>(
-                                  value: category,
-                                  child: Text(category),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setLocalState(() {
-                              selectedCategory = value;
-                            });
-                          },
+                        validator: _validateProductCategory,
+                        items: _productCategoryOptions
+                            .map(
+                              (category) => DropdownMenuItem<String>(
+                                value: category,
+                                child: Text(category),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setLocalState(() {
+                            selectedCategory = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: remarkController,
+                        maxLines: 3,
+                        maxLength: 500,
+                        maxLengthEnforcement: MaxLengthEnforcement.none,
+                        decoration: const InputDecoration(
+                          labelText: '备注',
+                          hintText: '最多 500 个字符，提交时自动去除首尾空格',
+                          border: OutlineInputBorder(),
                         ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: remarkController,
-                          maxLines: 3,
-                          maxLength: 500,
-                          maxLengthEnforcement: MaxLengthEnforcement.none,
-                          decoration: const InputDecoration(
-                            labelText: '备注',
-                            hintText: '最多 500 个字符，提交时自动去除首尾空格',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: _validateProductRemark,
-                        ),
-                      ],
-                    ),
+                        validator: _validateProductRemark,
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1284,71 +1269,69 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setLocalState) {
-            return AlertDialog(
+            return MesDialog(
               title: const Text('添加产品'),
+              width: 420,
               content: Form(
                 key: formKey,
                 autovalidateMode: AutovalidateMode.onUserInteraction,
-                child: SizedBox(
-                  width: 420,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _buildReadonlyStatusField(label: '默认状态', value: '启用'),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: nameController,
-                          maxLength: 128,
-                          maxLengthEnforcement: MaxLengthEnforcement.none,
-                          decoration: const InputDecoration(
-                            labelText: '产品名称',
-                            hintText: '请输入 1-128 个字符，提交时自动去除首尾空格',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: _validateProductName,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildReadonlyStatusField(label: '默认状态', value: '启用'),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: nameController,
+                        maxLength: 128,
+                        maxLengthEnforcement: MaxLengthEnforcement.none,
+                        decoration: const InputDecoration(
+                          labelText: '产品名称',
+                          hintText: '请输入 1-128 个字符，提交时自动去除首尾空格',
+                          border: OutlineInputBorder(),
                         ),
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<String>(
-                          initialValue: selectedCategory,
-                          decoration: const InputDecoration(
-                            labelText: '产品分类',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: _validateProductCategory,
-                          hint: const Text('请选择产品分类'),
-                          items: _productCategoryOptions
-                              .map(
-                                (category) => DropdownMenuItem<String>(
-                                  value: category,
-                                  child: Text(category),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            if (value == null) {
-                              return;
-                            }
-                            setLocalState(() {
-                              selectedCategory = value;
-                            });
-                          },
+                        validator: _validateProductName,
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedCategory,
+                        decoration: const InputDecoration(
+                          labelText: '产品分类',
+                          border: OutlineInputBorder(),
                         ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: remarkController,
-                          maxLines: 3,
-                          maxLength: 500,
-                          maxLengthEnforcement: MaxLengthEnforcement.none,
-                          decoration: const InputDecoration(
-                            labelText: '备注',
-                            hintText: '最多 500 个字符，提交时自动去除首尾空格',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: _validateProductRemark,
+                        validator: _validateProductCategory,
+                        hint: const Text('请选择产品分类'),
+                        items: _productCategoryOptions
+                            .map(
+                              (category) => DropdownMenuItem<String>(
+                                value: category,
+                                child: Text(category),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          if (value == null) {
+                            return;
+                          }
+                          setLocalState(() {
+                            selectedCategory = value;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: remarkController,
+                        maxLines: 3,
+                        maxLength: 500,
+                        maxLengthEnforcement: MaxLengthEnforcement.none,
+                        decoration: const InputDecoration(
+                          labelText: '备注',
+                          hintText: '最多 500 个字符，提交时自动去除首尾空格',
+                          border: OutlineInputBorder(),
                         ),
-                      ],
-                    ),
+                        validator: _validateProductRemark,
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1411,34 +1394,32 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     final confirmed = await showMesLockedFormDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
+        return MesDialog(
           title: const Text('删除产品'),
-          content: SizedBox(
-            width: 420,
-            child: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('确认删除产品“${product.name}”吗？'),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: passwordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: '请输入当前账号密码',
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return '请输入密码';
-                      }
-                      return null;
-                    },
+          width: 420,
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('确认删除产品“${product.name}”吗？'),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: passwordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: '请输入当前账号密码',
+                    border: OutlineInputBorder(),
                   ),
-                ],
-              ),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return '请输入密码';
+                    }
+                    return null;
+                  },
+                ),
+              ],
             ),
           ),
           actions: [

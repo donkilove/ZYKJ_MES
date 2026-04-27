@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/core/ui/primitives/mes_status_chip.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
@@ -51,7 +52,7 @@ class ProductVersionTableSection extends StatelessWidget {
         subtitle: '版本状态、备注、来源版本和动作入口保持既有业务语义。',
         expandChild: true,
         child: loading
-            ? const Center(child: CircularProgressIndicator())
+            ? const MesLoadingState(label: '版本加载中...')
             : versions.isEmpty
             ? const MesEmptyState(
                 title: '暂无版本记录',

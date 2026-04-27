@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 
 class ProductParameterHistoryDialog extends StatelessWidget {
@@ -23,12 +24,12 @@ class ProductParameterHistoryDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return KeyedSubtree(
       key: const ValueKey('product-parameter-history-dialog'),
-      child: AlertDialog(
+      child: MesDialog(
         title: Text(
           '参数变更历史 - ${row.productName} / ${row.productCategory} / ${history.versionLabel ?? row.versionLabel}',
         ),
+        width: 760,
         content: SizedBox(
-          width: 760,
           height: 480,
           child: history.items.isEmpty
               ? const Center(child: Text('暂无历史记录'))

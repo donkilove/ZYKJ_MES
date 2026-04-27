@@ -6,7 +6,9 @@ import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_action_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_footer.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_header.dart';
@@ -467,19 +469,13 @@ class _ProductParameterManagementPageState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
+        return MesActionDialog(
           title: const Text('放弃未保存的修改？'),
           content: const Text('当前编辑内容尚未保存，离开后将丢失本次修改。'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('继续编辑'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('放弃修改'),
-            ),
-          ],
+          cancelLabel: '继续编辑',
+          confirmLabel: '放弃修改',
+          isDestructive: true,
+          onConfirm: () => Navigator.of(context).pop(true),
         );
       },
     );
@@ -495,32 +491,22 @@ class _ProductParameterManagementPageState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
+        return MesActionDialog(
           title: const Text('变更影响确认'),
-          content: SizedBox(
-            width: 520,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '存在 ${impact.totalOrders} 条未完工订单（待开工 ${impact.pendingOrders}，生产中 ${impact.inProgressOrders}）。',
-                ),
-                const SizedBox(height: 8),
-                const Text('确认后将按强制模式继续保存。'),
-              ],
-            ),
+          width: 520,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '存在 ${impact.totalOrders} 条未完工订单（待开工 ${impact.pendingOrders}，生产中 ${impact.inProgressOrders}）。',
+              ),
+              const SizedBox(height: 8),
+              const Text('确认后将按强制模式继续保存。'),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('确认继续'),
-            ),
-          ],
+          confirmLabel: '确认继续',
+          onConfirm: () => Navigator.of(context).pop(true),
         );
       },
     );
@@ -1008,7 +994,7 @@ class _ProductParameterManagementPageState
 
   Widget _buildEditorTableArea() {
     if (_editorLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const MesLoadingState(label: '参数编辑器加载中...');
     }
 
     final visibleRows = _editorGroupFilter.isEmpty
