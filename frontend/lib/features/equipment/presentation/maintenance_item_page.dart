@@ -6,6 +6,7 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 
@@ -429,181 +430,163 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: CrudPageHeader(
-                  title: '保养项目',
-                  onRefresh: _loading ? null : () => _loadItems(page: _page),
-                ),
-              ),
-            ],
+
+    final filtersToolbar = Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _keywordController,
+            decoration: const InputDecoration(
+              labelText: '搜索项目名称',
+              border: OutlineInputBorder(),
+            ),
+            onSubmitted: (_) => _loadItems(page: 1),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _keywordController,
-                  decoration: const InputDecoration(
-                    labelText: '搜索项目名称',
-                    border: OutlineInputBorder(),
-                  ),
-                  onSubmitted: (_) => _loadItems(page: 1),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 140,
-                child: DropdownButtonFormField<bool?>(
-                  initialValue: _enabledFilter,
-                  items: const [
-                    DropdownMenuItem<bool?>(value: null, child: Text('全部状态')),
-                    DropdownMenuItem<bool?>(value: true, child: Text('启用')),
-                    DropdownMenuItem<bool?>(value: false, child: Text('停用')),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _enabledFilter = value);
-                  },
-                  decoration: const InputDecoration(
-                    labelText: '状态',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 160,
-                child: DropdownButtonFormField<String?>(
-                  initialValue: _categoryFilter,
-                  items: const [
-                    DropdownMenuItem<String?>(value: null, child: Text('全部类别')),
-                    DropdownMenuItem<String?>(value: '点检', child: Text('点检')),
-                    DropdownMenuItem<String?>(value: '润滑', child: Text('润滑')),
-                    DropdownMenuItem<String?>(value: '校准', child: Text('校准')),
-                    DropdownMenuItem<String?>(value: '清洁', child: Text('清洁')),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _categoryFilter = value);
-                  },
-                  decoration: const InputDecoration(
-                    labelText: '类别',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: _loading ? null : () => _loadItems(page: 1),
-                icon: const Icon(Icons.search),
-                label: const Text('搜索'),
-              ),
-              const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: (_loading || !widget.canWrite)
-                    ? null
-                    : () => _showEditDialog(),
-                icon: const Icon(Icons.add),
-                label: const Text('新增项目'),
-              ),
+        ),
+        const SizedBox(width: 12),
+        SizedBox(
+          width: 140,
+          child: DropdownButtonFormField<bool?>(
+            initialValue: _enabledFilter,
+            items: const [
+              DropdownMenuItem<bool?>(value: null, child: Text('全部状态')),
+              DropdownMenuItem<bool?>(value: true, child: Text('启用')),
+              DropdownMenuItem<bool?>(value: false, child: Text('停用')),
             ],
+            onChanged: (value) {
+              setState(() => _enabledFilter = value);
+            },
+            decoration: const InputDecoration(
+              labelText: '状态',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
           ),
-          const SizedBox(height: 12),
-          Text('总数: $_total', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 12),
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                _message,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
+        ),
+        const SizedBox(width: 12),
+        SizedBox(
+          width: 160,
+          child: DropdownButtonFormField<String?>(
+            initialValue: _categoryFilter,
+            items: const [
+              DropdownMenuItem<String?>(value: null, child: Text('全部类别')),
+              DropdownMenuItem<String?>(value: '点检', child: Text('点检')),
+              DropdownMenuItem<String?>(value: '润滑', child: Text('润滑')),
+              DropdownMenuItem<String?>(value: '校准', child: Text('校准')),
+              DropdownMenuItem<String?>(value: '清洁', child: Text('清洁')),
+            ],
+            onChanged: (value) {
+              setState(() => _categoryFilter = value);
+            },
+            decoration: const InputDecoration(
+              labelText: '类别',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        FilledButton.icon(
+          onPressed: _loading ? null : () => _loadItems(page: 1),
+          icon: const Icon(Icons.search),
+          label: const Text('搜索'),
+        ),
+        const SizedBox(width: 12),
+        FilledButton.icon(
+          onPressed: (_loading || !widget.canWrite)
+              ? null
+              : () => _showEditDialog(),
+          icon: const Icon(Icons.add),
+          label: const Text('新增项目'),
+        ),
+      ],
+    );
+
+    return MesCrudPageScaffold(
+      header: CrudPageHeader(
+        title: '保养项目',
+        onRefresh: _loading ? null : () => _loadItems(page: _page),
+      ),
+      filters: filtersToolbar,
+      banner: _message.isEmpty
+          ? null
+          : Text(
+              _message,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.error,
               ),
             ),
-          Expanded(
-            child: CrudListTableSection(
-              loading: _loading,
-              isEmpty: _items.isEmpty,
-              emptyText: '暂无保养项目',
-              enableUnifiedHeaderStyle: true,
-              child: DataTable(
-                columns: const [
-                  DataColumn(label: Text('项目名称')),
-                  DataColumn(label: Text('项目分类')),
-                  DataColumn(label: Text('默认周期天数')),
-                  DataColumn(label: Text('默认预计时长')),
-                  DataColumn(label: Text('状态')),
-                  DataColumn(label: Text('创建时间')),
-                  DataColumn(label: Text('更新时间')),
-                  DataColumn(label: Text('操作')),
-                ],
-                rows: _items.map((item) {
-                  return DataRow(
-                    cells: [
-                      DataCell(Text(item.name)),
-                      DataCell(
-                        Text(item.category.isEmpty ? '-' : item.category),
+      content: CrudListTableSection(
+        loading: _loading,
+        isEmpty: _items.isEmpty,
+        emptyText: '暂无保养项目',
+        enableUnifiedHeaderStyle: true,
+        child: DataTable(
+          columns: const [
+            DataColumn(label: Text('项目名称')),
+            DataColumn(label: Text('项目分类')),
+            DataColumn(label: Text('默认周期天数')),
+            DataColumn(label: Text('默认预计时长')),
+            DataColumn(label: Text('状态')),
+            DataColumn(label: Text('创建时间')),
+            DataColumn(label: Text('更新时间')),
+            DataColumn(label: Text('操作')),
+          ],
+          rows: _items.map((item) {
+            return DataRow(
+              cells: [
+                DataCell(Text(item.name)),
+                DataCell(
+                  Text(item.category.isEmpty ? '-' : item.category),
+                ),
+                DataCell(Text('${item.defaultCycleDays}')),
+                DataCell(
+                  Text(
+                    item.defaultDurationMinutes > 0
+                        ? '${item.defaultDurationMinutes} 分钟'
+                        : '-',
+                  ),
+                ),
+                DataCell(Text(item.isEnabled ? '启用' : '停用')),
+                DataCell(Text(_formatDateTime(item.createdAt))),
+                DataCell(Text(_formatDateTime(item.updatedAt))),
+                DataCell(
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      TextButton(
+                        onPressed: widget.canWrite
+                            ? () => _showEditDialog(item: item)
+                            : null,
+                        child: const Text('编辑'),
                       ),
-                      DataCell(Text('${item.defaultCycleDays}')),
-                      DataCell(
-                        Text(
-                          item.defaultDurationMinutes > 0
-                              ? '${item.defaultDurationMinutes} 分钟'
-                              : '-',
-                        ),
+                      TextButton(
+                        onPressed: widget.canWrite
+                            ? () => _toggleItem(item)
+                            : null,
+                        child: Text(item.isEnabled ? '停用' : '启用'),
                       ),
-                      DataCell(Text(item.isEnabled ? '启用' : '停用')),
-                      DataCell(Text(_formatDateTime(item.createdAt))),
-                      DataCell(Text(_formatDateTime(item.updatedAt))),
-                      DataCell(
-                        Wrap(
-                          spacing: 8,
-                          children: [
-                            TextButton(
-                              onPressed: widget.canWrite
-                                  ? () => _showEditDialog(item: item)
-                                  : null,
-                              child: const Text('编辑'),
-                            ),
-                            TextButton(
-                              onPressed: widget.canWrite
-                                  ? () => _toggleItem(item)
-                                  : null,
-                              child: Text(item.isEnabled ? '停用' : '启用'),
-                            ),
-                            TextButton(
-                              onPressed: widget.canWrite
-                                  ? () => _deleteItem(item)
-                                  : null,
-                              child: const Text('删除'),
-                            ),
-                          ],
-                        ),
+                      TextButton(
+                        onPressed: widget.canWrite
+                            ? () => _deleteItem(item)
+                            : null,
+                        child: const Text('删除'),
                       ),
                     ],
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          MesPaginationBar(
-            page: _page,
-            totalPages: _totalPages,
-            total: _total,
-            loading: _loading,
-            onPrevious: () => _loadItems(page: _page - 1),
-            onNext: () => _loadItems(page: _page + 1),
-          ),
-        ],
+                  ),
+                ),
+              ],
+            );
+          }).toList(),
+        ),
+      ),
+      pagination: MesPaginationBar(
+        page: _page,
+        totalPages: _totalPages,
+        total: _total,
+        loading: _loading,
+        onPrevious: () => _loadItems(page: _page - 1),
+        onNext: () => _loadItems(page: _page + 1),
       ),
     );
   }
