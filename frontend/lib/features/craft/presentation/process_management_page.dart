@@ -14,6 +14,7 @@ import 'package:mes_client/features/craft/presentation/widgets/process_managemen
 import 'package:mes_client/features/craft/presentation/widgets/process_stage_dialog.dart';
 import 'package:mes_client/features/craft/presentation/widgets/process_stage_panel.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 
 class ProcessManagementPage extends StatefulWidget {
   const ProcessManagementPage({
@@ -497,19 +498,18 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
         ),
     };
 
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
+    return MesCrudPageScaffold(
+      header: ProcessManagementPageHeader(
+        loading: _viewState.loading,
+        canWrite: widget.canWrite,
+        onRefresh: _loadData,
+        onCreateStage: _showStageDialog,
+        onCreateProcess: _showProcessDialog,
+      ),
+      filters: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          ProcessManagementPageHeader(
-            loading: _viewState.loading,
-            canWrite: widget.canWrite,
-            onRefresh: _loadData,
-            onCreateStage: _showStageDialog,
-            onCreateProcess: _showProcessDialog,
-          ),
-          const SizedBox(height: 12),
           ProcessManagementFeedbackBanner(
             message: _viewState.message,
             jumpNotice: _viewState.jumpNotice,
@@ -519,14 +519,11 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
             activeView: _viewState.activeView,
             onChanged: _pageState.setActiveView,
           ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: _viewState.loading
-                ? const Center(child: CircularProgressIndicator())
-                : workspace,
-          ),
         ],
       ),
+      content: _viewState.loading
+          ? const Center(child: CircularProgressIndicator())
+          : workspace,
     );
   }
 }
