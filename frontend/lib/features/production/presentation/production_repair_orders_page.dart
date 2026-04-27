@@ -11,7 +11,7 @@ import 'package:mes_client/features/production/services/production_service.dart'
 import 'package:mes_client/features/quality/services/repair_scrap_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
-import 'package:mes_client/core/widgets/locked_form_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 
@@ -491,7 +491,7 @@ class _ProductionRepairOrdersPageState
           : <_ReturnAllocationDraft>[];
       var scrapReplenished = false;
       var dialogError = '';
-      final result = await showLockedFormDialog<_RepairCompleteDialogResult?>(
+      final result = await showMesLockedFormDialog<_RepairCompleteDialogResult?>(
         context: context,
         builder: (context) => StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(

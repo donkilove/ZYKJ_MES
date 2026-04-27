@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
-Future<T?> showLockedFormDialog<T>({
+/// 锁定型表单弹窗。强制 `barrierDismissible: false` 与 `PopScope(canPop: false)`，
+/// 用于防止用户在表单填写过程中误关闭丢失数据。
+Future<T?> showMesLockedFormDialog<T>({
   required BuildContext context,
   required WidgetBuilder builder,
   bool useSafeArea = true,

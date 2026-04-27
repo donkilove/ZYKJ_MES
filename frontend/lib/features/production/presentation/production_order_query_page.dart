@@ -12,7 +12,7 @@ import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
-import 'package:mes_client/core/widgets/locked_form_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_order_status_chip.dart';
@@ -636,7 +636,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     );
     final defectRows = <_DefectRowDraft>[];
     try {
-      final payload = await showLockedFormDialog<_ProductionSubmitPayload?>(
+      final payload = await showMesLockedFormDialog<_ProductionSubmitPayload?>(
         context: context,
         builder: (context) => StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
@@ -836,7 +836,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     );
     final defectRows = <_DefectRowDraft>[_DefectRowDraft()];
     try {
-      final payload = await showLockedFormDialog<_ManualRepairSubmitPayload?>(
+      final payload = await showMesLockedFormDialog<_ManualRepairSubmitPayload?>(
         context: context,
         builder: (context) => StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
@@ -1056,7 +1056,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     int? helperId;
     final reasonController = TextEditingController();
     try {
-      final ok = await showLockedFormDialog<bool>(
+      final ok = await showMesLockedFormDialog<bool>(
         context: context,
         builder: (context) => StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(

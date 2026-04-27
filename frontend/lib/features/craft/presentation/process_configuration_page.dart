@@ -7,7 +7,7 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
-import 'package:mes_client/core/widgets/locked_form_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 
 class _TemplateStepDraft {
@@ -503,7 +503,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       return;
     }
 
-    final saved = await showLockedFormDialog<bool>(
+    final saved = await showMesLockedFormDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
@@ -892,7 +892,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       return;
     }
 
-    final saved = await showLockedFormDialog<bool>(
+    final saved = await showMesLockedFormDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
@@ -1224,7 +1224,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       return;
     }
     final nameController = TextEditingController(text: '系统母版套版');
-    final saved = await showLockedFormDialog<bool>(
+    final saved = await showMesLockedFormDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(
@@ -1702,7 +1702,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       return;
     }
 
-    final saved = await showLockedFormDialog<bool>(
+    final saved = await showMesLockedFormDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(

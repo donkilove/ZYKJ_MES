@@ -9,7 +9,7 @@ import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/core/services/export_file_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
-import 'package:mes_client/core/widgets/locked_form_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_create_dialog.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_edit_dialog.dart';
@@ -732,7 +732,7 @@ class _UserManagementPageState
       _showNoPermission();
       return;
     }
-    final confirmed = await showLockedFormDialog<bool>(
+    final confirmed = await showMesLockedFormDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(

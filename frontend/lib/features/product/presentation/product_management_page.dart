@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
-import 'package:mes_client/core/widgets/locked_form_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_feedback_banner.dart';
@@ -246,7 +246,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     if (!impact.requiresConfirmation) {
       return false;
     }
-    final confirmed = await showLockedFormDialog<bool>(
+    final confirmed = await showMesLockedFormDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
@@ -298,7 +298,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
   Future<String?> _promptInactiveReason() async {
     final reasonController = TextEditingController();
     final formKey = GlobalKey<FormState>();
-    final result = await showLockedFormDialog<String>(
+    final result = await showMesLockedFormDialog<String>(
       context: context,
       builder: (context) {
         return AlertDialog(
@@ -506,7 +506,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
       required String confirmText,
       Color? confirmColor,
     }) async {
-      final confirmed = await showLockedFormDialog<bool>(
+      final confirmed = await showMesLockedFormDialog<bool>(
         context: context,
         builder: (context) {
           return AlertDialog(
@@ -585,7 +585,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
       );
     }
 
-    await showLockedFormDialog<void>(
+    await showMesLockedFormDialog<void>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
@@ -711,7 +711,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                 text: item.note ?? '',
                               );
                               final newNote =
-                                  await showLockedFormDialog<String?>(
+                                  await showMesLockedFormDialog<String?>(
                                 context: context,
                                 builder: (ctx) => AlertDialog(
                                   title: Text('编辑 ${item.displayVersion} 备注'),
@@ -1149,7 +1149,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
         ? product.category
         : null;
 
-    final updated = await showLockedFormDialog<bool>(
+    final updated = await showMesLockedFormDialog<bool>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
@@ -1279,7 +1279,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     final formKey = GlobalKey<FormState>();
     String? selectedCategory;
 
-    final created = await showLockedFormDialog<bool>(
+    final created = await showMesLockedFormDialog<bool>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
@@ -1408,7 +1408,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     final passwordController = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
-    final confirmed = await showLockedFormDialog<bool>(
+    final confirmed = await showMesLockedFormDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(

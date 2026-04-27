@@ -7,7 +7,7 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
-import 'package:mes_client/core/widgets/locked_form_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
 
 class EquipmentLedgerPage extends StatefulWidget {
@@ -162,7 +162,7 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
       selectedOwner = '';
     }
 
-    final saved = await showLockedFormDialog<bool>(
+    final saved = await showMesLockedFormDialog<bool>(
       context: pageContext,
       builder: (dialogContext) {
         return StatefulBuilder(

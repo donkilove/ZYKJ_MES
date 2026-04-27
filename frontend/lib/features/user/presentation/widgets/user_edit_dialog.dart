@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mes_client/core/network/api_exception.dart';
-import 'package:mes_client/core/widgets/locked_form_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
@@ -97,7 +97,7 @@ Future<void> showUserEditDialog({
     bool isActive = detailUser.isActive;
     bool mustChangePassword = detailUser.mustChangePassword;
 
-    final updated = await showLockedFormDialog<bool>(
+    final updated = await showMesLockedFormDialog<bool>(
       context: context,
       builder: (context) {
         return StatefulBuilder(

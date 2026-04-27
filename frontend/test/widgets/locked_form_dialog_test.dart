@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/core/widgets/locked_form_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 
 void main() {
   testWidgets(
-    'showLockedFormDialog blocks escape and closes with explicit action',
+    'showMesLockedFormDialog blocks escape and closes with explicit action',
     (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -15,7 +15,7 @@ void main() {
                 body: Center(
                   child: ElevatedButton(
                     onPressed: () {
-                      showLockedFormDialog<void>(
+                      showMesLockedFormDialog<void>(
                         context: context,
                         builder: (dialogContext) {
                           return AlertDialog(

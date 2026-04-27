@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mes_client/core/widgets/locked_form_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 
@@ -44,7 +44,7 @@ Future<void> showConfirmDeleteUserDialog({
   final remarkController = TextEditingController();
   final formKey = GlobalKey<FormState>();
   var submitting = false;
-  final confirmed = await showLockedFormDialog<bool>(
+  final confirmed = await showMesLockedFormDialog<bool>(
     context: context,
     builder: (context) {
       return StatefulBuilder(
@@ -165,7 +165,7 @@ Future<void> showConfirmRestoreUserDialog({
   final formKey = GlobalKey<FormState>();
   var submitting = false;
 
-  final confirmed = await showLockedFormDialog<bool>(
+  final confirmed = await showMesLockedFormDialog<bool>(
     context: context,
     builder: (context) {
       return StatefulBuilder(
@@ -269,7 +269,7 @@ Future<void> showToggleUserActiveDialog({
   final formKey = GlobalKey<FormState>();
   var submitting = false;
 
-  final confirmed = await showLockedFormDialog<bool>(
+  final confirmed = await showMesLockedFormDialog<bool>(
     context: context,
     builder: (context) {
       return StatefulBuilder(

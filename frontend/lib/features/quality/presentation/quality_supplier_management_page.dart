@@ -6,7 +6,7 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/quality/presentation/widgets/quality_supplier_management_page_header.dart';
 import 'package:mes_client/features/quality/services/quality_supplier_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
-import 'package:mes_client/core/widgets/locked_form_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
 
 class QualitySupplierManagementPage extends StatefulWidget {
@@ -127,7 +127,7 @@ class _QualitySupplierManagementPageState
     final formKey = GlobalKey<FormState>();
     var isEnabled = item?.isEnabled ?? true;
 
-    final saved = await showLockedFormDialog<bool>(
+    final saved = await showMesLockedFormDialog<bool>(
       context: context,
       builder: (dialogContext) {
         return StatefulBuilder(

@@ -9,7 +9,7 @@ import 'package:mes_client/features/production/services/production_service.dart'
 import 'package:mes_client/features/quality/services/quality_supplier_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
-import 'package:mes_client/core/widgets/locked_form_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_order_status_chip.dart';
@@ -300,7 +300,7 @@ class _ProductionOrderManagementPageState
       return false;
     }
     final passwordController = TextEditingController();
-    final confirmed = await showLockedFormDialog<bool>(
+    final confirmed = await showMesLockedFormDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('结束订单'),
@@ -442,7 +442,7 @@ class _ProductionOrderManagementPageState
       if (!mounted) {
         return false;
       }
-      final selectedCodes = await showLockedFormDialog<List<String>>(
+      final selectedCodes = await showMesLockedFormDialog<List<String>>(
         context: context,
         builder: (dialogContext) {
           final selected = <String>{...initialSelected};

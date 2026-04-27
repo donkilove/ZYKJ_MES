@@ -8,7 +8,7 @@ import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 import 'package:mes_client/core/widgets/adaptive_table_container.dart';
-import 'package:mes_client/core/widgets/locked_form_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 
 class ProductionFirstArticlePage extends StatefulWidget {
   const ProductionFirstArticlePage({
@@ -177,7 +177,7 @@ class _ProductionFirstArticlePageState
       ).showSnackBar(const SnackBar(content: Text('当前工序暂无可用首件模板')));
       return;
     }
-    final selected = await showLockedFormDialog<FirstArticleTemplateItem>(
+    final selected = await showMesLockedFormDialog<FirstArticleTemplateItem>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('选择首件模板'),
@@ -234,7 +234,7 @@ class _ProductionFirstArticlePageState
       if (!mounted) {
         return;
       }
-      await showLockedFormDialog<void>(
+      await showMesLockedFormDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: const Text('首件参数查看'),
@@ -310,7 +310,7 @@ class _ProductionFirstArticlePageState
       ).showSnackBar(const SnackBar(content: Text('暂无可选参与操作员')));
       return;
     }
-    final selectedIds = await showLockedFormDialog<Set<int>>(
+    final selectedIds = await showMesLockedFormDialog<Set<int>>(
       context: context,
       builder: (dialogContext) {
         final draftIds = _selectedParticipants.map((item) => item.id).toSet();

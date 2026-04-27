@@ -9,7 +9,7 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
-import 'package:mes_client/core/widgets/locked_form_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
 import 'package:mes_client/features/user/presentation/widgets/registration_approval_feedback_banner.dart';
 import 'package:mes_client/features/user/presentation/widgets/registration_approval_filter_section.dart';
@@ -406,7 +406,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
     String? selectedRoleCode = _defaultRoleCode();
     int? selectedStageId;
 
-    final approved = await showLockedFormDialog<bool>(
+    final approved = await showMesLockedFormDialog<bool>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
