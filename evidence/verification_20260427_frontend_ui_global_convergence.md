@@ -32,6 +32,24 @@
 
 待补。
 
+### 阶段 1 总结
+
+- 任务清单完成情况：
+  - T1.1：`LegacyLegacyUserManagementPage` 已重命名为 `UserManagementPage`，6 个文件同步修正，commit `764ec08`。
+  - T1.2：分页条由 `SimplePaginationBar` 切换到 `MesPaginationBar`，commit `02744ea`。
+  - T1.3（路径 B）：`showLockedFormDialog` 从 `core/widgets/locked_form_dialog.dart` 迁移到 `core/ui/patterns/mes_locked_form_dialog.dart`，函数改名为 `showMesLockedFormDialog`，全站 28+ 处调用方同步收敛，commit `0bf2e20`。
+    - 决策点：原计划要求"用 AlertDialog 替换 LockedFormDialog"会导致 `barrierDismissible:false` + `PopScope(canPop:false)` 表单保护行为丢失（用户填表中途误关闭丢数据），与用户确认后改为路径 B：保留行为，仅做命名与位置对齐。
+  - T1.4：`UserManagementFeedbackBanner` 现状已基于 `UserModuleFeedbackBanner` → `MesInlineBanner`，链路完整，无需变更。
+  - T1.5：用户管理页空态由 `CrudListTableSection` 内部已转发到 `MesEmptyState`，错误态由外层 `UserManagementFeedbackBanner` (`MesInlineBanner.error`) 表达——这是合理的"banner 不替换数据"设计；加载态仍保留 `CircularProgressIndicator`，记入阶段 4 剧本的"加载态对齐"项。
+- 用户管理页 import 已完全脱离 `core/widgets/` 旧件依赖（仅 `UserDataTable` 内部仍间接依赖 `CrudListTableSection`/`UnifiedListTableHeaderStyle`，二者本身已转发到新件，留待阶段 4 推进）。
+- 验证：
+  - `flutter analyze lib`：0 新增错误（仅 1 个无关 unused_field 警告，位于 `production/first_article_scan_review_mobile_page.dart`）
+  - `flutter test test/widgets/user_management_page_test.dart`：60/60 通过
+  - `flutter test test/widgets/main_shell_page_test.dart`：26/26 通过
+  - `flutter test test/widgets/message_center_page_test.dart`：22/22 通过
+  - `flutter test test/widgets/production_page_test.dart`：8/8 通过
+- 用户管理页现具备"可被全站映射的基线资格"，进入阶段 2 整模收敛。
+
 ## 阶段 2：用户模块整模收敛
 
 待补。
