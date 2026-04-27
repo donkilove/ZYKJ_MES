@@ -10,7 +10,7 @@ import 'package:mes_client/features/quality/services/quality_supplier_service.da
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
-import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_order_status_chip.dart';
 import 'package:mes_client/features/production/presentation/production_order_detail_page.dart';
@@ -833,7 +833,7 @@ class _ProductionOrderManagementPageState
             ),
           ),
           const SizedBox(height: 12),
-          SimplePaginationBar(
+          MesPaginationBar(
             page: _page,
             totalPages: _totalPages,
             total: _total,
