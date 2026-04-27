@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
@@ -124,6 +126,67 @@ class _MaintenanceExecutionDetailPageState
     );
   }
 
+  Widget _buildDetailCard(MaintenanceWorkOrderDetail detail) {
+    return MesSectionCard(
+      title: '保养执行详情',
+      subtitle: '查看执行节点、结果摘要与关联记录。',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _row('设备', detail.equipmentName),
+          _row('来源计划', _nonEmptyOrDash(detail.sourcePlanSummary)),
+          _row('设备快照', _nonEmptyOrDash(detail.sourceEquipmentName)),
+          _row(
+            '执行工段快照',
+            _nonEmptyOrDash(detail.sourceExecutionProcessCode),
+          ),
+          if ((detail.sourceEquipmentCode ?? '').trim().isNotEmpty)
+            _row('设备编号', detail.sourceEquipmentCode!),
+          _row('项目', detail.itemName),
+          if ((detail.sourceItemName ?? '').trim().isNotEmpty)
+            _row('项目快照', detail.sourceItemName!),
+          _row('到期日期', _formatDate(detail.dueDate)),
+          _row('状态', _statusLabel(detail.status)),
+          _row('执行人', detail.executorUsername ?? '-'),
+          _row('开始时间', _formatDateTime(detail.startedAt)),
+          _row('完成时间', _formatDateTime(detail.completedAt)),
+          _row('结果摘要', detail.resultSummary ?? '-'),
+          _row('备注', detail.resultRemark ?? '-'),
+          if (detail.attachmentLink?.trim().isNotEmpty == true)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: MaintenanceAttachmentAction(
+                attachmentLink: detail.attachmentLink,
+                attachmentName: detail.attachmentName,
+                onOpen: openMaintenanceAttachment,
+              ),
+            ),
+          if (detail.recordId != null) ...[
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => MaintenanceRecordDetailPage(
+                        session: widget.session,
+                        onLogout: widget.onLogout,
+                        recordId: detail.recordId!,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.receipt_long),
+                label: const Text('查看生成记录'),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final detail = _detail;
@@ -132,60 +195,15 @@ class _MaintenanceExecutionDetailPageState
       body: _loading
           ? const MesLoadingState(label: '保养执行详情加载中...')
           : detail == null
-          ? Center(child: Text(_message.isEmpty ? '加载失败' : _message))
-          : Padding(
-              padding: const EdgeInsets.all(16),
-              child: ListView(
-                children: [
-                  _row('设备', detail.equipmentName),
-                  _row('来源计划', _nonEmptyOrDash(detail.sourcePlanSummary)),
-                  _row('设备快照', _nonEmptyOrDash(detail.sourceEquipmentName)),
-                  _row(
-                    '执行工段快照',
-                    _nonEmptyOrDash(detail.sourceExecutionProcessCode),
-                  ),
-                  if ((detail.sourceEquipmentCode ?? '').trim().isNotEmpty)
-                    _row('设备编号', detail.sourceEquipmentCode!),
-                  _row('项目', detail.itemName),
-                  if ((detail.sourceItemName ?? '').trim().isNotEmpty)
-                    _row('项目快照', detail.sourceItemName!),
-                  _row('到期日期', _formatDate(detail.dueDate)),
-                  _row('状态', _statusLabel(detail.status)),
-                  _row('执行人', detail.executorUsername ?? '-'),
-                  _row('开始时间', _formatDateTime(detail.startedAt)),
-                  _row('完成时间', _formatDateTime(detail.completedAt)),
-                  _row('结果摘要', detail.resultSummary ?? '-'),
-                  _row('备注', detail.resultRemark ?? '-'),
-                  if (detail.attachmentLink?.trim().isNotEmpty == true)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: MaintenanceAttachmentAction(
-                        attachmentLink: detail.attachmentLink,
-                        attachmentName: detail.attachmentName,
-                        onOpen: openMaintenanceAttachment,
-                      ),
-                    ),
-                  if (detail.recordId != null)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => MaintenanceRecordDetailPage(
-                                session: widget.session,
-                                onLogout: widget.onLogout,
-                                recordId: detail.recordId!,
-                              ),
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.receipt_long),
-                        label: const Text('查看生成记录'),
-                      ),
-                    ),
-                ],
+          ? Center(
+              child: MesEmptyState(
+                title: '加载失败',
+                description: _message.isEmpty ? '未获取到保养执行详情。' : _message,
               ),
+            )
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [_buildDetailCard(detail)],
             ),
     );
   }

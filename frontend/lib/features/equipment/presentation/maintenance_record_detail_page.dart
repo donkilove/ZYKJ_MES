@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
@@ -163,6 +165,63 @@ class _MaintenanceRecordDetailPageState
     );
   }
 
+  Widget _buildDetailCard(MaintenanceRecordDetail detail) {
+    return MesSectionCard(
+      title: '保养记录详情',
+      subtitle: '查看记录结果、附件与来源工单。',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _row('设备', detail.equipmentName),
+          _row('来源计划', _nonEmptyOrDash(detail.sourcePlanSummary)),
+          _row('设备快照', _nonEmptyOrDash(detail.sourceEquipmentName)),
+          _row(
+            '执行工段快照',
+            _nonEmptyOrDash(detail.sourceExecutionProcessCode),
+          ),
+          if ((detail.sourceEquipmentCode ?? '').trim().isNotEmpty)
+            _row('设备编号', detail.sourceEquipmentCode!),
+          _row('项目', detail.itemName),
+          if ((detail.sourceItemName ?? '').trim().isNotEmpty)
+            _row('项目快照', detail.sourceItemName!),
+          _row('工单编号', '#${detail.workOrderId}'),
+          _row('到期日期', _formatDate(detail.dueDate)),
+          _row('完成时间', _formatDateTime(detail.completedAt)),
+          _row('执行人', detail.executorUsername ?? '-'),
+          _row('结果摘要', detail.resultSummary),
+          _row('备注', detail.resultRemark ?? '-'),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: MaintenanceAttachmentAction(
+              attachmentLink: detail.attachmentLink,
+              attachmentName: detail.attachmentName,
+              onOpen: widget.onOpenAttachment,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => MaintenanceExecutionDetailPage(
+                      session: widget.session,
+                      onLogout: widget.onLogout,
+                      workOrderId: detail.workOrderId,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('查看来源工单'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final detail = _detail;
@@ -171,58 +230,15 @@ class _MaintenanceRecordDetailPageState
       body: _loading
           ? const MesLoadingState(label: '保养记录详情加载中...')
           : detail == null
-          ? Center(child: Text(_message.isEmpty ? '加载失败' : _message))
-          : Padding(
-              padding: const EdgeInsets.all(16),
-              child: ListView(
-                children: [
-                  _row('设备', detail.equipmentName),
-                  _row('来源计划', _nonEmptyOrDash(detail.sourcePlanSummary)),
-                  _row('设备快照', _nonEmptyOrDash(detail.sourceEquipmentName)),
-                  _row(
-                    '执行工段快照',
-                    _nonEmptyOrDash(detail.sourceExecutionProcessCode),
-                  ),
-                  if ((detail.sourceEquipmentCode ?? '').trim().isNotEmpty)
-                    _row('设备编号', detail.sourceEquipmentCode!),
-                  _row('项目', detail.itemName),
-                  if ((detail.sourceItemName ?? '').trim().isNotEmpty)
-                    _row('项目快照', detail.sourceItemName!),
-                  _row('工单编号', '#${detail.workOrderId}'),
-                  _row('到期日期', _formatDate(detail.dueDate)),
-                  _row('完成时间', _formatDateTime(detail.completedAt)),
-                  _row('执行人', detail.executorUsername ?? '-'),
-                  _row('结果摘要', detail.resultSummary),
-                  _row('备注', detail.resultRemark ?? '-'),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: MaintenanceAttachmentAction(
-                      attachmentLink: detail.attachmentLink,
-                      attachmentName: detail.attachmentName,
-                      onOpen: widget.onOpenAttachment,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => MaintenanceExecutionDetailPage(
-                              session: widget.session,
-                              onLogout: widget.onLogout,
-                              workOrderId: detail.workOrderId,
-                            ),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.open_in_new),
-                      label: const Text('查看来源工单'),
-                    ),
-                  ),
-                ],
+          ? Center(
+              child: MesEmptyState(
+                title: '加载失败',
+                description: _message.isEmpty ? '未获取到保养记录详情。' : _message,
               ),
+            )
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [_buildDetailCard(detail)],
             ),
     );
   }

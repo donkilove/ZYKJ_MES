@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_inline_banner.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/features/equipment/presentation/maintenance_execution_detail_page.dart';
 import 'package:mes_client/features/equipment/presentation/maintenance_record_detail_page.dart';
@@ -269,6 +272,130 @@ class _EquipmentDetailPageState extends State<EquipmentDetailPage> {
     );
   }
 
+  Widget _buildSummaryCard(EquipmentDetailResult detail) {
+    return MesSectionCard(
+      title: '设备概览',
+      subtitle: '集中查看设备基础信息与当前维护压力。',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _row('设备编号', detail.code),
+          _row('设备名称', detail.name),
+          _row('型号', detail.model.isEmpty ? '-' : detail.model),
+          _row('位置', detail.location.isEmpty ? '-' : detail.location),
+          _row('负责人', detail.ownerName.isEmpty ? '-' : detail.ownerName),
+          _row('状态', detail.isEnabled ? '启用' : '停用'),
+          _row('备注', detail.remark.isEmpty ? '-' : detail.remark),
+          _row('启用计划数', '${detail.activePlanCount}'),
+          _row('待执行工单数', '${detail.pendingWorkOrderCount}'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlansCard(EquipmentDetailResult detail) {
+    return MesSectionCard(
+      title: '关联计划',
+      child: detail.activePlans.isEmpty
+          ? MesEmptyState(
+              title: detail.activePlansScopeLimited
+                  ? '当前权限范围内暂无可见启用保养计划'
+                  : '暂无启用保养计划',
+            )
+          : Column(
+              key: _plansSectionKey,
+              children: [
+                for (final plan in detail.activePlans)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('${plan.itemName} / ${plan.executionProcessName}'),
+                    subtitle: Text(
+                      '下次到期：${_formatDate(plan.nextDueDate)}｜默认执行人：${plan.defaultExecutorUsername ?? '-'}',
+                    ),
+                  ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildWorkOrdersCard(EquipmentDetailResult detail) {
+    return MesSectionCard(
+      title: '未完成工单',
+      child: detail.pendingWorkOrders.isEmpty
+          ? MesEmptyState(
+              title: detail.pendingWorkOrdersScopeLimited
+                  ? '当前权限范围内暂无可见未完成工单'
+                  : '暂无未完成工单',
+            )
+          : Column(
+              key: _workOrdersSectionKey,
+              children: [
+                for (final order in detail.pendingWorkOrders)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text('#${order.id} ${order.itemName}'),
+                    subtitle: Text(
+                      '工段：${order.sourceExecutionProcessCode ?? '-'}｜到期：${_formatDate(order.dueDate)}｜状态：${order.status}',
+                    ),
+                    trailing: TextButton(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => MaintenanceExecutionDetailPage(
+                              session: widget.session,
+                              onLogout: widget.onLogout,
+                              workOrderId: order.id,
+                            ),
+                          ),
+                        );
+                      },
+                      child: const Text('查看'),
+                    ),
+                  ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildRecordsCard(EquipmentDetailResult detail) {
+    return MesSectionCard(
+      title: '最近保养记录',
+      child: detail.recentRecords.isEmpty
+          ? MesEmptyState(
+              title: detail.recentRecordsScopeLimited
+                  ? '当前权限范围内暂无可见保养记录'
+                  : '暂无保养记录',
+            )
+          : Column(
+              key: _recordsSectionKey,
+              children: [
+                for (final record in detail.recentRecords)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(record.itemName),
+                    subtitle: Text(
+                      '完成：${_formatDate(record.completedAt)}｜结果：${record.resultSummary}｜执行人：${record.executorUsername ?? '-'}',
+                    ),
+                    trailing: TextButton(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => MaintenanceRecordDetailPage(
+                              session: widget.session,
+                              onLogout: widget.onLogout,
+                              recordId: record.id,
+                            ),
+                          ),
+                        );
+                      },
+                      child: const Text('查看'),
+                    ),
+                  ),
+              ],
+            ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final detail = _detail;
@@ -277,127 +404,39 @@ class _EquipmentDetailPageState extends State<EquipmentDetailPage> {
       body: _loading
           ? const MesLoadingState(label: '设备详情加载中...')
           : detail == null
-          ? Center(child: Text(_message.isEmpty ? '加载失败' : _message))
-          : Padding(
-              padding: const EdgeInsets.all(16),
-              child: ListView(
-                controller: _scrollController,
-                children: [
-                  _buildRiskOverview(detail),
-                  const SizedBox(height: 16),
-                  _row('设备编号', detail.code),
-                  _row('设备名称', detail.name),
-                  _row('型号', detail.model.isEmpty ? '-' : detail.model),
-                  _row('位置', detail.location.isEmpty ? '-' : detail.location),
-                  _row(
-                    '负责人',
-                    detail.ownerName.isEmpty ? '-' : detail.ownerName,
-                  ),
-                  _row('状态', detail.isEnabled ? '启用' : '停用'),
-                  _row('备注', detail.remark.isEmpty ? '-' : detail.remark),
-                  _row('启用计划数', '${detail.activePlanCount}'),
-                  _row('待执行工单数', '${detail.pendingWorkOrderCount}'),
-                  const Divider(height: 24),
-                  Text(
-                    '关联计划',
-                    key: _plansSectionKey,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  if (detail.activePlans.isEmpty)
-                    Text(
-                      detail.activePlansScopeLimited
-                          ? '当前权限范围内暂无可见启用保养计划'
-                          : '暂无启用保养计划',
-                    )
-                  else
-                    ...detail.activePlans.map(
-                      (plan) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(
-                          '${plan.itemName} / ${plan.executionProcessName}',
-                        ),
-                        subtitle: Text(
-                          '下次到期：${_formatDate(plan.nextDueDate)}｜默认执行人：${plan.defaultExecutorUsername ?? '-'}',
-                        ),
-                      ),
-                    ),
-                  const Divider(height: 24),
-                  Text(
-                    '未完成工单',
-                    key: _workOrdersSectionKey,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  if (detail.pendingWorkOrders.isEmpty)
-                    Text(
-                      detail.pendingWorkOrdersScopeLimited
-                          ? '当前权限范围内暂无可见未完成工单'
-                          : '暂无未完成工单',
-                    )
-                  else
-                    ...detail.pendingWorkOrders.map(
-                      (order) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text('#${order.id} ${order.itemName}'),
-                        subtitle: Text(
-                          '工段：${order.sourceExecutionProcessCode ?? '-'}｜到期：${_formatDate(order.dueDate)}｜状态：${order.status}',
-                        ),
-                        trailing: TextButton(
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => MaintenanceExecutionDetailPage(
-                                  session: widget.session,
-                                  onLogout: widget.onLogout,
-                                  workOrderId: order.id,
-                                ),
-                              ),
-                            );
-                          },
-                          child: const Text('查看'),
-                        ),
-                      ),
-                    ),
-                  const Divider(height: 24),
-                  Text(
-                    '最近保养记录',
-                    key: _recordsSectionKey,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  if (detail.recentRecords.isEmpty)
-                    Text(
-                      detail.recentRecordsScopeLimited
-                          ? '当前权限范围内暂无可见保养记录'
-                          : '暂无保养记录',
-                    )
-                  else
-                    ...detail.recentRecords.map(
-                      (record) => ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(record.itemName),
-                        subtitle: Text(
-                          '完成：${_formatDate(record.completedAt)}｜结果：${record.resultSummary}｜执行人：${record.executorUsername ?? '-'}',
-                        ),
-                        trailing: TextButton(
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => MaintenanceRecordDetailPage(
-                                  session: widget.session,
-                                  onLogout: widget.onLogout,
-                                  recordId: record.id,
-                                ),
-                              ),
-                            );
-                          },
-                          child: const Text('查看'),
-                        ),
-                      ),
-                    ),
-                ],
+          ? Center(
+              child: MesEmptyState(
+                title: '加载失败',
+                description: _message.isEmpty ? '未获取到设备详情。' : _message,
               ),
+            )
+          : ListView(
+              controller: _scrollController,
+              padding: const EdgeInsets.all(16),
+              children: [
+                _buildRiskOverview(detail),
+                const SizedBox(height: 16),
+                if (_message.isNotEmpty) ...[
+                  MesInlineBanner.warning(message: _message),
+                  const SizedBox(height: 16),
+                ],
+                _buildSummaryCard(detail),
+                const SizedBox(height: 16),
+                KeyedSubtree(
+                  key: _plansSectionKey,
+                  child: _buildPlansCard(detail),
+                ),
+                const SizedBox(height: 16),
+                KeyedSubtree(
+                  key: _workOrdersSectionKey,
+                  child: _buildWorkOrdersCard(detail),
+                ),
+                const SizedBox(height: 16),
+                KeyedSubtree(
+                  key: _recordsSectionKey,
+                  child: _buildRecordsCard(detail),
+                ),
+              ],
             ),
     );
   }
