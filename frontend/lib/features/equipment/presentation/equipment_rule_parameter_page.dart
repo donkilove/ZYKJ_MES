@@ -6,6 +6,7 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 
@@ -166,25 +167,15 @@ class _EquipmentRuleParameterPageState extends State<EquipmentRuleParameterPage>
     if (tabs.isEmpty || _innerTabController == null) {
       return const Center(child: Text('当前账号没有可访问的规则/参数页面。'));
     }
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CrudPageHeader(title: '规则与参数', onRefresh: _refreshCurrentTab),
-          const SizedBox(height: 12),
-          Material(
-            color: Theme.of(context).colorScheme.surface,
-            child: TabBar(controller: _innerTabController, tabs: tabs),
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: TabBarView(
-              controller: _innerTabController,
-              children: children,
-            ),
-          ),
-        ],
+    return MesCrudPageScaffold(
+      header: CrudPageHeader(title: '规则与参数', onRefresh: _refreshCurrentTab),
+      filters: Material(
+        color: Theme.of(context).colorScheme.surface,
+        child: TabBar(controller: _innerTabController, tabs: tabs),
+      ),
+      content: TabBarView(
+        controller: _innerTabController,
+        children: children,
       ),
     );
   }
