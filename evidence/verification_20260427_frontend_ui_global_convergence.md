@@ -82,6 +82,23 @@
 
 待补。
 
+### 阶段 3 总结
+
+- 任务清单完成情况：
+  - T3.1：模块改造剧本已落地，commit `8d388bd`，文件：`docs/superpowers/playbooks/2026-04-27-frontend-module-ui-convergence-playbook.md`。
+  - T3.2：前端 UI 基线说明已落地，commit `a60c016`，文件：`docs/frontend/ui-baseline.md`。
+- 剧本相对原计划草案的修正：
+  - 删除"用 AlertDialog 替换 LockedFormDialog"指引（会丢失保护行为），改为"使用 `showMesLockedFormDialog`"
+  - 增加"加载态推迟"约定（避免每页琐碎手动包装）
+  - 增加"错误态优先 banner"约定（避免错误覆盖整内容区丢失数据）
+  - 增加"集成测试基线"小节，记录 main 上预先存在的 2 个失败用例，避免后续模块改造时误判为回归
+- 9 小时窗口承诺的全部交付物已就位：
+  1. 全站差异审计表（阶段 0）
+  2. 用户管理页基线收口（阶段 1）
+  3. 用户模块整模收敛（阶段 2）
+  4. 模块改造剧本 + UI 基线文档（阶段 3）
+- 进入阶段 4：按剧本推动 product → equipment → production → quality → craft → message → misc → settings → plugin_host → shell.home → auth → time_sync 逐模块收敛。
+
 ## 后续阶段（窗口外）
 
 待补。
