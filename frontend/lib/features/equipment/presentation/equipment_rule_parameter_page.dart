@@ -6,7 +6,7 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
-import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 
 enum _RuleListAction { openParameters, edit, toggle, delete }
@@ -835,7 +835,7 @@ class _RulesTabState extends State<_RulesTab> {
           ),
         ),
         const SizedBox(height: 12),
-        SimplePaginationBar(
+        MesPaginationBar(
           page: _page,
           totalPages: _totalPages,
           total: _total,
@@ -1557,7 +1557,7 @@ class _ParametersTabState extends State<_ParametersTab> {
           ),
         ),
         const SizedBox(height: 12),
-        SimplePaginationBar(
+        MesPaginationBar(
           page: _page,
           totalPages: _totalPages,
           total: _total,
