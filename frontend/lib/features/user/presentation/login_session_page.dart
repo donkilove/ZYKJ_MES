@@ -6,7 +6,7 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/user/presentation/widgets/login_session_page_header.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
-import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 
 class LoginSessionPage extends StatefulWidget {
@@ -416,7 +416,7 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
               ),
             ),
             const SizedBox(height: 12),
-            SimplePaginationBar(
+            MesPaginationBar(
               page: _sessionPage,
               totalPages: _sessionTotalPages,
               total: _sessionTotal,
