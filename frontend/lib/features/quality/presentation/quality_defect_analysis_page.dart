@@ -11,6 +11,7 @@ import 'package:mes_client/features/quality/presentation/widgets/quality_defect_
 import 'package:mes_client/features/quality/services/quality_service.dart';
 import 'package:mes_client/core/widgets/adaptive_table_container.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 
 class QualityDefectAnalysisPage extends StatefulWidget {
@@ -231,44 +232,32 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return MesCrudPageScaffold(
+      header: Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: QualityDefectAnalysisPageHeader(
-                  loading: _loading,
-                  canExport: widget.canExport,
-                  exporting: _exporting,
-                  onRefresh: _load,
-                  onExport: _export,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _buildFilterBar(theme),
-          const SizedBox(height: 12),
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                _message,
-                style: TextStyle(color: theme.colorScheme.error),
-              ),
-            ),
           Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : _result == null
-                ? const Center(child: Text('暂无数据'))
-                : _buildContent(theme),
+            child: QualityDefectAnalysisPageHeader(
+              loading: _loading,
+              canExport: widget.canExport,
+              exporting: _exporting,
+              onRefresh: _load,
+              onExport: _export,
+            ),
           ),
         ],
       ),
+      filters: _buildFilterBar(theme),
+      banner: _message.isEmpty
+          ? null
+          : Text(
+              _message,
+              style: TextStyle(color: theme.colorScheme.error),
+            ),
+      content: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _result == null
+          ? const Center(child: Text('暂无数据'))
+          : _buildContent(theme),
     );
   }
 
