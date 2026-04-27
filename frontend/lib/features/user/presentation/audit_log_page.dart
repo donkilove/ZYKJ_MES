@@ -8,7 +8,7 @@ import 'package:mes_client/features/user/presentation/widgets/audit_log_page_hea
 import 'package:mes_client/features/user/presentation/widgets/shared/user_module_filter_panel.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
-import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 
 class AuditLogPage extends StatefulWidget {
@@ -321,7 +321,7 @@ class _AuditLogPageState extends State<AuditLogPage> {
           ),
         ),
       ),
-      pagination: SimplePaginationBar(
+      pagination: MesPaginationBar(
         page: _page,
         totalPages: _totalPages,
         total: _total,
