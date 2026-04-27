@@ -7,7 +7,9 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_inline_banner.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/auth/services/auth_service.dart';
 import 'package:mes_client/features/user/presentation/widgets/account_settings_page_header.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
@@ -414,43 +416,34 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     final stageLabel = profile.stageName?.trim().isNotEmpty == true
         ? profile.stageName!
         : '/';
-    return Card(
-      elevation: 0,
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildSectionHeader(
-              icon: Icons.badge_outlined,
-              title: '个人资料',
-              subtitle: '保留账号核心信息，避免与会话信息重复展示。',
-            ),
-            const SizedBox(height: 16),
-            _buildFieldGroup(
-              children: [
-                _buildInfoItem('用户名', profile.username),
-                _buildInfoItem('显示名称', profile.fullName ?? '-'),
-                _buildInfoItem('账号状态', profile.isActive ? '启用' : '停用'),
-                _buildInfoItem('角色', roleLabel),
-                _buildInfoItem('工段', stageLabel),
-                _buildInfoItem('最近登录 IP', profile.lastLoginIp ?? '-'),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _buildFieldGroup(
-              children: [
-                _buildInfoItem('创建时间', _formatDateTime(profile.createdAt)),
-                _buildInfoItem('最近登录', _formatDateTime(profile.lastLoginAt)),
-                _buildInfoItem(
-                  '最近改密时间',
-                  _formatDateTime(profile.passwordChangedAt),
-                ),
-              ],
-            ),
-          ],
-        ),
+    return MesSectionCard(
+      title: '个人资料',
+      subtitle: '保留账号核心信息，避免与会话信息重复展示。',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildFieldGroup(
+            children: [
+              _buildInfoItem('用户名', profile.username),
+              _buildInfoItem('显示名称', profile.fullName ?? '-'),
+              _buildInfoItem('账号状态', profile.isActive ? '启用' : '停用'),
+              _buildInfoItem('角色', roleLabel),
+              _buildInfoItem('工段', stageLabel),
+              _buildInfoItem('最近登录 IP', profile.lastLoginIp ?? '-'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildFieldGroup(
+            children: [
+              _buildInfoItem('创建时间', _formatDateTime(profile.createdAt)),
+              _buildInfoItem('最近登录', _formatDateTime(profile.lastLoginAt)),
+              _buildInfoItem(
+                '最近改密时间',
+                _formatDateTime(profile.passwordChangedAt),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
