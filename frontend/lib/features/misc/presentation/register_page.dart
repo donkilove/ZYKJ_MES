@@ -271,6 +271,7 @@ class _RegisterPageState extends State<RegisterPage> {
                                       height: 18,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
+                                        color: Colors.white,
                                       ),
                                     )
                                   : const Text('提交注册申请'),

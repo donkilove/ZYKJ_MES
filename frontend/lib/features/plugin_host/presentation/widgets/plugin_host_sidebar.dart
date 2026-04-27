@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/features/plugin_host/presentation/plugin_host_controller.dart';
 
 class PluginHostSidebar extends StatelessWidget {
@@ -26,7 +27,7 @@ class PluginHostSidebar extends StatelessWidget {
           const Divider(height: 1),
           Expanded(
             child: controller.loading
-                ? const Center(child: CircularProgressIndicator())
+                ? const MesLoadingState(label: '插件加载中...')
                 : controller.plugins.isEmpty
                 ? const Center(child: Text('未发现插件，请检查插件目录。'))
                 : ListView.builder(

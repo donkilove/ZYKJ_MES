@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_error_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 
 class MessageCenterListSection extends StatelessWidget {
@@ -32,7 +33,7 @@ class MessageCenterListSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final content = loading && isEmpty
-        ? const Center(child: CircularProgressIndicator())
+        ? const MesLoadingState()
         : error.isNotEmpty && isEmpty
         ? MesErrorState(message: error, onRetry: onRetry)
         : isEmpty

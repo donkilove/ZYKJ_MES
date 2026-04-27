@@ -12,6 +12,7 @@ import 'package:mes_client/features/quality/services/quality_service.dart';
 import 'package:mes_client/core/widgets/adaptive_table_container.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 
 class QualityDefectAnalysisPage extends StatefulWidget {
@@ -254,7 +255,7 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
               style: TextStyle(color: theme.colorScheme.error),
             ),
       content: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const MesLoadingState(label: '缺陷分析加载中...')
           : _result == null
           ? const Center(child: Text('暂无数据'))
           : _buildContent(theme),

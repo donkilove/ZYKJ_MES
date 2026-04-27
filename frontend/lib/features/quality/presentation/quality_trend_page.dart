@@ -7,6 +7,7 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/services/export_file_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/widgets/adaptive_table_container.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
@@ -950,7 +951,7 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
       filters: _buildFilterBar(),
       banner: _buildSummaryCards(context),
       content: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const MesLoadingState(label: '质量趋势加载中...')
           : _buildMainContent(),
     );
   }

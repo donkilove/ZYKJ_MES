@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/services/page_catalog_service.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/features/auth/services/auth_service.dart';
 import 'package:mes_client/features/auth/services/authz_service.dart';
 import 'package:mes_client/features/message/services/message_service.dart';
@@ -232,9 +233,7 @@ class _MainShellPageState extends State<MainShellPage>
       builder: (context, _) {
         final state = _controller.state;
         if (state.loading) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+          return const Scaffold(body: MesLoadingState(label: '工作台加载中...'));
         }
 
         final showErrorPage =

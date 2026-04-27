@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:flutter/services.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
@@ -409,7 +410,7 @@ class _LoginPageState extends State<LoginPage> {
           child: const Center(
             child: Padding(
               padding: EdgeInsets.all(48),
-              child: CircularProgressIndicator(),
+              child: MesLoadingState(label: '公告加载中...'),
             ),
           ),
         ),
@@ -673,7 +674,10 @@ class _LoginPageState extends State<LoginPage> {
                     ? const SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       )
                     : const Icon(Icons.refresh),
               ),
@@ -774,7 +778,10 @@ class _LoginPageState extends State<LoginPage> {
                         ? const SizedBox(
                             width: 18,
                             height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
                           )
                         : const Text('登录'),
                   ),

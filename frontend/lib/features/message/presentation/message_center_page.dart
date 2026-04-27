@@ -7,6 +7,8 @@ import 'package:mes_client/features/message/models/message_models.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/features/message/presentation/widgets/message_center_header.dart';
 import 'package:mes_client/features/message/presentation/widgets/message_center_detail_sections.dart';
 import 'package:mes_client/features/message/presentation/widgets/message_center_list_section.dart';
@@ -961,7 +963,7 @@ class _AnnouncementPublishDialogState
     if (_loadingOptions) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 24),
-        child: Center(child: CircularProgressIndicator()),
+        child: MesLoadingState(label: '可选范围加载中...'),
       );
     }
     if (_rangeType == 'roles') {
@@ -1031,119 +1033,117 @@ class _AnnouncementPublishDialogState
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return MesDialog(
       title: const Text('发布公告'),
-      content: SizedBox(
-        width: 560,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: _titleController,
-                decoration: const InputDecoration(
-                  labelText: '标题',
-                  border: OutlineInputBorder(),
+      width: 560,
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _titleController,
+              decoration: const InputDecoration(
+                labelText: '标题',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _contentController,
+              minLines: 4,
+              maxLines: 6,
+              decoration: const InputDecoration(
+                labelText: '正文',
+                border: OutlineInputBorder(),
+                alignLabelWithHint: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _priority,
+              decoration: const InputDecoration(
+                labelText: '优先级',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem(value: 'normal', child: Text('普通')),
+                DropdownMenuItem(value: 'important', child: Text('重要')),
+                DropdownMenuItem(value: 'urgent', child: Text('紧急')),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() => _priority = value);
+                }
+              },
+            ),
+            const SizedBox(height: 12),
+            const Text('发送范围'),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('全员'),
+                  selected: _rangeType == 'all',
+                  onSelected: (_) => setState(() => _rangeType = 'all'),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _contentController,
-                minLines: 4,
-                maxLines: 6,
-                decoration: const InputDecoration(
-                  labelText: '正文',
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
+                ChoiceChip(
+                  label: const Text('指定角色'),
+                  selected: _rangeType == 'roles',
+                  onSelected: (_) => setState(() => _rangeType = 'roles'),
                 ),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: _priority,
-                decoration: const InputDecoration(
-                  labelText: '优先级',
-                  border: OutlineInputBorder(),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'normal', child: Text('普通')),
-                  DropdownMenuItem(value: 'important', child: Text('重要')),
-                  DropdownMenuItem(value: 'urgent', child: Text('紧急')),
-                ],
-                onChanged: (value) {
-                  if (value != null) {
-                    setState(() => _priority = value);
-                  }
-                },
-              ),
-              const SizedBox(height: 12),
-              const Text('发送范围'),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  ChoiceChip(
-                    label: const Text('全员'),
-                    selected: _rangeType == 'all',
-                    onSelected: (_) => setState(() => _rangeType = 'all'),
-                  ),
-                  ChoiceChip(
-                    label: const Text('指定角色'),
-                    selected: _rangeType == 'roles',
-                    onSelected: (_) => setState(() => _rangeType = 'roles'),
-                  ),
-                  ChoiceChip(
-                    label: const Text('指定用户'),
-                    selected: _rangeType == 'users',
-                    onSelected: (_) => setState(() => _rangeType = 'users'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              _buildSelectionArea(),
-              const SizedBox(height: 12),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.schedule_outlined),
-                title: const Text('生效时间'),
-                subtitle: Text(_formatLocalDateTime(DateTime.now())),
-              ),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.event_busy_outlined),
-                title: const Text('失效时间'),
-                subtitle: Text(
-                  _expiresAt == null
-                      ? '不设置'
-                      : _formatLocalDateTime(_expiresAt!),
-                ),
-                trailing: Wrap(
-                  spacing: 8,
-                  children: [
-                    TextButton(
-                      onPressed: _submitting ? null : _pickExpiresAt,
-                      child: const Text('选择'),
-                    ),
-                    if (_expiresAt != null)
-                      TextButton(
-                        onPressed: _submitting
-                            ? null
-                            : () => setState(() => _expiresAt = null),
-                        child: const Text('清空'),
-                      ),
-                  ],
-                ),
-              ),
-              if (_error.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _error,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ChoiceChip(
+                  label: const Text('指定用户'),
+                  selected: _rangeType == 'users',
+                  onSelected: (_) => setState(() => _rangeType = 'users'),
                 ),
               ],
+            ),
+            const SizedBox(height: 12),
+            _buildSelectionArea(),
+            const SizedBox(height: 12),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.schedule_outlined),
+              title: const Text('生效时间'),
+              subtitle: Text(_formatLocalDateTime(DateTime.now())),
+            ),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.event_busy_outlined),
+              title: const Text('失效时间'),
+              subtitle: Text(
+                _expiresAt == null
+                    ? '不设置'
+                    : _formatLocalDateTime(_expiresAt!),
+              ),
+              trailing: Wrap(
+                spacing: 8,
+                children: [
+                  TextButton(
+                    onPressed: _submitting ? null : _pickExpiresAt,
+                    child: const Text('选择'),
+                  ),
+                  if (_expiresAt != null)
+                    TextButton(
+                      onPressed: _submitting
+                          ? null
+                          : () => setState(() => _expiresAt = null),
+                      child: const Text('清空'),
+                    ),
+                ],
+              ),
+            ),
+            if (_error.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                _error,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
             ],
-          ),
+          ],
         ),
       ),
       actions: [

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_action_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/features/quality/presentation/widgets/quality_supplier_management_page_header.dart';
 import 'package:mes_client/features/quality/services/quality_supplier_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
@@ -133,52 +135,50 @@ class _QualitySupplierManagementPageState
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (innerContext, setInnerState) {
-            return AlertDialog(
+            return MesDialog(
               title: Text(isCreate ? '新增供应商' : '编辑供应商'),
-              content: SizedBox(
-                width: 520,
-                child: Form(
-                  key: formKey,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextFormField(
-                          controller: nameController,
-                          decoration: const InputDecoration(
-                            labelText: '名称',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return '请输入供应商名称';
-                            }
-                            return null;
-                          },
+              width: 520,
+              content: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: nameController,
+                        decoration: const InputDecoration(
+                          labelText: '名称',
+                          border: OutlineInputBorder(),
                         ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: remarkController,
-                          decoration: const InputDecoration(
-                            labelText: '备注',
-                            border: OutlineInputBorder(),
-                          ),
-                          maxLines: 3,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return '请输入供应商名称';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: remarkController,
+                        decoration: const InputDecoration(
+                          labelText: '备注',
+                          border: OutlineInputBorder(),
                         ),
-                        const SizedBox(height: 12),
-                        SwitchListTile.adaptive(
-                          value: isEnabled,
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('启用状态'),
-                          subtitle: Text(isEnabled ? '当前为启用' : '当前为停用'),
-                          onChanged: (value) {
-                            setInnerState(() {
-                              isEnabled = value;
-                            });
-                          },
-                        ),
-                      ],
-                    ),
+                        maxLines: 3,
+                      ),
+                      const SizedBox(height: 12),
+                      SwitchListTile.adaptive(
+                        value: isEnabled,
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('启用状态'),
+                        subtitle: Text(isEnabled ? '当前为启用' : '当前为停用'),
+                        onChanged: (value) {
+                          setInnerState(() {
+                            isEnabled = value;
+                          });
+                        },
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -239,19 +239,12 @@ class _QualitySupplierManagementPageState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
+        return MesActionDialog(
           title: const Text('确认删除'),
           content: Text('确认删除供应商 ${item.name} 吗？'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('确认删除'),
-            ),
-          ],
+          confirmLabel: '确认删除',
+          isDestructive: true,
+          onConfirm: () => Navigator.of(dialogContext).pop(true),
         );
       },
     );

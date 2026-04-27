@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
@@ -182,7 +183,7 @@ class _FirstArticleDispositionPageState
       appBar: AppBar(title: Text(_pageTitle())),
       body: SafeArea(
         child: _loading
-            ? const Center(child: CircularProgressIndicator())
+            ? const MesLoadingState(label: '首件处置加载中...')
             : _detail == null
             ? Center(child: Text(_message.isNotEmpty ? _message : '加载失败'))
             : SingleChildScrollView(
@@ -460,6 +461,7 @@ class _FirstArticleDispositionPageState
                                         height: 16,
                                         child: CircularProgressIndicator(
                                           strokeWidth: 2,
+                                          color: Colors.white,
                                         ),
                                       )
                                     : Text(
