@@ -7,7 +7,7 @@ import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/features/user/presentation/widgets/role_management_page_header.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
-import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 
 class RoleManagementPage extends StatefulWidget {
@@ -515,7 +515,7 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
           ),
         ),
       ),
-      pagination: SimplePaginationBar(
+      pagination: MesPaginationBar(
         page: _page,
         totalPages: _totalPages,
         total: _total,
