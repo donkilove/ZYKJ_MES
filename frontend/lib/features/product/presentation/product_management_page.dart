@@ -6,7 +6,7 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
-import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_feedback_banner.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_filter_section.dart';
@@ -1723,7 +1723,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
         buildActionItems: _buildProductActionMenuItems,
         onSelected: _handleProductTableAction,
       ),
-      pagination: SimplePaginationBar(
+      pagination: MesPaginationBar(
         page: _productPage,
         totalPages: _productTotalPages,
         total: _total,
