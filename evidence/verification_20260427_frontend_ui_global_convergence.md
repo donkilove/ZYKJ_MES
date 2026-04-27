@@ -54,6 +54,30 @@
 
 待补。
 
+### 阶段 2 总结
+
+- 任务清单完成情况：
+  - T2.1：注册审批页分页条对齐 `MesPaginationBar`，commit `7e2bc66`。
+  - T2.2：角色管理页分页条对齐 `MesPaginationBar`，commit `ff30108`。
+  - T2.3：审计日志页分页条对齐 `MesPaginationBar`，commit `da206d9`。
+  - T2.4：登录会话页分页条对齐 `MesPaginationBar`，commit `eae300c`。
+  - T2.5：账号设置页与功能权限配置页现状已基于 `MesPageHeader` + `MesSectionCard`，与基线一致；唯一残留为初始加载态裸 `CircularProgressIndicator`，按 T1.5 一致策略推迟到阶段 4 剧本"加载态对齐"统一处理；本任务无变更。
+  - T2.6：`UserPage` Tab Shell 已基于 `UserPageShell`，与生产/设备模块壳层模式一致；本任务无变更。
+- 用户模块整模 `SimplePaginationBar` 旧件已**完全清退**（grep 验证 `core/widgets/simple_pagination_bar` 在 `frontend/lib/features/user` 下零引用）。
+- 验证：
+  - `flutter analyze lib/features/user`：0 错误
+  - 各页 widget test 全绿：用户管理 60、注册审批 10、角色管理 7、审计日志 27（含其他子页）、登录会话 8
+  - `flutter test integration_test/user_module_flow_test.dart -d windows`：1/1 通过
+  - `flutter test integration_test/home_shell_flow_test.dart -d windows`：10/10 通过
+  - `flutter test integration_test/login_flow_test.dart -d windows`：13 通过 / 2 失败
+- 关于 `login_flow_test.dart` 两个失败：
+  - 失败 1：`登录后进入消息中心并完成详情查看、单条已读与跳转到账户设置`（line 312，`Found 0 widgets with text "未读消息"`）
+  - 失败 2：`登录后进入工艺总页并切换关键页签完成关键动作`（line 611，`pumpAndSettle timed out`）
+  - **决定性证据：在 `main` 分支上单独跑这两个用例，错误信息、行号、堆栈完全一致**（main 是 commit `0056d21`，与本分支 base 一致）。
+  - 结论：这两个失败是**预先存在的测试缺陷**，与本轮 UI 收敛改动无关；按本计划"不处理与 UI 一致性无关的业务/测试缺陷"原则，**不在本轮范围内修复**，留待独立任务处理。
+  - 已确认本轮触及的所有模块（user、message、craft 等）的 widget 测试全绿，且 user_module_flow / home_shell_flow 集成测试也全绿，没有真正的回归。
+- 用户模块作为后续模块改造剧本的"模板模块"地位确立，进入阶段 3。
+
 ## 阶段 3：模块改造剧本与基线文档
 
 待补。
