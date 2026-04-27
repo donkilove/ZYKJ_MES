@@ -12,7 +12,7 @@ import 'package:mes_client/features/quality/services/repair_scrap_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
-import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 
 enum _RepairOrderAction { detail, summary, complete }
@@ -961,7 +961,7 @@ class _ProductionRepairOrdersPageState
             ),
           ),
           const SizedBox(height: 12),
-          SimplePaginationBar(
+          MesPaginationBar(
             page: _page,
             totalPages: _totalPages,
             total: _total,
