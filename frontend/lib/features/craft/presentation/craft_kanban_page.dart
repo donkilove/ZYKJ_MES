@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
@@ -209,10 +211,10 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
           : utf8.decode(base64Decode(contentBase64));
       await showDialog<void>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
+        builder: (dialogContext) => MesDialog(
           title: const Text('看板导出预览'),
+          width: 920,
           content: SizedBox(
-            width: 920,
             height: 560,
             child: text.isEmpty
                 ? const Center(child: Text('暂无可导出数据'))
@@ -278,7 +280,10 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
           const SizedBox(
             width: 20,
             height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Colors.white,
+            ),
           ),
       ],
     );
@@ -749,7 +754,7 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
 
   Widget _buildContent() {
     return (_loadingProducts || _loadingMetrics)
-        ? const Center(child: CircularProgressIndicator())
+        ? const MesLoadingState(label: '工艺看板加载中...')
         : (_metrics == null || _metrics!.items.isEmpty)
             ? const Center(child: Text('暂无可统计数据'))
             : ListView(

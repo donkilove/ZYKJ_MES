@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 
 class ProcessItemDialog extends StatefulWidget {
@@ -99,8 +100,9 @@ class _ProcessItemDialogState extends State<ProcessItemDialog> {
     final fullCodePreview = serialText.isEmpty
         ? '${stage.code}-__'
         : '${stage.code}-$serialText';
-    return AlertDialog(
+    return MesDialog(
       title: Text(widget.existing == null ? '新增工序' : '编辑工序'),
+      width: 520,
       content: Form(
         key: _formKey,
         child: SingleChildScrollView(

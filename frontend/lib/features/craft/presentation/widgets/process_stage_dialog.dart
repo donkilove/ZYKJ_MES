@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 
 class ProcessStageDialog extends StatefulWidget {
@@ -72,8 +73,9 @@ class _ProcessStageDialogState extends State<ProcessStageDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return MesDialog(
       title: Text(widget.existing == null ? '新增工段' : '编辑工段'),
+      width: 520,
       content: Form(
         key: _formKey,
         child: SingleChildScrollView(

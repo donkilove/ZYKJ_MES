@@ -15,6 +15,8 @@ import 'package:mes_client/features/craft/presentation/widgets/process_stage_dia
 import 'package:mes_client/features/craft/presentation/widgets/process_stage_panel.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 
 class ProcessManagementPage extends StatefulWidget {
   const ProcessManagementPage({
@@ -522,7 +524,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
         ],
       ),
       content: _viewState.loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const MesLoadingState(label: '工艺视图加载中...')
           : workspace,
     );
   }
@@ -581,13 +583,13 @@ class _ReferenceDialogState extends State<_ReferenceDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return MesDialog(
       title: Text(widget.title),
+      width: 480,
       content: SizedBox(
-        width: 480,
         height: 360,
         child: _loading
-            ? const Center(child: CircularProgressIndicator())
+            ? const MesLoadingState(label: '引用记录加载中...')
             : _error.isNotEmpty
             ? Text(
                 _error,
@@ -628,7 +630,7 @@ class _ReferenceDialogState extends State<_ReferenceDialog> {
               ),
       ),
       actions: [
-        TextButton(
+        FilledButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('关闭'),
         ),

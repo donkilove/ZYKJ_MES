@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 
@@ -544,7 +545,7 @@ class _CraftReferenceAnalysisPageState
       return const Center(child: Text('请在左侧选择工段、工序或模板以查看引用情况'));
     }
     if (_loadingRef) {
-      return const Center(child: CircularProgressIndicator());
+      return const MesLoadingState(label: '引用分析加载中...');
     }
 
     if (_stageRefResult != null) {
@@ -1006,7 +1007,7 @@ class _CraftReferenceAnalysisPageState
   Widget _buildContent() {
     final theme = Theme.of(context);
     if (_loadingBase) {
-      return const Center(child: CircularProgressIndicator());
+      return const MesLoadingState(label: '基础数据加载中...');
     }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,

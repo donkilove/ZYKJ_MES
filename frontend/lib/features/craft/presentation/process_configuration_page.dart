@@ -6,6 +6,8 @@ import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
@@ -374,10 +376,10 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       }
       await showDialog<void>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
+        builder: (dialogContext) => MesDialog(
           title: Text('模板详情 - ${item.templateName}'),
+          width: 820,
           content: SizedBox(
-            width: 820,
             height: 520,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -421,7 +423,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
             ),
           ),
           actions: [
-            TextButton(
+            FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('关闭'),
             ),
@@ -519,241 +521,239 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
               });
             }
 
-            return AlertDialog(
+            return MesDialog(
               title: Text(isEdit ? '编辑模板' : '新建模板'),
-              content: SizedBox(
-                width: 860,
-                child: Form(
-                  key: formKey,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        DropdownButtonFormField<int>(
-                          initialValue: selectedProductId,
-                          decoration: const InputDecoration(
-                            labelText: '产品',
-                            border: OutlineInputBorder(),
-                          ),
-                          items: _products
-                              .map(
-                                (item) => DropdownMenuItem(
-                                  value: item.id,
-                                  child: Text(item.name),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: isEdit
-                              ? null
-                              : (value) {
-                                  if (value == null) {
-                                    return;
-                                  }
-                                  setDialogState(() {
-                                    selectedProductId = value;
-                                  });
-                                },
+              width: 860,
+              content: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      DropdownButtonFormField<int>(
+                        initialValue: selectedProductId,
+                        decoration: const InputDecoration(
+                          labelText: '产品',
+                          border: OutlineInputBorder(),
                         ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: templateNameController,
-                          decoration: const InputDecoration(
-                            labelText: '模板名称',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return '请输入模板名称';
-                            }
-                            return null;
-                          },
+                        items: _products
+                            .map(
+                              (item) => DropdownMenuItem(
+                                value: item.id,
+                                child: Text(item.name),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: isEdit
+                            ? null
+                            : (value) {
+                                if (value == null) {
+                                  return;
+                                }
+                                setDialogState(() {
+                                  selectedProductId = value;
+                                });
+                              },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: templateNameController,
+                        decoration: const InputDecoration(
+                          labelText: '模板名称',
+                          border: OutlineInputBorder(),
                         ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: remarkController,
-                          maxLength: 500,
-                          maxLines: 3,
-                          decoration: const InputDecoration(
-                            labelText: '备注（可选）',
-                            border: OutlineInputBorder(),
-                            alignLabelWithHint: true,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return '请输入模板名称';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: remarkController,
+                        maxLength: 500,
+                        maxLines: 3,
+                        decoration: const InputDecoration(
+                          labelText: '备注（可选）',
+                          border: OutlineInputBorder(),
+                          alignLabelWithHint: true,
+                        ),
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('设为默认模板'),
+                        value: isDefault,
+                        onChanged: (value) {
+                          setDialogState(() {
+                            isDefault = value;
+                          });
+                        },
+                      ),
+                      if (!isEdit)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text(
+                            '新建模板统一先保存为草稿，完成评审后再由列表中的“发布”入口生效。',
+                            style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ),
+                      if (isEdit)
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,
-                          title: const Text('设为默认模板'),
-                          value: isDefault,
+                          title: const Text('启用模板'),
+                          value: isEnabled,
                           onChanged: (value) {
                             setDialogState(() {
-                              isDefault = value;
+                              isEnabled = value;
                             });
                           },
                         ),
-                        if (!isEdit)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Text(
-                              '新建模板统一先保存为草稿，完成评审后再由列表中的“发布”入口生效。',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ),
-                        if (isEdit)
-                          SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('启用模板'),
-                            value: isEnabled,
-                            onChanged: (value) {
-                              setDialogState(() {
-                                isEnabled = value;
-                              });
-                            },
-                          ),
-                        if (isEdit)
-                          SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('同步未完成订单'),
-                            value: syncOrders,
-                            onChanged: (value) {
-                              setDialogState(() {
-                                syncOrders = value;
-                              });
-                            },
-                          ),
-                        if (isEdit)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Text(
-                              '提示：保存编辑后模板会进入草稿状态，请在列表中执行“发布”使其生效。',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ),
-                        Row(
-                          children: [
-                            const Text(
-                              '步骤',
-                              style: TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                            const Spacer(),
-                            OutlinedButton.icon(
-                              onPressed: addStep,
-                              icon: const Icon(Icons.add),
-                              label: const Text('新增步骤'),
-                            ),
-                          ],
+                      if (isEdit)
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text('同步未完成订单'),
+                          value: syncOrders,
+                          onChanged: (value) {
+                            setDialogState(() {
+                              syncOrders = value;
+                            });
+                          },
                         ),
-                        const SizedBox(height: 8),
-                        ...List.generate(steps.length, (index) {
-                          final step = steps[index];
-                          final processRows = _processesByStage(step.stageId);
-                          if (!processRows.any(
-                                (item) => item.id == step.processId,
-                              ) &&
-                              processRows.isNotEmpty) {
-                            step.processId = processRows.first.id;
-                          }
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            child: Padding(
-                              padding: const EdgeInsets.all(8),
-                              child: Column(
-                                children: [
-                                  Row(
-                                    children: [
-                                      SizedBox(
-                                        width: 48,
-                                        child: Text('#${index + 1}'),
-                                      ),
-                                      Expanded(
-                                        child: DropdownButtonFormField<int>(
-                                          initialValue: step.stageId,
-                                          decoration: const InputDecoration(
-                                            labelText: '工段',
-                                            border: OutlineInputBorder(),
-                                            isDense: true,
-                                          ),
-                                          items: _stages
-                                              .map(
-                                                (item) => DropdownMenuItem(
-                                                  value: item.id,
-                                                  child: Text(item.name),
-                                                ),
-                                              )
-                                              .toList(),
-                                          onChanged: (value) {
-                                            if (value == null) {
-                                              return;
+                      if (isEdit)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text(
+                            '提示：保存编辑后模板会进入草稿状态，请在列表中执行“发布”使其生效。',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                      Row(
+                        children: [
+                          const Text(
+                            '步骤',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const Spacer(),
+                          OutlinedButton.icon(
+                            onPressed: addStep,
+                            icon: const Icon(Icons.add),
+                            label: const Text('新增步骤'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ...List.generate(steps.length, (index) {
+                        final step = steps[index];
+                        final processRows = _processesByStage(step.stageId);
+                        if (!processRows.any(
+                              (item) => item.id == step.processId,
+                            ) &&
+                            processRows.isNotEmpty) {
+                          step.processId = processRows.first.id;
+                        }
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 48,
+                                      child: Text('#${index + 1}'),
+                                    ),
+                                    Expanded(
+                                      child: DropdownButtonFormField<int>(
+                                        initialValue: step.stageId,
+                                        decoration: const InputDecoration(
+                                          labelText: '工段',
+                                          border: OutlineInputBorder(),
+                                          isDense: true,
+                                        ),
+                                        items: _stages
+                                            .map(
+                                              (item) => DropdownMenuItem(
+                                                value: item.id,
+                                                child: Text(item.name),
+                                              ),
+                                            )
+                                            .toList(),
+                                        onChanged: (value) {
+                                          if (value == null) {
+                                            return;
+                                          }
+                                          final nextRows = _processesByStage(
+                                            value,
+                                          );
+                                          setDialogState(() {
+                                            step.stageId = value;
+                                            if (nextRows.isNotEmpty) {
+                                              step.processId =
+                                                  nextRows.first.id;
                                             }
-                                            final nextRows = _processesByStage(
-                                              value,
-                                            );
-                                            setDialogState(() {
-                                              step.stageId = value;
-                                              if (nextRows.isNotEmpty) {
-                                                step.processId =
-                                                    nextRows.first.id;
-                                              }
-                                            });
-                                          },
-                                        ),
+                                          });
+                                        },
                                       ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: DropdownButtonFormField<int>(
-                                          initialValue: processRows.isEmpty
-                                              ? null
-                                              : (processRows.any(
-                                                      (item) =>
-                                                          item.id ==
-                                                          step.processId,
-                                                    )
-                                                    ? step.processId
-                                                    : processRows.first.id),
-                                          decoration: const InputDecoration(
-                                            labelText: '小工序',
-                                            border: OutlineInputBorder(),
-                                            isDense: true,
-                                          ),
-                                          items: processRows
-                                              .map(
-                                                (item) => DropdownMenuItem(
-                                                  value: item.id,
-                                                  child: Text(item.name),
-                                                ),
-                                              )
-                                              .toList(),
-                                          onChanged: processRows.isEmpty
-                                              ? null
-                                              : (value) {
-                                                  if (value == null) {
-                                                    return;
-                                                  }
-                                                  setDialogState(() {
-                                                    step.processId = value;
-                                                  });
-                                                },
-                                        ),
-                                      ),
-                                      IconButton(
-                                        tooltip: '删除',
-                                        onPressed: steps.length <= 1
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: DropdownButtonFormField<int>(
+                                        initialValue: processRows.isEmpty
                                             ? null
-                                            : () {
+                                            : (processRows.any(
+                                                    (item) =>
+                                                        item.id ==
+                                                        step.processId,
+                                                  )
+                                                  ? step.processId
+                                                  : processRows.first.id),
+                                        decoration: const InputDecoration(
+                                          labelText: '小工序',
+                                          border: OutlineInputBorder(),
+                                          isDense: true,
+                                        ),
+                                        items: processRows
+                                            .map(
+                                              (item) => DropdownMenuItem(
+                                                value: item.id,
+                                                child: Text(item.name),
+                                              ),
+                                            )
+                                            .toList(),
+                                        onChanged: processRows.isEmpty
+                                            ? null
+                                            : (value) {
+                                                if (value == null) {
+                                                  return;
+                                                }
                                                 setDialogState(() {
-                                                  steps = [...steps]
-                                                    ..removeAt(index);
+                                                  step.processId = value;
                                                 });
                                               },
-                                        icon: const Icon(Icons.delete_outline),
                                       ),
-                                    ],
-                                  ),
-                                ],
-                              ),
+                                    ),
+                                    IconButton(
+                                      tooltip: '删除',
+                                      onPressed: steps.length <= 1
+                                          ? null
+                                          : () {
+                                              setDialogState(() {
+                                                steps = [...steps]
+                                                  ..removeAt(index);
+                                              });
+                                            },
+                                      icon: const Icon(Icons.delete_outline),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
-                          );
-                        }),
-                      ],
-                    ),
+                          ),
+                        );
+                      }),
+                    ],
                   ),
                 ),
               ),
@@ -908,149 +908,147 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
               });
             }
 
-            return AlertDialog(
+            return MesDialog(
               title: Text(isEdit ? '编辑系统母版' : '新建系统母版'),
-              content: SizedBox(
-                width: 860,
-                child: Form(
-                  key: formKey,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (isEdit)
-                          Text(
-                            '当前版本：v${_systemMasterTemplate!.version}',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        if (isEdit) const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            const Text(
-                              '步骤',
-                              style: TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                            const Spacer(),
-                            OutlinedButton.icon(
-                              onPressed: addStep,
-                              icon: const Icon(Icons.add),
-                              label: const Text('新增步骤'),
-                            ),
-                          ],
+              width: 860,
+              content: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (isEdit)
+                        Text(
+                          '当前版本：v${_systemMasterTemplate!.version}',
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
-                        const SizedBox(height: 8),
-                        ...List.generate(steps.length, (index) {
-                          final step = steps[index];
-                          final processRows = _processesByStage(step.stageId);
-                          if (!processRows.any(
-                                (item) => item.id == step.processId,
-                              ) &&
-                              processRows.isNotEmpty) {
-                            step.processId = processRows.first.id;
-                          }
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            child: Padding(
-                              padding: const EdgeInsets.all(8),
-                              child: Column(
-                                children: [
-                                  Row(
-                                    children: [
-                                      SizedBox(
-                                        width: 48,
-                                        child: Text('#${index + 1}'),
-                                      ),
-                                      Expanded(
-                                        child: DropdownButtonFormField<int>(
-                                          initialValue: step.stageId,
-                                          decoration: const InputDecoration(
-                                            labelText: '工段',
-                                            border: OutlineInputBorder(),
-                                            isDense: true,
-                                          ),
-                                          items: _stages
-                                              .map(
-                                                (item) => DropdownMenuItem(
-                                                  value: item.id,
-                                                  child: Text(item.name),
-                                                ),
-                                              )
-                                              .toList(),
-                                          onChanged: (value) {
-                                            if (value == null) {
-                                              return;
+                      if (isEdit) const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Text(
+                            '步骤',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const Spacer(),
+                          OutlinedButton.icon(
+                            onPressed: addStep,
+                            icon: const Icon(Icons.add),
+                            label: const Text('新增步骤'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ...List.generate(steps.length, (index) {
+                        final step = steps[index];
+                        final processRows = _processesByStage(step.stageId);
+                        if (!processRows.any(
+                              (item) => item.id == step.processId,
+                            ) &&
+                            processRows.isNotEmpty) {
+                          step.processId = processRows.first.id;
+                        }
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 48,
+                                      child: Text('#${index + 1}'),
+                                    ),
+                                    Expanded(
+                                      child: DropdownButtonFormField<int>(
+                                        initialValue: step.stageId,
+                                        decoration: const InputDecoration(
+                                          labelText: '工段',
+                                          border: OutlineInputBorder(),
+                                          isDense: true,
+                                        ),
+                                        items: _stages
+                                            .map(
+                                              (item) => DropdownMenuItem(
+                                                value: item.id,
+                                                child: Text(item.name),
+                                              ),
+                                            )
+                                            .toList(),
+                                        onChanged: (value) {
+                                          if (value == null) {
+                                            return;
+                                          }
+                                          final nextRows = _processesByStage(
+                                            value,
+                                          );
+                                          setDialogState(() {
+                                            step.stageId = value;
+                                            if (nextRows.isNotEmpty) {
+                                              step.processId =
+                                                  nextRows.first.id;
                                             }
-                                            final nextRows = _processesByStage(
-                                              value,
-                                            );
-                                            setDialogState(() {
-                                              step.stageId = value;
-                                              if (nextRows.isNotEmpty) {
-                                                step.processId =
-                                                    nextRows.first.id;
-                                              }
-                                            });
-                                          },
-                                        ),
+                                          });
+                                        },
                                       ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: DropdownButtonFormField<int>(
-                                          initialValue: processRows.isEmpty
-                                              ? null
-                                              : (processRows.any(
-                                                      (item) =>
-                                                          item.id ==
-                                                          step.processId,
-                                                    )
-                                                    ? step.processId
-                                                    : processRows.first.id),
-                                          decoration: const InputDecoration(
-                                            labelText: '小工序',
-                                            border: OutlineInputBorder(),
-                                            isDense: true,
-                                          ),
-                                          items: processRows
-                                              .map(
-                                                (item) => DropdownMenuItem(
-                                                  value: item.id,
-                                                  child: Text(item.name),
-                                                ),
-                                              )
-                                              .toList(),
-                                          onChanged: processRows.isEmpty
-                                              ? null
-                                              : (value) {
-                                                  if (value == null) {
-                                                    return;
-                                                  }
-                                                  setDialogState(() {
-                                                    step.processId = value;
-                                                  });
-                                                },
-                                        ),
-                                      ),
-                                      IconButton(
-                                        tooltip: '删除',
-                                        onPressed: steps.length <= 1
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: DropdownButtonFormField<int>(
+                                        initialValue: processRows.isEmpty
                                             ? null
-                                            : () {
+                                            : (processRows.any(
+                                                    (item) =>
+                                                        item.id ==
+                                                        step.processId,
+                                                  )
+                                                  ? step.processId
+                                                  : processRows.first.id),
+                                        decoration: const InputDecoration(
+                                          labelText: '小工序',
+                                          border: OutlineInputBorder(),
+                                          isDense: true,
+                                        ),
+                                        items: processRows
+                                            .map(
+                                              (item) => DropdownMenuItem(
+                                                value: item.id,
+                                                child: Text(item.name),
+                                              ),
+                                            )
+                                            .toList(),
+                                        onChanged: processRows.isEmpty
+                                            ? null
+                                            : (value) {
+                                                if (value == null) {
+                                                  return;
+                                                }
                                                 setDialogState(() {
-                                                  steps = [...steps]
-                                                    ..removeAt(index);
+                                                  step.processId = value;
                                                 });
                                               },
-                                        icon: const Icon(Icons.delete_outline),
                                       ),
-                                    ],
-                                  ),
-                                ],
-                              ),
+                                    ),
+                                    IconButton(
+                                      tooltip: '删除',
+                                      onPressed: steps.length <= 1
+                                          ? null
+                                          : () {
+                                              setDialogState(() {
+                                                steps = [...steps]
+                                                  ..removeAt(index);
+                                              });
+                                            },
+                                      icon: const Icon(Icons.delete_outline),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
-                          );
-                        }),
-                      ],
-                    ),
+                          ),
+                        );
+                      }),
+                    ],
                   ),
                 ),
               ),
@@ -1123,10 +1121,10 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       await showDialog<void>(
         context: context,
         builder: (dialogContext) {
-          return AlertDialog(
+          return MesDialog(
             title: const Text('系统母版历史版本'),
+            width: 920,
             content: SizedBox(
-              width: 920,
               height: 560,
               child: result.items.isEmpty
                   ? const Center(child: Text('暂无历史版本'))
@@ -1230,43 +1228,41 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
-            return AlertDialog(
+            return MesDialog(
               title: const Text('从系统母版套版'),
-              content: SizedBox(
-                width: 420,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    DropdownButtonFormField<int>(
-                      initialValue: selectedProductId,
-                      decoration: const InputDecoration(
-                        labelText: '目标产品',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: _products
-                          .map(
-                            (p) => DropdownMenuItem(
-                              value: p.id,
-                              child: Text(p.name),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (v) {
-                        if (v != null) {
-                          setDialogState(() => selectedProductId = v);
-                        }
-                      },
+              width: 420,
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<int>(
+                    initialValue: selectedProductId,
+                    decoration: const InputDecoration(
+                      labelText: '目标产品',
+                      border: OutlineInputBorder(),
                     ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: nameController,
-                      decoration: const InputDecoration(
-                        labelText: '新模板名称',
-                        border: OutlineInputBorder(),
-                      ),
+                    items: _products
+                        .map(
+                          (p) => DropdownMenuItem(
+                            value: p.id,
+                            child: Text(p.name),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) {
+                        setDialogState(() => selectedProductId = v);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: '新模板名称',
+                      border: OutlineInputBorder(),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
               actions: [
                 TextButton(
@@ -1333,8 +1329,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     if (enabled) {
       confirmed = await showDialog<bool>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) => MesDialog(
           title: Text('$actionText模板'),
+          width: 420,
           content: Text('确认$actionText模板 ${item.templateName} 吗？'),
           actions: [
             TextButton(
@@ -1602,44 +1599,42 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       }
       final confirmed = await showDialog<bool>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
+        builder: (dialogContext) => MesDialog(
           title: Text(title),
-          content: SizedBox(
-            width: 720,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(description),
-                  if (isBlocked) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
+          width: 720,
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(description),
+                if (isBlocked) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(
+                        dialogContext,
+                      ).colorScheme.errorContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '当前存在 ${analysis.blockedOrders} 条阻断级引用，后端会拦截本次$confirmText；请先处理进行中工单后再操作。',
+                      style: TextStyle(
                         color: Theme.of(
                           dialogContext,
-                        ).colorScheme.errorContainer,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        '当前存在 ${analysis.blockedOrders} 条阻断级引用，后端会拦截本次$confirmText；请先处理进行中工单后再操作。',
-                        style: TextStyle(
-                          color: Theme.of(
-                            dialogContext,
-                          ).colorScheme.onErrorContainer,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        ).colorScheme.onErrorContainer,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ],
-                  const SizedBox(height: 12),
-                  _buildImpactSummaryWrap(analysis),
-                  const SizedBox(height: 12),
-                  _buildActionImpactPreview(analysis),
+                  ),
                 ],
-              ),
+                const SizedBox(height: 12),
+                _buildImpactSummaryWrap(analysis),
+                const SizedBox(height: 12),
+                _buildActionImpactPreview(analysis),
+              ],
             ),
           ),
           actions: [
@@ -1708,67 +1703,65 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return AlertDialog(
+            return MesDialog(
               title: Text('发布模板 - ${item.templateName}'),
-              content: SizedBox(
-                width: 720,
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildImpactSummaryWrap(analysis!),
-                      const SizedBox(height: 8),
-                      if (analysis.items.any((item) => !item.syncable))
-                        Text(
-                          '存在无法同步的订单，发布时会自动跳过受阻订单。',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                          ),
+              width: 720,
+              content: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildImpactSummaryWrap(analysis!),
+                    const SizedBox(height: 8),
+                    if (analysis.items.any((item) => !item.syncable))
+                      Text(
+                        '存在无法同步的订单，发布时会自动跳过受阻订单。',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
                         ),
-                      if (analysis.referenceItems.isNotEmpty)
-                        Text(
-                          '已纳入用户工段引用与模板复用关系，请发布前同步确认关键引用对象。',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
+                      ),
+                    if (analysis.referenceItems.isNotEmpty)
+                      Text(
+                        '已纳入用户工段引用与模板复用关系，请发布前同步确认关键引用对象。',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
                         ),
-                      _buildImpactReferenceSection(analysis),
-                      const SizedBox(height: 8),
-                      SwitchListTile(
+                      ),
+                    _buildImpactReferenceSection(analysis),
+                    const SizedBox(height: 8),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('同步未完成订单'),
+                      subtitle: const Text('将模板变更同步到关联订单可同步工序'),
+                      value: applyOrderSync,
+                      onChanged: (value) {
+                        setDialogState(() {
+                          applyOrderSync = value;
+                          if (!value) {
+                            confirmed = false;
+                          }
+                        });
+                      },
+                    ),
+                    if (applyOrderSync)
+                      CheckboxListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: const Text('同步未完成订单'),
-                        subtitle: const Text('将模板变更同步到关联订单可同步工序'),
-                        value: applyOrderSync,
+                        title: const Text('我已确认上述影响并继续发布'),
+                        value: confirmed,
                         onChanged: (value) {
                           setDialogState(() {
-                            applyOrderSync = value;
-                            if (!value) {
-                              confirmed = false;
-                            }
+                            confirmed = value ?? false;
                           });
                         },
                       ),
-                      if (applyOrderSync)
-                        CheckboxListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('我已确认上述影响并继续发布'),
-                          value: confirmed,
-                          onChanged: (value) {
-                            setDialogState(() {
-                              confirmed = value ?? false;
-                            });
-                          },
-                        ),
-                      TextField(
-                        controller: noteController,
-                        maxLength: 256,
-                        decoration: const InputDecoration(
-                          labelText: '发布说明（可选）',
-                          border: OutlineInputBorder(),
-                        ),
+                    TextField(
+                      controller: noteController,
+                      maxLength: 256,
+                      decoration: const InputDecoration(
+                        labelText: '发布说明（可选）',
+                        border: OutlineInputBorder(),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
               actions: [
@@ -1853,10 +1846,10 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
 
       await showDialog<void>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
+        builder: (dialogContext) => MesDialog(
           title: Text('版本管理 - ${item.templateName}'),
+          width: 860,
           content: SizedBox(
-            width: 860,
             height: 560,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2781,7 +2774,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
             else if (_loading)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 32),
-                child: Center(child: CircularProgressIndicator()),
+                child: MesLoadingState(label: '模板列表加载中...'),
               )
             else
               _buildTemplateList(theme, templates),
