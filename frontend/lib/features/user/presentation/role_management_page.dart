@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/features/user/presentation/widgets/role_management_page_header.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
@@ -186,94 +187,92 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return AlertDialog(
+            return MesDialog(
               title: Text(role == null ? '新增角色' : '编辑角色'),
-              content: SizedBox(
-                width: 420,
-                child: SingleChildScrollView(
-                  child: Form(
-                    key: formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextFormField(
-                          controller: nameController,
-                          readOnly: hasBuiltinSemantics,
-                          decoration: const InputDecoration(labelText: '角色名称'),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return '角色名称不能为空';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<String>(
-                          initialValue: selectedRoleType,
-                          decoration: const InputDecoration(labelText: '角色类型'),
-                          items: [
-                            const DropdownMenuItem(
-                              value: _roleTypeCustom,
-                              child: Text('自定义'),
-                            ),
-                            if (selectedRoleType == _roleTypeBuiltin)
-                              const DropdownMenuItem(
-                                value: _roleTypeBuiltin,
-                                child: Text('系统内置'),
-                              ),
-                          ],
-                          onChanged: canEditRoleType
-                              ? (value) {
-                                  if (value == null) {
-                                    return;
-                                  }
-                                  setDialogState(() {
-                                    selectedRoleType = value;
-                                  });
-                                }
-                              : null,
-                        ),
-                        if (role == null)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 6),
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                '新增角色仅支持自定义角色，系统内置角色由系统预置。',
-                                style: TextStyle(fontSize: 12),
-                              ),
-                            ),
+              width: 420,
+              content: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: nameController,
+                        readOnly: hasBuiltinSemantics,
+                        decoration: const InputDecoration(labelText: '角色名称'),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return '角色名称不能为空';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedRoleType,
+                        decoration: const InputDecoration(labelText: '角色类型'),
+                        items: [
+                          const DropdownMenuItem(
+                            value: _roleTypeCustom,
+                            child: Text('自定义'),
                           ),
-                        const SizedBox(height: 12),
-                        if (!editingExistingRole)
-                          DropdownButtonFormField<bool>(
-                            initialValue: selectedEnabled,
-                            decoration: const InputDecoration(labelText: '状态'),
-                            items: const [
-                              DropdownMenuItem(value: true, child: Text('启用')),
-                              DropdownMenuItem(value: false, child: Text('停用')),
-                            ],
-                            onChanged: (value) {
-                              if (value == null) {
-                                return;
+                          if (selectedRoleType == _roleTypeBuiltin)
+                            const DropdownMenuItem(
+                              value: _roleTypeBuiltin,
+                              child: Text('系统内置'),
+                            ),
+                        ],
+                        onChanged: canEditRoleType
+                            ? (value) {
+                                if (value == null) {
+                                  return;
+                                }
+                                setDialogState(() {
+                                  selectedRoleType = value;
+                                });
                               }
-                              setDialogState(() {
-                                selectedEnabled = value;
-                              });
-                            },
-                          )
-                        else
-                          Align(
+                            : null,
+                      ),
+                      if (role == null)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 6),
+                          child: Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
-                              hasBuiltinSemantics
-                                  ? '系统内置角色仅禁止改名、删除；如需变更启停，请使用列表中的启停按钮。'
-                                  : '当前状态：${_statusLabel(selectedEnabled)}，如需变更请使用列表中的启停按钮。',
-                              style: Theme.of(context).textTheme.bodySmall,
+                              '新增角色仅支持自定义角色，系统内置角色由系统预置。',
+                              style: TextStyle(fontSize: 12),
                             ),
                           ),
-                      ],
-                    ),
+                        ),
+                      const SizedBox(height: 12),
+                      if (!editingExistingRole)
+                        DropdownButtonFormField<bool>(
+                          initialValue: selectedEnabled,
+                          decoration: const InputDecoration(labelText: '状态'),
+                          items: const [
+                            DropdownMenuItem(value: true, child: Text('启用')),
+                            DropdownMenuItem(value: false, child: Text('停用')),
+                          ],
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setDialogState(() {
+                              selectedEnabled = value;
+                            });
+                          },
+                        )
+                      else
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            hasBuiltinSemantics
+                                ? '系统内置角色仅禁止改名、删除；如需变更启停，请使用列表中的启停按钮。'
+                                : '当前状态：${_statusLabel(selectedEnabled)}，如需变更请使用列表中的启停按钮。',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
@@ -359,8 +358,9 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
+        return MesDialog(
           title: const Text('删除角色'),
+          width: 420,
           content: Text('确认删除角色“${role.name}”吗？删除后不可恢复。'),
           actions: [
             TextButton(

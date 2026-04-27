@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
@@ -137,231 +138,229 @@ Future<void> showUserEditDialog({
               );
             }
 
-            return AlertDialog(
+            return MesDialog(
               title: Text('编辑用户：${detailUser.username}'),
-              content: SizedBox(
-                width: 520,
-                child: SingleChildScrollView(
-                  child: Form(
-                    key: formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+              width: 520,
+              content: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '当前信息',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          buildInfoItem(
+                            '当前账号状态',
+                            originalActive ? '启用' : '停用',
+                          ),
+                          buildInfoItem(
+                            '首次登录需改密',
+                            originalMustChangePassword ? '是' : '否',
+                          ),
+                          buildInfoItem(
+                            '最近登录时间',
+                            formatDialogDateTime(detailUser.lastLoginAt),
+                          ),
+                          buildInfoItem(
+                            '最近改密时间',
+                            formatDialogDateTime(
+                              detailUser.passwordChangedAt,
+                            ),
+                          ),
+                          buildInfoItem(
+                            '最近登录 IP',
+                            detailUser.lastLoginIp?.trim().isNotEmpty == true
+                                ? detailUser.lastLoginIp!.trim()
+                                : '-',
+                          ),
+                          buildInfoItem('当前角色', originalRoleName),
+                          buildInfoItem('当前工段', originalStageName),
+                        ],
+                      ),
+                      if (detailWarning != null) ...[
+                        const SizedBox(height: 12),
                         Text(
-                          '当前信息',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
+                          detailWarning,
+                          key: const ValueKey('userEditDetailWarning'),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.error,
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 12,
-                          children: [
-                            buildInfoItem(
-                              '当前账号状态',
-                              originalActive ? '启用' : '停用',
-                            ),
-                            buildInfoItem(
-                              '首次登录需改密',
-                              originalMustChangePassword ? '是' : '否',
-                            ),
-                            buildInfoItem(
-                              '最近登录时间',
-                              formatDialogDateTime(detailUser.lastLoginAt),
-                            ),
-                            buildInfoItem(
-                              '最近改密时间',
-                              formatDialogDateTime(
-                                detailUser.passwordChangedAt,
-                              ),
-                            ),
-                            buildInfoItem(
-                              '最近登录 IP',
-                              detailUser.lastLoginIp?.trim().isNotEmpty == true
-                                  ? detailUser.lastLoginIp!.trim()
-                                  : '-',
-                            ),
-                            buildInfoItem('当前角色', originalRoleName),
-                            buildInfoItem('当前工段', originalStageName),
-                          ],
+                      ],
+                      const SizedBox(height: 20),
+                      Text(
+                        '编辑内容',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
                         ),
-                        if (detailWarning != null) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            detailWarning,
-                            key: const ValueKey('userEditDetailWarning'),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.error,
-                            ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: accountController,
+                        readOnly: !canEditAccount,
+                        decoration: InputDecoration(
+                          labelText: '账号',
+                          helperText: canEditAccount ? null : '仅系统管理员可修改账号',
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return '请输入账号';
+                          }
+                          if (value.trim().length < 2) {
+                            return '账号至少 2 个字符';
+                          }
+                          if (value.trim().length > 10) {
+                            return '账号最多 10 个字符';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          const Text('账号状态：'),
+                          const SizedBox(width: 8),
+                          ChoiceChip(
+                            key: const ValueKey('userEditStatusEnabled'),
+                            label: const Text('启用'),
+                            selected: isActive,
+                            onSelected: (_) =>
+                                setDialogState(() => isActive = true),
+                          ),
+                          const SizedBox(width: 8),
+                          ChoiceChip(
+                            key: const ValueKey('userEditStatusDisabled'),
+                            label: const Text('停用'),
+                            selected: !isActive,
+                            onSelected: (_) =>
+                                setDialogState(() => isActive = false),
                           ),
                         ],
-                        const SizedBox(height: 20),
-                        Text(
-                          '编辑内容',
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
+                      ),
+                      const SizedBox(height: 8),
+                      SwitchListTile.adaptive(
+                        key: const ValueKey('userEditMustChangePassword'),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('下次登录强制改密'),
+                        subtitle: Text(
+                          mustChangePassword
+                              ? '用户下次登录后必须先修改密码'
+                              : '用户下次登录无需强制修改密码',
                         ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: accountController,
-                          readOnly: !canEditAccount,
-                          decoration: InputDecoration(
-                            labelText: '账号',
-                            helperText: canEditAccount ? null : '仅系统管理员可修改账号',
-                          ),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return '请输入账号';
+                        value: mustChangePassword,
+                        onChanged: (value) =>
+                            setDialogState(() => mustChangePassword = value),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        '角色分配（单选）',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 8),
+                      RadioGroup<String>(
+                        groupValue: selectedRoleCode,
+                        onChanged: (value) {
+                          setDialogState(() {
+                            selectedRoleCode = value;
+                            if (!_isOperator(selectedRoleCode)) {
+                              selectedStageId = null;
                             }
-                            if (value.trim().length < 2) {
-                              return '账号至少 2 个字符';
-                            }
-                            if (value.trim().length > 10) {
-                              return '账号最多 10 个字符';
-                            }
-                            return null;
-                          },
+                          });
+                        },
+                        child: Column(
+                          children: roles.map((role) {
+                            return RadioListTile<String>(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(role.name),
+                              subtitle: Text(
+                                '${role.code} · ${role.roleType == 'builtin' ? '系统内置' : '自定义'}',
+                              ),
+                              value: role.code,
+                            );
+                          }).toList(),
                         ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            const Text('账号状态：'),
-                            const SizedBox(width: 8),
-                            ChoiceChip(
-                              key: const ValueKey('userEditStatusEnabled'),
-                              label: const Text('启用'),
-                              selected: isActive,
-                              onSelected: (_) =>
-                                  setDialogState(() => isActive = true),
-                            ),
-                            const SizedBox(width: 8),
-                            ChoiceChip(
-                              key: const ValueKey('userEditStatusDisabled'),
-                              label: const Text('停用'),
-                              selected: !isActive,
-                              onSelected: (_) =>
-                                  setDialogState(() => isActive = false),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        SwitchListTile.adaptive(
-                          key: const ValueKey('userEditMustChangePassword'),
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('下次登录强制改密'),
-                          subtitle: Text(
-                            mustChangePassword
-                                ? '用户下次登录后必须先修改密码'
-                                : '用户下次登录无需强制修改密码',
-                          ),
-                          value: mustChangePassword,
-                          onChanged: (value) =>
-                              setDialogState(() => mustChangePassword = value),
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          '角色分配（单选）',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 8),
-                        RadioGroup<String>(
-                          groupValue: selectedRoleCode,
-                          onChanged: (value) {
-                            setDialogState(() {
-                              selectedRoleCode = value;
-                              if (!_isOperator(selectedRoleCode)) {
-                                selectedStageId = null;
-                              }
-                            });
-                          },
-                          child: Column(
-                            children: roles.map((role) {
-                              return RadioListTile<String>(
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                                title: Text(role.name),
-                                subtitle: Text(
-                                  '${role.code} · ${role.roleType == 'builtin' ? '系统内置' : '自定义'}',
-                                ),
-                                value: role.code,
-                              );
-                            }).toList(),
+                      ),
+                      if (selectedRoleCode == null)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 4),
+                          child: Text(
+                            '请选择一个角色',
+                            style: TextStyle(color: Colors.red),
                           ),
                         ),
-                        if (selectedRoleCode == null)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 4),
-                            child: Text(
-                              '请选择一个角色',
-                              style: TextStyle(color: Colors.red),
-                            ),
-                          ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          '工段分配（单选，操作员必选，自定义角色可选）',
-                          style: TextStyle(fontWeight: FontWeight.w600),
+                      const SizedBox(height: 12),
+                      const Text(
+                        '工段分配（单选，操作员必选，自定义角色可选）',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        stageHelperText,
+                        style: TextStyle(
+                          color: isOperatorSelected
+                              ? Colors.red
+                              : theme.colorScheme.onSurfaceVariant,
+                          fontWeight: isOperatorSelected
+                              ? FontWeight.w600
+                              : FontWeight.w400,
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          stageHelperText,
-                          style: TextStyle(
-                            color: isOperatorSelected
-                                ? Colors.red
-                                : theme.colorScheme.onSurfaceVariant,
-                            fontWeight: isOperatorSelected
-                                ? FontWeight.w600
-                                : FontWeight.w400,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Opacity(
-                          opacity: canAssignStage ? 1 : 0.5,
-                          child: IgnorePointer(
-                            ignoring: !canAssignStage,
-                            child: currentStages.isEmpty
-                                ? const Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 8),
-                                    child: Text('暂无可分配工段'),
-                                  )
-                                : RadioGroup<int>(
-                                    groupValue: selectedStageId,
-                                    onChanged: (value) {
-                                      if (value == null) {
-                                        return;
-                                      }
-                                      setDialogState(() {
-                                        selectedStageId = value;
-                                      });
-                                    },
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: currentStages.map((stage) {
-                                        return RadioListTile<int>(
-                                          dense: true,
-                                          contentPadding: EdgeInsets.zero,
-                                          title: Text(stage.name),
-                                          subtitle: Text(stage.code),
-                                          value: stage.id,
-                                        );
-                                      }).toList(),
-                                    ),
+                      ),
+                      const SizedBox(height: 8),
+                      Opacity(
+                        opacity: canAssignStage ? 1 : 0.5,
+                        child: IgnorePointer(
+                          ignoring: !canAssignStage,
+                          child: currentStages.isEmpty
+                              ? const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 8),
+                                  child: Text('暂无可分配工段'),
+                                )
+                              : RadioGroup<int>(
+                                  groupValue: selectedStageId,
+                                  onChanged: (value) {
+                                    if (value == null) {
+                                      return;
+                                    }
+                                    setDialogState(() {
+                                      selectedStageId = value;
+                                    });
+                                  },
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: currentStages.map((stage) {
+                                      return RadioListTile<int>(
+                                        dense: true,
+                                        contentPadding: EdgeInsets.zero,
+                                        title: Text(stage.name),
+                                        subtitle: Text(stage.code),
+                                        value: stage.id,
+                                      );
+                                    }).toList(),
                                   ),
+                                ),
+                        ),
+                      ),
+                      if (isOperatorSelected && selectedStageId == null)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 4),
+                          child: Text(
+                            '操作员角色必须选择一个工段',
+                            style: TextStyle(color: Colors.red),
                           ),
                         ),
-                        if (isOperatorSelected && selectedStageId == null)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 4),
-                            child: Text(
-                              '操作员角色必须选择一个工段',
-                              style: TextStyle(color: Colors.red),
-                            ),
-                          ),
-                      ],
-                    ),
+                    ],
                   ),
                 ),
               ),
@@ -458,44 +457,42 @@ Future<void> showUserEditDialog({
                     final confirmed = await showDialog<bool>(
                       context: context,
                       builder: (dialogContext) {
-                        return AlertDialog(
+                        return MesDialog(
                           title: const Text('确认保存用户变更'),
-                          content: SizedBox(
-                            width: 420,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  '本次变更摘要',
-                                  style: TextStyle(fontWeight: FontWeight.w700),
+                          width: 420,
+                          content: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                '本次变更摘要',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              const SizedBox(height: 8),
+                              ...summaryLines.map(
+                                (line) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 6),
+                                  child: Text(line),
+                                ),
+                              ),
+                              if (riskHints.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  '风险提示',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: theme.colorScheme.error,
+                                  ),
                                 ),
                                 const SizedBox(height: 8),
-                                ...summaryLines.map(
-                                  (line) => Padding(
+                                ...riskHints.map(
+                                  (hint) => Padding(
                                     padding: const EdgeInsets.only(bottom: 6),
-                                    child: Text(line),
+                                    child: Text(hint),
                                   ),
                                 ),
-                                if (riskHints.isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    '风险提示',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      color: theme.colorScheme.error,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  ...riskHints.map(
-                                    (hint) => Padding(
-                                      padding: const EdgeInsets.only(bottom: 6),
-                                      child: Text(hint),
-                                    ),
-                                  ),
-                                ],
                               ],
-                            ),
+                            ],
                           ),
                           actions: [
                             TextButton(

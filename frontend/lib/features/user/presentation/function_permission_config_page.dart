@@ -4,6 +4,8 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/models/authz_models.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/features/auth/services/authz_service.dart';
 import 'package:mes_client/features/user/presentation/widgets/function_permission_config_page_header.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
@@ -377,8 +379,9 @@ class _FunctionPermissionConfigPageState
       final discard = await showDialog<bool>(
         context: context,
         builder: (context) {
-          return AlertDialog(
+          return MesDialog(
             title: const Text('切换模块'),
+            width: 420,
             content: const Text('当前有未保存改动，是否放弃并切换？'),
             actions: [
               TextButton(
@@ -433,8 +436,9 @@ class _FunctionPermissionConfigPageState
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
+        return MesDialog(
           title: const Text('确认保存'),
+          width: 420,
           content: const Text('将保存当前模块的权限配置，是否继续？'),
           actions: [
             TextButton(
@@ -730,7 +734,7 @@ class _FunctionPermissionConfigPageState
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const MesLoadingState(label: '权限配置加载中...');
     }
 
     final catalog = _catalog;

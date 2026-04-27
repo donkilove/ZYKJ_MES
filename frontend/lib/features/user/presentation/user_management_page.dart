@@ -8,6 +8,7 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/core/services/export_file_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
@@ -735,33 +736,31 @@ class _UserManagementPageState
     final confirmed = await showMesLockedFormDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
+        return MesDialog(
           title: const Text('创建导出任务'),
-          content: SizedBox(
-            width: 420,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('导出格式：${_formatLabel(format)}'),
-                const SizedBox(height: 6),
-                Text('当前关键词：${_normalizedKeyword ?? '未设置'}'),
-                const SizedBox(height: 6),
-                Text('当前角色筛选：${_filterRoleCode ?? '全部'}'),
-                const SizedBox(height: 6),
-                Text(
-                  '当前账号状态筛选：${_filterIsActive == null
-                      ? '全部'
-                      : _filterIsActive!
-                      ? '启用'
-                      : '停用'}',
-                ),
-                const SizedBox(height: 6),
-                Text('当前数据范围：${_deletedScopeText(_deletedScope)}'),
-                const SizedBox(height: 6),
-                Text('预计导出记录数：$_total'),
-              ],
-            ),
+          width: 420,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('导出格式：${_formatLabel(format)}'),
+              const SizedBox(height: 6),
+              Text('当前关键词：${_normalizedKeyword ?? '未设置'}'),
+              const SizedBox(height: 6),
+              Text('当前角色筛选：${_filterRoleCode ?? '全部'}'),
+              const SizedBox(height: 6),
+              Text(
+                '当前账号状态筛选：${_filterIsActive == null
+                    ? '全部'
+                    : _filterIsActive!
+                    ? '启用'
+                    : '停用'}',
+              ),
+              const SizedBox(height: 6),
+              Text('当前数据范围：${_deletedScopeText(_deletedScope)}'),
+              const SizedBox(height: 6),
+              Text('预计导出记录数：$_total'),
+            ],
           ),
           actions: [
             TextButton(
@@ -903,9 +902,7 @@ class _UserManagementPageState
                   height: 16,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      theme.colorScheme.onPrimary,
-                    ),
+                    color: theme.colorScheme.onPrimary,
                   ),
                 )
               : const Icon(Icons.search, key: ValueKey('queryIcon')),

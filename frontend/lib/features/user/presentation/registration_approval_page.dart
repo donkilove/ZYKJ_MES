@@ -7,6 +7,7 @@ import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
@@ -412,149 +413,147 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             final isOperatorSelected = _isOperator(selectedRoleCode);
-            return AlertDialog(
+            return MesDialog(
               title: const Text('通过注册申请并分配信息'),
-              content: SizedBox(
-                width: 560,
-                child: SingleChildScrollView(
-                  child: Form(
-                    key: formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('申请账号：${item.account}'),
-                        const SizedBox(height: 10),
-                        TextFormField(
-                          controller: accountController,
-                          maxLength: _accountMaxLength,
-                          decoration: const InputDecoration(
-                            labelText: '入库账号',
-                            border: OutlineInputBorder(),
+              width: 560,
+              content: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('申请账号：${item.account}'),
+                      const SizedBox(height: 10),
+                      TextFormField(
+                        controller: accountController,
+                        maxLength: _accountMaxLength,
+                        decoration: const InputDecoration(
+                          labelText: '入库账号',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return '请输入入库账号';
+                          }
+                          if (value.trim().length < 2) {
+                            return '账号至少 2 个字符';
+                          }
+                          if (value.trim().length > _accountMaxLength) {
+                            return '账号最多 $_accountMaxLength 个字符';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: passwordController,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: '初始密码',
+                          helperText: '密码规则：至少6位；不能包含连续4位相同字符。',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return '请输入初始密码';
+                          }
+                          if (value.trim().length < 6) {
+                            return '密码至少 6 个字符';
+                          }
+                          if (RegExp(r'(.)\1\1\1').hasMatch(value.trim())) {
+                            return '初始密码不能包含连续4位相同字符';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        '角色分配（单选）',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      RadioGroup<String>(
+                        groupValue: selectedRoleCode,
+                        onChanged: (value) {
+                          setDialogState(() {
+                            selectedRoleCode = value;
+                            if (!_isOperator(selectedRoleCode)) {
+                              selectedStageId = null;
+                            }
+                          });
+                        },
+                        child: Column(
+                          children: assignableRoles.map((role) {
+                            return RadioListTile<String>(
+                              dense: true,
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(role.name),
+                              subtitle: Text(
+                                '${role.code} · ${role.roleType == 'builtin' ? '系统内置' : '自定义'}',
+                              ),
+                              value: role.code,
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                      if (selectedRoleCode == null)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 4),
+                          child: Text(
+                            '请选择一个角色',
+                            style: TextStyle(color: Colors.red),
                           ),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return '请输入入库账号';
-                            }
-                            if (value.trim().length < 2) {
-                              return '账号至少 2 个字符';
-                            }
-                            if (value.trim().length > _accountMaxLength) {
-                              return '账号最多 $_accountMaxLength 个字符';
-                            }
-                            return null;
-                          },
                         ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: passwordController,
-                          obscureText: true,
-                          decoration: const InputDecoration(
-                            labelText: '初始密码',
-                            helperText: '密码规则：至少6位；不能包含连续4位相同字符。',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return '请输入初始密码';
-                            }
-                            if (value.trim().length < 6) {
-                              return '密码至少 6 个字符';
-                            }
-                            if (RegExp(r'(.)\1\1\1').hasMatch(value.trim())) {
-                              return '初始密码不能包含连续4位相同字符';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          '角色分配（单选）',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        RadioGroup<String>(
-                          groupValue: selectedRoleCode,
-                          onChanged: (value) {
-                            setDialogState(() {
-                              selectedRoleCode = value;
-                              if (!_isOperator(selectedRoleCode)) {
-                                selectedStageId = null;
-                              }
-                            });
-                          },
-                          child: Column(
-                            children: assignableRoles.map((role) {
-                              return RadioListTile<String>(
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                                title: Text(role.name),
-                                subtitle: Text(
-                                  '${role.code} · ${role.roleType == 'builtin' ? '系统内置' : '自定义'}',
-                                ),
-                                value: role.code,
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                        if (selectedRoleCode == null)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 4),
-                            child: Text(
-                              '请选择一个角色',
-                              style: TextStyle(color: Colors.red),
-                            ),
-                          ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          '工段分配（单选，仅操作员角色可选）',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 8),
-                        Opacity(
-                          opacity: isOperatorSelected ? 1 : 0.5,
-                          child: IgnorePointer(
-                            ignoring: !isOperatorSelected,
-                            child: currentStages.isEmpty
-                                ? const Padding(
-                                    padding: EdgeInsets.symmetric(vertical: 8),
-                                    child: Text('暂无可分配工段'),
-                                  )
-                                : RadioGroup<int>(
-                                    groupValue: selectedStageId,
-                                    onChanged: (value) {
-                                      if (value == null) {
-                                        return;
-                                      }
-                                      setDialogState(() {
-                                        selectedStageId = value;
-                                      });
-                                    },
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: currentStages.map((stage) {
-                                        return RadioListTile<int>(
-                                          dense: true,
-                                          contentPadding: EdgeInsets.zero,
-                                          title: Text(stage.name),
-                                          subtitle: Text(stage.code),
-                                          value: stage.id,
-                                        );
-                                      }).toList(),
-                                    ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        '工段分配（单选，仅操作员角色可选）',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 8),
+                      Opacity(
+                        opacity: isOperatorSelected ? 1 : 0.5,
+                        child: IgnorePointer(
+                          ignoring: !isOperatorSelected,
+                          child: currentStages.isEmpty
+                              ? const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 8),
+                                  child: Text('暂无可分配工段'),
+                                )
+                              : RadioGroup<int>(
+                                  groupValue: selectedStageId,
+                                  onChanged: (value) {
+                                    if (value == null) {
+                                      return;
+                                    }
+                                    setDialogState(() {
+                                      selectedStageId = value;
+                                    });
+                                  },
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: currentStages.map((stage) {
+                                      return RadioListTile<int>(
+                                        dense: true,
+                                        contentPadding: EdgeInsets.zero,
+                                        title: Text(stage.name),
+                                        subtitle: Text(stage.code),
+                                        value: stage.id,
+                                      );
+                                    }).toList(),
                                   ),
+                                ),
+                        ),
+                      ),
+                      if (isOperatorSelected && selectedStageId == null)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 4),
+                          child: Text(
+                            '操作员角色必须选择一个工段',
+                            style: TextStyle(color: Colors.red),
                           ),
                         ),
-                        if (isOperatorSelected && selectedStageId == null)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 4),
-                            child: Text(
-                              '操作员角色必须选择一个工段',
-                              style: TextStyle(color: Colors.red),
-                            ),
-                          ),
-                      ],
-                    ),
+                    ],
                   ),
                 ),
               ),
@@ -651,8 +650,9 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) {
-          return AlertDialog(
+          return MesDialog(
             title: const Text('驳回注册申请'),
+            width: 420,
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,

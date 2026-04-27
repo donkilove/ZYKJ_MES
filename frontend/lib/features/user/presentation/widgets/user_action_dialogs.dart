@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
@@ -50,64 +51,62 @@ Future<void> showConfirmDeleteUserDialog({
       return StatefulBuilder(
         builder: (context, setDialogState) {
           final theme = Theme.of(context);
-          return AlertDialog(
+          return MesDialog(
             title: const Text('逻辑删除用户'),
-            content: SizedBox(
-              width: 440,
-              child: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '影响摘要',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+            width: 440,
+            content: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '影响摘要',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
                     ),
-                    const SizedBox(height: 8),
-                    Text('目标账号：${user.username}'),
-                    const SizedBox(height: 4),
-                    Text('当前在线状态：${user.isOnline ? '在线' : '离线'}'),
-                    const SizedBox(height: 4),
-                    Text('当前角色：$roleLabel'),
-                    const SizedBox(height: 4),
-                    Text('当前工段：$stageLabel'),
-                    const SizedBox(height: 12),
-                    Text(
-                      '删除后用户会被停用、从常规列表隐藏，且数据仍保留，可在已删除视图中恢复。',
-                      style: theme.textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text('目标账号：${user.username}'),
+                  const SizedBox(height: 4),
+                  Text('当前在线状态：${user.isOnline ? '在线' : '离线'}'),
+                  const SizedBox(height: 4),
+                  Text('当前角色：$roleLabel'),
+                  const SizedBox(height: 4),
+                  Text('当前工段：$stageLabel'),
+                  const SizedBox(height: 12),
+                  Text(
+                    '删除后用户会被停用、从常规列表隐藏，且数据仍保留，可在已删除视图中恢复。',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    user.isOnline ? '提交后将强制下线当前会话。' : '删除后账号不可登录，需恢复后重新管理。',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: user.isOnline ? theme.colorScheme.error : null,
+                      fontWeight: user.isOnline
+                          ? FontWeight.w700
+                          : FontWeight.w400,
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      user.isOnline ? '提交后将强制下线当前会话。' : '删除后账号不可登录，需恢复后重新管理。',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: user.isOnline ? theme.colorScheme.error : null,
-                        fontWeight: user.isOnline
-                            ? FontWeight.w700
-                            : FontWeight.w400,
-                      ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: remarkController,
+                    enabled: !submitting,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: '删除原因',
+                      hintText: '请输入逻辑删除原因',
+                      border: OutlineInputBorder(),
                     ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: remarkController,
-                      enabled: !submitting,
-                      maxLines: 3,
-                      decoration: const InputDecoration(
-                        labelText: '删除原因',
-                        hintText: '请输入逻辑删除原因',
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return '请输入删除原因';
-                        }
-                        return null;
-                      },
-                    ),
-                  ],
-                ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return '请输入删除原因';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
               ),
             ),
             actions: [
@@ -171,45 +170,43 @@ Future<void> showConfirmRestoreUserDialog({
       return StatefulBuilder(
         builder: (context, setDialogState) {
           final theme = Theme.of(context);
-          return AlertDialog(
+          return MesDialog(
             title: const Text('恢复用户'),
-            content: SizedBox(
-              width: 420,
-              child: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '恢复后用户会回到常规列表，但默认保持停用状态，需要管理员显式启用后才可再次登录。',
-                      style: theme.textTheme.bodyMedium,
+            width: 420,
+            content: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '恢复后用户会回到常规列表，但默认保持停用状态，需要管理员显式启用后才可再次登录。',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  Text('目标账号：${user.username}'),
+                  const SizedBox(height: 4),
+                  Text('当前角色：$roleLabel'),
+                  const SizedBox(height: 4),
+                  Text('当前工段：$stageLabel'),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: remarkController,
+                    enabled: !submitting,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: '恢复原因',
+                      hintText: '请输入恢复原因',
+                      border: OutlineInputBorder(),
                     ),
-                    const SizedBox(height: 12),
-                    Text('目标账号：${user.username}'),
-                    const SizedBox(height: 4),
-                    Text('当前角色：$roleLabel'),
-                    const SizedBox(height: 4),
-                    Text('当前工段：$stageLabel'),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: remarkController,
-                      enabled: !submitting,
-                      maxLines: 3,
-                      decoration: const InputDecoration(
-                        labelText: '恢复原因',
-                        hintText: '请输入恢复原因',
-                        border: OutlineInputBorder(),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return '请输入恢复原因';
-                        }
-                        return null;
-                      },
-                    ),
-                  ],
-                ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return '请输入恢复原因';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
               ),
             ),
             actions: [
@@ -280,56 +277,54 @@ Future<void> showToggleUserActiveDialog({
           final helperText = active
               ? '启用后账号可重新登录，但不会自动恢复在线状态。'
               : '停用后账号将无法继续登录，系统会强制下线该用户所有活跃会话。';
-          return AlertDialog(
+          return MesDialog(
             title: Text('$actionLabel用户'),
-            content: SizedBox(
-              width: 420,
-              child: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '目标账号：${user.username}',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+            width: 420,
+            content: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '目标账号：${user.username}',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
                     ),
-                    const SizedBox(height: 8),
-                    Text('当前角色：$roleLabel'),
-                    const SizedBox(height: 4),
-                    Text('当前账号状态：$statusLabel'),
-                    const SizedBox(height: 4),
-                    Text('当前在线状态：$onlineLabel'),
-                    const SizedBox(height: 12),
-                    Text(
-                      helperText,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: !active ? theme.colorScheme.error : null,
-                        fontWeight: !active ? FontWeight.w600 : FontWeight.w400,
-                      ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text('当前角色：$roleLabel'),
+                  const SizedBox(height: 4),
+                  Text('当前账号状态：$statusLabel'),
+                  const SizedBox(height: 4),
+                  Text('当前在线状态：$onlineLabel'),
+                  const SizedBox(height: 12),
+                  Text(
+                    helperText,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: !active ? theme.colorScheme.error : null,
+                      fontWeight: !active ? FontWeight.w600 : FontWeight.w400,
                     ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: remarkController,
-                      enabled: !submitting,
-                      maxLines: 3,
-                      decoration: InputDecoration(
-                        labelText: active ? '备注（可选）' : '停用原因',
-                        hintText: active ? '可填写启用说明' : '请输入停用原因',
-                        border: const OutlineInputBorder(),
-                      ),
-                      validator: (value) {
-                        if (!active &&
-                            (value == null || value.trim().isEmpty)) {
-                          return '请输入停用原因';
-                        }
-                        return null;
-                      },
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: remarkController,
+                    enabled: !submitting,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      labelText: active ? '备注（可选）' : '停用原因',
+                      hintText: active ? '可填写启用说明' : '请输入停用原因',
+                      border: const OutlineInputBorder(),
                     ),
-                  ],
-                ),
+                    validator: (value) {
+                      if (!active &&
+                          (value == null || value.trim().isEmpty)) {
+                        return '请输入停用原因';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
               ),
             ),
             actions: [

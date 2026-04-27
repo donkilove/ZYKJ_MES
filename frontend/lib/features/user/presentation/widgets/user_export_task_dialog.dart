@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
@@ -194,10 +196,10 @@ class UserExportTaskDialogState extends State<UserExportTaskDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return AlertDialog(
+    return MesDialog(
       title: const Text('导出任务'),
+      width: 920,
       content: SizedBox(
-        width: 920,
         height: 460,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -231,7 +233,7 @@ class UserExportTaskDialogState extends State<UserExportTaskDialog> {
                 ),
               ),
             if (_loading)
-              const Expanded(child: Center(child: CircularProgressIndicator()))
+              const Expanded(child: MesLoadingState(label: '导出任务加载中...'))
             else if (_error.isNotEmpty)
               Expanded(
                 child: Center(
@@ -368,7 +370,7 @@ class UserExportTaskDialogState extends State<UserExportTaskDialog> {
         ),
       ),
       actions: [
-        TextButton(
+        FilledButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('关闭'),
         ),
