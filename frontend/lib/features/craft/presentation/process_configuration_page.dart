@@ -7,6 +7,7 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 
@@ -2795,64 +2796,55 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     final theme = Theme.of(context);
     final templates = _filteredTemplates;
 
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CrudPageHeader(
-            title: '生产工序配置',
-            onRefresh: _loading ? null : _loadData,
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return SingleChildScrollView(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minHeight: constraints.maxHeight,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildJumpBanner(theme),
-                        const SizedBox(height: 12),
-                        _buildSystemMasterManagementCard(theme),
-                        const SizedBox(height: 12),
-                        constraints.maxWidth >= 1080
-                            ? Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  SizedBox(
-                                    width: 280,
-                                    child: _buildProductPanel(theme),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: _buildTemplateWorkspace(
-                                      theme,
-                                      templates,
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _buildProductPanel(theme),
-                                  const SizedBox(height: 12),
-                                  _buildTemplateWorkspace(theme, templates),
-                                ],
+    return MesCrudPageScaffold(
+      header: CrudPageHeader(
+        title: '生产工序配置',
+        onRefresh: _loading ? null : _loadData,
+      ),
+      content: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: constraints.maxHeight,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildJumpBanner(theme),
+                  const SizedBox(height: 12),
+                  _buildSystemMasterManagementCard(theme),
+                  const SizedBox(height: 12),
+                  constraints.maxWidth >= 1080
+                      ? Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              width: 280,
+                              child: _buildProductPanel(theme),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildTemplateWorkspace(
+                                theme,
+                                templates,
                               ),
-                      ],
-                    ),
-                  ),
-                );
-              },
+                            ),
+                          ],
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildProductPanel(theme),
+                            const SizedBox(height: 12),
+                            _buildTemplateWorkspace(theme, templates),
+                          ],
+                        ),
+                ],
+              ),
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
