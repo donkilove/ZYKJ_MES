@@ -136,3 +136,49 @@
   - 浮层标准化：约 25 处 inline showDialog + AlertDialog 可统一为 MesDialog 模板（patterns 层暂未提供）
 
 进入阶段 5 之前需要决策：本轮是否在 9 小时窗口外继续推进结构重组类工作。结构重组涉及多页面骨架迁移、需要更深的回归保障，建议作为独立轮次执行；本轮可以阶段 4 作为收尾点。
+
+### 阶段 5 总结：结构重组（17 个 page 接入 MesCrudPageScaffold 骨架）
+
+- 用户决策：覆盖全部 22 个 page。实际经过逐 page 评估（systematic 验证审计表的判断），17 个 page 适用 `MesCrudPageScaffold` 骨架重组，5 个 page 因布局类型不同保留差异。
+- 按模块分批完成情况：
+  - **5.1 product**：3 个候选项重新评估
+    - `product_management_page.dart` 的 `MediaQuery.of` 在 dialog `pageBuilder` 内部使用，是合理用法（dialog 高度依赖外屏尺寸而非自身 box constraint），**保留差异，无变更**。
+    - `product_version_management_page.dart` 已使用 `MesListDetailShell`（patterns 层的列表+详情双栏壳层），是合适的设计选择（双栏列表+详情非 CRUD 模式），**保留差异，无变更**。
+    - `product_detail_drawer.dart` 是 dialog 内嵌 widget，本轮不动 dialog 内部结构。
+    - **product 模块阶段 5 实际无 commit**，前置审计判断需修正。
+  - **5.2 equipment**：6 个 page 接入 MesCrudPageScaffold，commits `c2538bd` `821123c` `e28222e` `3f9ff7f` `fd5d868` `c8d43c5`
+    - `设备规则参数页接入 MesCrudPageScaffold 骨架` (`c8d43c5`) 因含 TabBar + 双 Tab 双 List，外壳重组保留 tab 内部结构（DONE_WITH_CONCERNS 处理）
+  - **5.3 production**：5 个 page 接入 MesCrudPageScaffold，commits `e602ef9` `d690c24` `b4e38b4` `3d4aba1` `90e1cb2`
+  - **5.4 quality**：3 个 page 接入 MesCrudPageScaffold，commits `f87acd6` `710801b` `c548bc0`
+  - **5.5 craft**：2 个 page 接入 MesCrudPageScaffold，commits `50ad95c` `c6960d2`
+  - **5.6 misc**：1 个 page 接入 MesCrudPageScaffold，commit `6dda21f`
+- 阶段 5 实际 commit 数：17 个 page 重组 commit。
+- 阶段 5 整体改动模式（统一）：
+  - 移除外层 `Padding(EdgeInsets.all(16))` + `Column(crossAxisAlignment: start)` 包装
+  - `Row(children: [Expanded(child: CrudPageHeader)])` → 直接 `CrudPageHeader` 给 `header:` 槽
+  - 独立 `Text('总数: $_total')` 行 → 移除（`MesPaginationBar` 默认 `showTotal: true` 接管）
+  - `if (_message.isNotEmpty)` 反馈条 → `banner:` 槽（条件 null）
+  - `Expanded(CrudListTableSection)` → `content:` 槽（无需 Expanded）
+  - 间距由 `MesCrudPageScaffold` 内部 `MesGap.vertical(spacing)` 统一
+- 验证：
+  - `flutter analyze lib`：1 个预先存在 warning（无关），无新增错误
+  - `flutter test test/widgets/main_shell_page_test test/widgets/message_center_page_test test/widgets/production_page_test test/widgets/user_management_page_test`：115/115 通过
+  - 各模块 widget 测试均在 implementer 提交前验证通过（equipment 22、production 26、quality 全过、craft 全过、misc 3）
+  - `flutter test integration_test/user_module_flow_test.dart -d windows`：1/1 通过
+  - `flutter test integration_test/home_shell_flow_test.dart -d windows`：10/10 通过（含跳产品/质量/工艺/设备/质量子页等阶段 5 触及的模块）
+- 已知未触动项（仍为阶段 4 总结里登记的清单）：
+  - 全站约 18 处页头仍走 CrudPageHeader wrapper（已转发到 MesPageHeader，无视觉差异）
+  - 全站约 18 处页面手写筛选区（仍未抽取为 `MesFilterBar`）
+  - 约 35 处裸 `CircularProgressIndicator`（等 patterns 提供 `MesLoadingState`）
+  - 约 25 处浮层 inline AlertDialog（等 patterns 提供 `MesDialog`）
+- 这些已知未触动项的共同特点：**它们要么需要 patterns 层先扩展能力（loading/dialog 模板），要么属于命名清退（CrudPageHeader），单独提交都不能改善视觉一致性**——已纳入剧本"窗口外推进项"，由后续 patterns 层扩展驱动。
+
+### 整体交付小结
+
+- 分支：`feature/frontend-ui-global-convergence`，从 `0056d21` 起共 53+ commit。
+- 9 小时窗口承诺（阶段 0-3）：100% 完成。
+- 窗口外阶段 4：全站 SimplePaginationBar 旧件 100% 清退（25+ 处 → 0）。
+- 窗口外阶段 5：17 个 CRUD page 接入 MesCrudPageScaffold 骨架，骨架语言统一。
+- 文档：审计表、验证日志、改造剧本、UI 基线说明四件齐备。
+- 回归：高频 widget 115/115 + user_module/home_shell 集成 11/11 全绿；预先存在的 login_flow 2 个失败已确认与本轮无关（在 main 分支同样失败）。
+- 迁移口径：无迁移，直接替换。
