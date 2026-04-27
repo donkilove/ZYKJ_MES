@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
@@ -134,7 +135,7 @@ class _ProductionRepairOrderDetailPageState
     return Scaffold(
       appBar: AppBar(title: Text('维修详情 - $title')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const MesLoadingState(label: '维修详情加载中...')
           : detail == null
           ? Center(child: Text(_message.isEmpty ? '加载失败' : _message))
           : Padding(

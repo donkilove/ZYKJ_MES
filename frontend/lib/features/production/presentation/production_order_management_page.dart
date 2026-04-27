@@ -7,6 +7,7 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 import 'package:mes_client/features/quality/services/quality_supplier_service.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
@@ -248,8 +249,9 @@ class _ProductionOrderManagementPageState
     }
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => MesDialog(
         title: const Text('删除订单'),
+        width: 420,
         content: Text('确认删除订单 ${order.orderCode} 吗？'),
         actions: [
           TextButton(
@@ -303,30 +305,28 @@ class _ProductionOrderManagementPageState
     final passwordController = TextEditingController();
     final confirmed = await showMesLockedFormDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => MesDialog(
         title: const Text('结束订单'),
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('确认结束订单 ${order.orderCode} 吗？'),
-              const SizedBox(height: 8),
-              const Text('请输入当前生产管理员登录密码后，才能结束订单。'),
-              const SizedBox(height: 4),
-              const Text('该操作会强制释放相关生产状态。'),
-              const SizedBox(height: 12),
-              TextField(
-                controller: passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: '当前登录密码',
-                  border: OutlineInputBorder(),
-                ),
+        width: 420,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('确认结束订单 ${order.orderCode} 吗？'),
+            const SizedBox(height: 8),
+            const Text('请输入当前生产管理员登录密码后，才能结束订单。'),
+            const SizedBox(height: 4),
+            const Text('该操作会强制释放相关生产状态。'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: passwordController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: '当前登录密码',
+                border: OutlineInputBorder(),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -449,51 +449,49 @@ class _ProductionOrderManagementPageState
           final selected = <String>{...initialSelected};
           return StatefulBuilder(
             builder: (dialogContext, setDialogState) {
-              return AlertDialog(
+              return MesDialog(
                 title: Text('并行模式设置 - ${order.orderCode}'),
-                content: SizedBox(
-                  width: 520,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('请选择参与并行的工序（至少 2 道）。'),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        height: 260,
-                        child: ListView(
-                          children: sortedProcesses.map((row) {
-                            final code = row.processCode;
-                            final enabled = availableCodes.contains(code);
-                            return CheckboxListTile(
-                              dense: true,
-                              value: selected.contains(code),
-                              onChanged: enabled
-                                  ? (checked) {
-                                      setDialogState(() {
-                                        if (checked == true) {
-                                          selected.add(code);
-                                        } else {
-                                          selected.remove(code);
-                                        }
-                                      });
-                                    }
-                                  : null,
-                              title: Text('${row.processName} ($code)'),
-                              subtitle: Text('顺序 ${row.processOrder}'),
-                              controlAffinity: ListTileControlAffinity.leading,
-                              contentPadding: EdgeInsets.zero,
-                            );
-                          }).toList(),
-                        ),
+                width: 520,
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('请选择参与并行的工序（至少 2 道）。'),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      height: 260,
+                      child: ListView(
+                        children: sortedProcesses.map((row) {
+                          final code = row.processCode;
+                          final enabled = availableCodes.contains(code);
+                          return CheckboxListTile(
+                            dense: true,
+                            value: selected.contains(code),
+                            onChanged: enabled
+                                ? (checked) {
+                                    setDialogState(() {
+                                      if (checked == true) {
+                                        selected.add(code);
+                                      } else {
+                                        selected.remove(code);
+                                      }
+                                    });
+                                  }
+                                : null,
+                            title: Text('${row.processName} ($code)'),
+                            subtitle: Text('顺序 ${row.processOrder}'),
+                            controlAffinity: ListTileControlAffinity.leading,
+                            contentPadding: EdgeInsets.zero,
+                          );
+                        }).toList(),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '当前已选 ${selected.length} 道。',
-                        style: Theme.of(dialogContext).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '当前已选 ${selected.length} 道。',
+                      style: Theme.of(dialogContext).textTheme.bodySmall,
+                    ),
+                  ],
                 ),
                 actions: [
                   TextButton(
@@ -555,8 +553,9 @@ class _ProductionOrderManagementPageState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
+        return MesDialog(
           title: const Text('关闭并行模式'),
+          width: 420,
           content: Text('确认关闭订单 ${order.orderCode} 的并行模式吗？'),
           actions: [
             TextButton(

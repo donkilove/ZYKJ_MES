@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
@@ -638,7 +639,7 @@ class _ProductionOrderFormPageState extends State<ProductionOrderFormPage> {
       appBar: AppBar(title: Text(_isEdit ? '编辑订单' : '创建订单')),
       body: SafeArea(
         child: _initializing
-            ? const Center(child: CircularProgressIndicator())
+            ? const MesLoadingState(label: '订单表单初始化中...')
             : Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 980),

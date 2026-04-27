@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
@@ -501,7 +502,7 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
         const SizedBox(height: 12),
         Expanded(
           child: _loadingToday
-              ? const Center(child: CircularProgressIndicator())
+              ? const MesLoadingState(label: '今日实时产量加载中...')
               : Column(
                   children: [
                     Expanded(
@@ -557,7 +558,7 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
 
   Widget _buildProcessStatsSection() {
     if (_loadingProcessStats) {
-      return const Center(child: CircularProgressIndicator());
+      return const MesLoadingState(label: '工序统计加载中...');
     }
     return CrudListTableSection(
       loading: false,
@@ -597,7 +598,7 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
 
   Widget _buildOperatorStatsSection() {
     if (_loadingOperatorStats) {
-      return const Center(child: CircularProgressIndicator());
+      return const MesLoadingState(label: '人员统计加载中...');
     }
     return CrudListTableSection(
       loading: false,

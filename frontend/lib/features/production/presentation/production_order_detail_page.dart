@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
@@ -428,7 +429,7 @@ class _ProductionOrderDetailPageState extends State<ProductionOrderDetailPage> {
         body: Padding(
           padding: const EdgeInsets.all(16),
           child: _loading
-              ? const Center(child: CircularProgressIndicator())
+              ? const MesLoadingState(label: '订单详情加载中...')
               : detail == null
               ? Center(
                   child: Column(

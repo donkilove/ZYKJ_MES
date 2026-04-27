@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
@@ -179,33 +181,31 @@ class _ProductionFirstArticlePageState
     }
     final selected = await showMesLockedFormDialog<FirstArticleTemplateItem>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => MesDialog(
         title: const Text('选择首件模板'),
-        content: SizedBox(
-          width: 560,
-          child: ListView.separated(
-            shrinkWrap: true,
-            itemCount: _templates.length,
-            separatorBuilder: (_, _) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final item = _templates[index];
-              final isSelected = item.id == _selectedTemplate?.id;
-              return ListTile(
-                selected: isSelected,
-                leading: Icon(
-                  isSelected
-                      ? Icons.radio_button_checked
-                      : Icons.radio_button_off,
-                ),
-                onTap: () => Navigator.of(dialogContext).pop(item),
-                title: Text(item.templateName),
-                subtitle: Text(
-                  '检验内容：${(item.checkContent ?? '').trim().isEmpty ? '-' : item.checkContent}\n'
-                  '测试值：${(item.testValue ?? '').trim().isEmpty ? '-' : item.testValue}',
-                ),
-              );
-            },
-          ),
+        width: 560,
+        content: ListView.separated(
+          shrinkWrap: true,
+          itemCount: _templates.length,
+          separatorBuilder: (_, _) => const Divider(height: 1),
+          itemBuilder: (context, index) {
+            final item = _templates[index];
+            final isSelected = item.id == _selectedTemplate?.id;
+            return ListTile(
+              selected: isSelected,
+              leading: Icon(
+                isSelected
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_off,
+              ),
+              onTap: () => Navigator.of(dialogContext).pop(item),
+              title: Text(item.templateName),
+              subtitle: Text(
+                '检验内容：${(item.checkContent ?? '').trim().isEmpty ? '-' : item.checkContent}\n'
+                '测试值：${(item.testValue ?? '').trim().isEmpty ? '-' : item.testValue}',
+              ),
+            );
+          },
         ),
         actions: [
           TextButton(
@@ -236,47 +236,45 @@ class _ProductionFirstArticlePageState
       }
       await showMesLockedFormDialog<void>(
         context: context,
-        builder: (dialogContext) => AlertDialog(
+        builder: (dialogContext) => MesDialog(
           title: const Text('首件参数查看'),
-          content: SizedBox(
-            width: 760,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('产品：${result.productName}'),
-                Text('参数范围：${result.parameterScope}'),
-                Text('版本：${result.versionLabel}'),
-                Text('生命周期：${result.lifecycleStatus}'),
-                const SizedBox(height: 12),
-                Flexible(
-                  child: result.items.isEmpty
-                      ? const Center(child: Text('暂无参数'))
-                      : AdaptiveTableContainer(
-                          child: DataTable(
-                            columns: const [
-                              DataColumn(label: Text('名称')),
-                              DataColumn(label: Text('分类')),
-                              DataColumn(label: Text('类型')),
-                              DataColumn(label: Text('值')),
-                              DataColumn(label: Text('说明')),
-                            ],
-                            rows: result.items.map((item) {
-                              return DataRow(
-                                cells: [
-                                  DataCell(Text(item.name)),
-                                  DataCell(Text(item.category)),
-                                  DataCell(Text(item.type)),
-                                  DataCell(Text(item.value)),
-                                  DataCell(Text(item.description)),
-                                ],
-                              );
-                            }).toList(),
-                          ),
+          width: 760,
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('产品：${result.productName}'),
+              Text('参数范围：${result.parameterScope}'),
+              Text('版本：${result.versionLabel}'),
+              Text('生命周期：${result.lifecycleStatus}'),
+              const SizedBox(height: 12),
+              Flexible(
+                child: result.items.isEmpty
+                    ? const Center(child: Text('暂无参数'))
+                    : AdaptiveTableContainer(
+                        child: DataTable(
+                          columns: const [
+                            DataColumn(label: Text('名称')),
+                            DataColumn(label: Text('分类')),
+                            DataColumn(label: Text('类型')),
+                            DataColumn(label: Text('值')),
+                            DataColumn(label: Text('说明')),
+                          ],
+                          rows: result.items.map((item) {
+                            return DataRow(
+                              cells: [
+                                DataCell(Text(item.name)),
+                                DataCell(Text(item.category)),
+                                DataCell(Text(item.type)),
+                                DataCell(Text(item.value)),
+                                DataCell(Text(item.description)),
+                              ],
+                            );
+                          }).toList(),
                         ),
-                ),
-              ],
-            ),
+                      ),
+              ),
+            ],
           ),
           actions: [
             TextButton(
@@ -315,29 +313,27 @@ class _ProductionFirstArticlePageState
       builder: (dialogContext) {
         final draftIds = _selectedParticipants.map((item) => item.id).toSet();
         return StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
+          builder: (context, setDialogState) => MesDialog(
             title: const Text('添加参与操作员'),
-            content: SizedBox(
-              width: 560,
-              child: ListView(
-                shrinkWrap: true,
-                children: _participantOptions.map((item) {
-                  return CheckboxListTile(
-                    value: draftIds.contains(item.id),
-                    title: Text(item.displayName),
-                    controlAffinity: ListTileControlAffinity.leading,
-                    onChanged: (checked) {
-                      setDialogState(() {
-                        if (checked == true) {
-                          draftIds.add(item.id);
-                        } else {
-                          draftIds.remove(item.id);
-                        }
-                      });
-                    },
-                  );
-                }).toList(),
-              ),
+            width: 560,
+            content: ListView(
+              shrinkWrap: true,
+              children: _participantOptions.map((item) {
+                return CheckboxListTile(
+                  value: draftIds.contains(item.id),
+                  title: Text(item.displayName),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  onChanged: (checked) {
+                    setDialogState(() {
+                      if (checked == true) {
+                        draftIds.add(item.id);
+                      } else {
+                        draftIds.remove(item.id);
+                      }
+                    });
+                  },
+                );
+              }).toList(),
             ),
             actions: [
               TextButton(
@@ -627,7 +623,7 @@ class _ProductionFirstArticlePageState
     return Scaffold(
       appBar: AppBar(title: Text('首件录入 - ${order.orderCode}')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const MesLoadingState(label: '首件录入加载中...')
           : SafeArea(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),

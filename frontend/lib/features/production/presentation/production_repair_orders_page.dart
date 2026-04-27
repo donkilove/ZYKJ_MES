@@ -9,6 +9,7 @@ import 'package:mes_client/features/production/presentation/production_repair_or
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 import 'package:mes_client/features/quality/services/repair_scrap_service.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
@@ -371,29 +372,27 @@ class _ProductionRepairOrdersPageState
       }
       await showDialog<void>(
         context: context,
-        builder: (context) => AlertDialog(
+        builder: (context) => MesDialog(
           title: Text('现象汇总 - ${item.repairOrderCode}'),
-          content: SizedBox(
-            width: 420,
-            child: result.items.isEmpty
-                ? const Text('暂无现象明细')
-                : Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: result.items
-                        .map(
-                          (entry) => Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            child: Row(
-                              children: [
-                                Expanded(child: Text(entry.phenomenon)),
-                                Text('数量：${entry.quantity}'),
-                              ],
-                            ),
+          width: 420,
+          content: result.items.isEmpty
+              ? const Text('暂无现象明细')
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: result.items
+                      .map(
+                        (entry) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              Expanded(child: Text(entry.phenomenon)),
+                              Text('数量：${entry.quantity}'),
+                            ],
                           ),
-                        )
-                        .toList(),
-                  ),
-          ),
+                        ),
+                      )
+                      .toList(),
+                ),
           actions: [
             FilledButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -495,170 +494,167 @@ class _ProductionRepairOrdersPageState
       final result = await showMesLockedFormDialog<_RepairCompleteDialogResult?>(
         context: context,
         builder: (context) => StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
+          builder: (context, setDialogState) => MesDialog(
             title: Text('完成维修 - ${item.repairOrderCode}'),
-            content: SizedBox(
-              width: 680,
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('送修数量：${item.repairQuantity}'),
-                    const SizedBox(height: 12),
-                    ...causeDrafts.map((draft) {
+            width: 680,
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('送修数量：${item.repairQuantity}'),
+                  const SizedBox(height: 12),
+                  ...causeDrafts.map((draft) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Expanded(flex: 3, child: Text(draft.phenomenon)),
+                          Expanded(
+                            flex: 2,
+                            child: Text('数量：${draft.quantity}'),
+                          ),
+                          Expanded(
+                            flex: 4,
+                            child: TextField(
+                              controller: draft.reasonController,
+                              decoration: const InputDecoration(
+                                labelText: '原因',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Column(
+                            children: [
+                              Checkbox(
+                                value: draft.isScrap,
+                                onChanged: (value) {
+                                  setDialogState(() {
+                                    draft.isScrap = value ?? false;
+                                  });
+                                },
+                              ),
+                              const Text('报废'),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: scrapReplenished,
+                        onChanged: (value) {
+                          setDialogState(() {
+                            scrapReplenished = value ?? false;
+                          });
+                        },
+                      ),
+                      const Text('报废已补充'),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Text('回流分配（仅对非报废数量生效）'),
+                      const Spacer(),
+                      OutlinedButton.icon(
+                        onPressed: processOptions.isEmpty
+                            ? null
+                            : () {
+                                setDialogState(() {
+                                  allocationDrafts.add(
+                                    _ReturnAllocationDraft(
+                                      targetProcessId: processOptions.first.id,
+                                    ),
+                                  );
+                                });
+                              },
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('新增回流项'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (processOptions.isEmpty)
+                    const Text('当前无可选回流工序')
+                  else
+                    ...List.generate(allocationDrafts.length, (index) {
+                      final draft = allocationDrafts[index];
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Row(
                           children: [
-                            Expanded(flex: 3, child: Text(draft.phenomenon)),
-                            Expanded(
-                              flex: 2,
-                              child: Text('数量：${draft.quantity}'),
-                            ),
                             Expanded(
                               flex: 4,
-                              child: TextField(
-                                controller: draft.reasonController,
+                              child: DropdownButtonFormField<int>(
+                                initialValue: draft.targetProcessId,
                                 decoration: const InputDecoration(
-                                  labelText: '原因',
+                                  labelText: '回流目标工序',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                                items: processOptions
+                                    .map(
+                                      (entry) => DropdownMenuItem<int>(
+                                        value: entry.id,
+                                        child: Text(
+                                          '${entry.code} ${entry.name}',
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (value) {
+                                  setDialogState(() {
+                                    draft.targetProcessId = value;
+                                  });
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              flex: 2,
+                              child: TextField(
+                                controller: draft.quantityController,
+                                keyboardType: TextInputType.number,
+                                decoration: const InputDecoration(
+                                  labelText: '数量',
                                   border: OutlineInputBorder(),
                                   isDense: true,
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            Column(
-                              children: [
-                                Checkbox(
-                                  value: draft.isScrap,
-                                  onChanged: (value) {
-                                    setDialogState(() {
-                                      draft.isScrap = value ?? false;
-                                    });
-                                  },
-                                ),
-                                const Text('报废'),
-                              ],
+                            IconButton(
+                              onPressed: allocationDrafts.length <= 1
+                                  ? null
+                                  : () {
+                                      setDialogState(() {
+                                        final removed = allocationDrafts
+                                            .removeAt(index);
+                                        removed.dispose();
+                                      });
+                                    },
+                              icon: const Icon(Icons.delete_outline),
                             ),
                           ],
                         ),
                       );
                     }),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Checkbox(
-                          value: scrapReplenished,
-                          onChanged: (value) {
-                            setDialogState(() {
-                              scrapReplenished = value ?? false;
-                            });
-                          },
-                        ),
-                        const Text('报废已补充'),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Text('回流分配（仅对非报废数量生效）'),
-                        const Spacer(),
-                        OutlinedButton.icon(
-                          onPressed: processOptions.isEmpty
-                              ? null
-                              : () {
-                                  setDialogState(() {
-                                    allocationDrafts.add(
-                                      _ReturnAllocationDraft(
-                                        targetProcessId:
-                                            processOptions.first.id,
-                                      ),
-                                    );
-                                  });
-                                },
-                          icon: const Icon(Icons.add, size: 16),
-                          label: const Text('新增回流项'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    if (processOptions.isEmpty)
-                      const Text('当前无可选回流工序')
-                    else
-                      ...List.generate(allocationDrafts.length, (index) {
-                        final draft = allocationDrafts[index];
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                flex: 4,
-                                child: DropdownButtonFormField<int>(
-                                  initialValue: draft.targetProcessId,
-                                  decoration: const InputDecoration(
-                                    labelText: '回流目标工序',
-                                    border: OutlineInputBorder(),
-                                    isDense: true,
-                                  ),
-                                  items: processOptions
-                                      .map(
-                                        (entry) => DropdownMenuItem<int>(
-                                          value: entry.id,
-                                          child: Text(
-                                            '${entry.code} ${entry.name}',
-                                          ),
-                                        ),
-                                      )
-                                      .toList(),
-                                  onChanged: (value) {
-                                    setDialogState(() {
-                                      draft.targetProcessId = value;
-                                    });
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                flex: 2,
-                                child: TextField(
-                                  controller: draft.quantityController,
-                                  keyboardType: TextInputType.number,
-                                  decoration: const InputDecoration(
-                                    labelText: '数量',
-                                    border: OutlineInputBorder(),
-                                    isDense: true,
-                                  ),
-                                ),
-                              ),
-                              IconButton(
-                                onPressed: allocationDrafts.length <= 1
-                                    ? null
-                                    : () {
-                                        setDialogState(() {
-                                          final removed = allocationDrafts
-                                              .removeAt(index);
-                                          removed.dispose();
-                                        });
-                                      },
-                                icon: const Icon(Icons.delete_outline),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                    if (dialogError.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          dialogError,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                          ),
+                  if (dialogError.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        dialogError,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
                         ),
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
             ),
             actions: [

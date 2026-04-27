@@ -10,6 +10,7 @@ import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
@@ -640,84 +641,82 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
       final payload = await showMesLockedFormDialog<_ProductionSubmitPayload?>(
         context: context,
         builder: (context) => StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
+          builder: (context, setDialogState) => MesDialog(
             title: const Text('结束生产'),
-            content: SizedBox(
-              width: 560,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: qtyController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: '有效流转数量',
-                        border: OutlineInputBorder(),
+            width: 560,
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: qtyController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: '有效流转数量',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Text('不良现象（可选）'),
+                      const Spacer(),
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          setDialogState(() {
+                            defectRows.add(_DefectRowDraft());
+                          });
+                        },
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('新增'),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        const Text('不良现象（可选）'),
-                        const Spacer(),
-                        OutlinedButton.icon(
-                          onPressed: () {
-                            setDialogState(() {
-                              defectRows.add(_DefectRowDraft());
-                            });
-                          },
-                          icon: const Icon(Icons.add, size: 16),
-                          label: const Text('新增'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    ...List.generate(defectRows.length, (index) {
-                      final row = defectRows[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 3,
-                              child: TextField(
-                                controller: row.phenomenonController,
-                                decoration: const InputDecoration(
-                                  labelText: '现象',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ...List.generate(defectRows.length, (index) {
+                    final row = defectRows[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: TextField(
+                              controller: row.phenomenonController,
+                              decoration: const InputDecoration(
+                                labelText: '现象',
+                                border: OutlineInputBorder(),
+                                isDense: true,
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              flex: 2,
-                              child: TextField(
-                                controller: row.quantityController,
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  labelText: '数量',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 2,
+                            child: TextField(
+                              controller: row.quantityController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: '数量',
+                                border: OutlineInputBorder(),
+                                isDense: true,
                               ),
                             ),
-                            IconButton(
-                              onPressed: () {
-                                setDialogState(() {
-                                  final removed = defectRows.removeAt(index);
-                                  removed.dispose();
-                                });
-                              },
-                              icon: const Icon(Icons.delete_outline),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                  ],
-                ),
+                          ),
+                          IconButton(
+                            onPressed: () {
+                              setDialogState(() {
+                                final removed = defectRows.removeAt(index);
+                                removed.dispose();
+                              });
+                            },
+                            icon: const Icon(Icons.delete_outline),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
               ),
             ),
             actions: [
@@ -840,88 +839,84 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
       final payload = await showMesLockedFormDialog<_ManualRepairSubmitPayload?>(
         context: context,
         builder: (context) => StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
+          builder: (context, setDialogState) => MesDialog(
             title: const Text('手工送修建单'),
-            content: SizedBox(
-              width: 560,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: productionQtyController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: '本次生产数量',
-                        border: OutlineInputBorder(),
+            width: 560,
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: productionQtyController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: '本次生产数量',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Text('不良现象明细'),
+                      const Spacer(),
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          setDialogState(() {
+                            defectRows.add(_DefectRowDraft());
+                          });
+                        },
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('新增'),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        const Text('不良现象明细'),
-                        const Spacer(),
-                        OutlinedButton.icon(
-                          onPressed: () {
-                            setDialogState(() {
-                              defectRows.add(_DefectRowDraft());
-                            });
-                          },
-                          icon: const Icon(Icons.add, size: 16),
-                          label: const Text('新增'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    ...List.generate(defectRows.length, (index) {
-                      final row = defectRows[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 3,
-                              child: TextField(
-                                controller: row.phenomenonController,
-                                decoration: const InputDecoration(
-                                  labelText: '现象',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ...List.generate(defectRows.length, (index) {
+                    final row = defectRows[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: TextField(
+                              controller: row.phenomenonController,
+                              decoration: const InputDecoration(
+                                labelText: '现象',
+                                border: OutlineInputBorder(),
+                                isDense: true,
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              flex: 2,
-                              child: TextField(
-                                controller: row.quantityController,
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  labelText: '数量',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 2,
+                            child: TextField(
+                              controller: row.quantityController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: '数量',
+                                border: OutlineInputBorder(),
+                                isDense: true,
                               ),
                             ),
-                            IconButton(
-                              onPressed: defectRows.length <= 1
-                                  ? null
-                                  : () {
-                                      setDialogState(() {
-                                        final removed = defectRows.removeAt(
-                                          index,
-                                        );
-                                        removed.dispose();
-                                      });
-                                    },
-                              icon: const Icon(Icons.delete_outline),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                  ],
-                ),
+                          ),
+                          IconButton(
+                            onPressed: defectRows.length <= 1
+                                ? null
+                                : () {
+                                    setDialogState(() {
+                                      final removed = defectRows.removeAt(index);
+                                      removed.dispose();
+                                    });
+                                  },
+                            icon: const Icon(Icons.delete_outline),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
               ),
             ),
             actions: [
@@ -1060,60 +1055,58 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
       final ok = await showMesLockedFormDialog<bool>(
         context: context,
         builder: (context) => StatefulBuilder(
-          builder: (context, setDialogState) => AlertDialog(
+          builder: (context, setDialogState) => MesDialog(
             title: const Text('发起代班'),
-            content: SizedBox(
-              width: 440,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    DropdownButtonFormField<int>(
-                      initialValue: targetId,
-                      decoration: const InputDecoration(
-                        labelText: '目标操作员',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: targetOperators
-                          .map(
-                            (it) => DropdownMenuItem<int>(
-                              value: it.id,
-                              child: Text(it.displayName),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) =>
-                          setDialogState(() => targetId = value),
+            width: 440,
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<int>(
+                    initialValue: targetId,
+                    decoration: const InputDecoration(
+                      labelText: '目标操作员',
+                      border: OutlineInputBorder(),
                     ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<int>(
-                      initialValue: helperId,
-                      decoration: const InputDecoration(
-                        labelText: '代班人',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: _assistUsers
-                          .map(
-                            (it) => DropdownMenuItem<int>(
-                              value: it.id,
-                              child: Text(it.displayName),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) =>
-                          setDialogState(() => helperId = value),
+                    items: targetOperators
+                        .map(
+                          (it) => DropdownMenuItem<int>(
+                            value: it.id,
+                            child: Text(it.displayName),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) =>
+                        setDialogState(() => targetId = value),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<int>(
+                    initialValue: helperId,
+                    decoration: const InputDecoration(
+                      labelText: '代班人',
+                      border: OutlineInputBorder(),
                     ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: reasonController,
-                      maxLines: 2,
-                      decoration: const InputDecoration(
-                        labelText: '代班原因（可选）',
-                        border: OutlineInputBorder(),
-                      ),
+                    items: _assistUsers
+                        .map(
+                          (it) => DropdownMenuItem<int>(
+                            value: it.id,
+                            child: Text(it.displayName),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) =>
+                        setDialogState(() => helperId = value),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: reasonController,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: '代班原因（可选）',
+                      border: OutlineInputBorder(),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
             actions: [
