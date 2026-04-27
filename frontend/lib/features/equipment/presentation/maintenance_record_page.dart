@@ -7,6 +7,7 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 
 class MaintenanceRecordPage extends StatefulWidget {
@@ -189,251 +190,239 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: CrudPageHeader(
-                  title: '保养记录',
-                  onRefresh: _loading ? null : () => _loadItems(page: _page),
+
+    final filtersToolbar = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _keywordController,
+                decoration: const InputDecoration(
+                  labelText: '搜索设备/项目/结果',
+                  border: OutlineInputBorder(),
                 ),
+                onSubmitted: (_) => _loadItems(page: 1),
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _keywordController,
+            ),
+            const SizedBox(width: 12),
+            if (_ownerOptions.isNotEmpty)
+              SizedBox(
+                width: 220,
+                child: DropdownButtonFormField<int?>(
+                  initialValue: _executorIdFilter,
                   decoration: const InputDecoration(
-                    labelText: '搜索设备/项目/结果',
+                    labelText: '执行人',
                     border: OutlineInputBorder(),
                   ),
-                  onSubmitted: (_) => _loadItems(page: 1),
-                ),
-              ),
-              const SizedBox(width: 12),
-              if (_ownerOptions.isNotEmpty)
-                SizedBox(
-                  width: 220,
-                  child: DropdownButtonFormField<int?>(
-                    initialValue: _executorIdFilter,
-                    decoration: const InputDecoration(
-                      labelText: '执行人',
-                      border: OutlineInputBorder(),
+                  items: [
+                    const DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text('全部执行人'),
                     ),
-                    items: [
-                      const DropdownMenuItem<int?>(
-                        value: null,
-                        child: Text('全部执行人'),
+                    ..._ownerOptions.map(
+                      (owner) => DropdownMenuItem<int?>(
+                        value: owner.userId,
+                        child: Text(owner.displayName),
                       ),
-                      ..._ownerOptions.map(
-                        (owner) => DropdownMenuItem<int?>(
-                          value: owner.userId,
-                          child: Text(owner.displayName),
-                        ),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      setState(() => _executorIdFilter = value);
-                    },
-                  ),
-                ),
-              if (_ownerOptions.isNotEmpty) const SizedBox(width: 12),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final picked = await _pickDate(
-                    initialDate: _startDate ?? DateTime.now(),
-                  );
-                  if (!mounted) {
-                    return;
-                  }
-                  if (picked != null) {
-                    setState(() {
-                      _startDate = picked;
-                    });
-                  }
-                },
-                icon: const Icon(Icons.event),
-                label: Text(
-                  _startDate == null ? '开始日期' : _formatDate(_startDate!),
-                ),
-              ),
-              const SizedBox(width: 12),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final picked = await _pickDate(
-                    initialDate: _endDate ?? DateTime.now(),
-                  );
-                  if (!mounted) {
-                    return;
-                  }
-                  if (picked != null) {
-                    setState(() {
-                      _endDate = picked;
-                    });
-                  }
-                },
-                icon: const Icon(Icons.event_available),
-                label: Text(_endDate == null ? '结束日期' : _formatDate(_endDate!)),
-              ),
-              const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: _loading ? null : () => _loadItems(page: 1),
-                icon: const Icon(Icons.search),
-                label: const Text('查询'),
-              ),
-              const SizedBox(width: 12),
-              TextButton(
-                onPressed: _loading
-                    ? null
-                    : () {
-                        setState(() {
-                          _startDate = null;
-                          _endDate = null;
-                          _executorIdFilter = null;
-                          _equipmentIdFilter = null;
-                          _resultSummaryFilter = null;
-                        });
-                        _loadItems(page: 1);
-                      },
-                child: const Text('清空筛选'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              SizedBox(
-                width: 160,
-                child: DropdownButtonFormField<String?>(
-                  initialValue: _resultSummaryFilter,
-                  items: const [
-                    DropdownMenuItem<String?>(value: null, child: Text('全部结果')),
-                    DropdownMenuItem<String?>(value: '完成', child: Text('完成')),
-                    DropdownMenuItem<String?>(value: '失败', child: Text('失败')),
+                    ),
                   ],
                   onChanged: (value) {
-                    setState(() => _resultSummaryFilter = value);
+                    setState(() => _executorIdFilter = value);
+                  },
+                ),
+              ),
+            if (_ownerOptions.isNotEmpty) const SizedBox(width: 12),
+            OutlinedButton.icon(
+              onPressed: () async {
+                final picked = await _pickDate(
+                  initialDate: _startDate ?? DateTime.now(),
+                );
+                if (!mounted) {
+                  return;
+                }
+                if (picked != null) {
+                  setState(() {
+                    _startDate = picked;
+                  });
+                }
+              },
+              icon: const Icon(Icons.event),
+              label: Text(
+                _startDate == null ? '开始日期' : _formatDate(_startDate!),
+              ),
+            ),
+            const SizedBox(width: 12),
+            OutlinedButton.icon(
+              onPressed: () async {
+                final picked = await _pickDate(
+                  initialDate: _endDate ?? DateTime.now(),
+                );
+                if (!mounted) {
+                  return;
+                }
+                if (picked != null) {
+                  setState(() {
+                    _endDate = picked;
+                  });
+                }
+              },
+              icon: const Icon(Icons.event_available),
+              label: Text(_endDate == null ? '结束日期' : _formatDate(_endDate!)),
+            ),
+            const SizedBox(width: 12),
+            FilledButton.icon(
+              onPressed: _loading ? null : () => _loadItems(page: 1),
+              icon: const Icon(Icons.search),
+              label: const Text('查询'),
+            ),
+            const SizedBox(width: 12),
+            TextButton(
+              onPressed: _loading
+                  ? null
+                  : () {
+                      setState(() {
+                        _startDate = null;
+                        _endDate = null;
+                        _executorIdFilter = null;
+                        _equipmentIdFilter = null;
+                        _resultSummaryFilter = null;
+                      });
+                      _loadItems(page: 1);
+                    },
+              child: const Text('清空筛选'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            SizedBox(
+              width: 160,
+              child: DropdownButtonFormField<String?>(
+                initialValue: _resultSummaryFilter,
+                items: const [
+                  DropdownMenuItem<String?>(value: null, child: Text('全部结果')),
+                  DropdownMenuItem<String?>(value: '完成', child: Text('完成')),
+                  DropdownMenuItem<String?>(value: '失败', child: Text('失败')),
+                ],
+                onChanged: (value) {
+                  setState(() => _resultSummaryFilter = value);
+                },
+                decoration: const InputDecoration(
+                  labelText: '结果',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ),
+            if (_equipmentList.isNotEmpty) ...[
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 200,
+                child: DropdownButtonFormField<int?>(
+                  initialValue: _equipmentIdFilter,
+                  items: [
+                    const DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text('全部设备'),
+                    ),
+                    ..._equipmentList.map(
+                      (e) => DropdownMenuItem<int?>(
+                        value: e.id,
+                        child: Text(e.name),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setState(() => _equipmentIdFilter = value);
                   },
                   decoration: const InputDecoration(
-                    labelText: '结果',
+                    labelText: '设备',
                     border: OutlineInputBorder(),
                     isDense: true,
                   ),
                 ),
               ),
-              if (_equipmentList.isNotEmpty) ...[
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 200,
-                  child: DropdownButtonFormField<int?>(
-                    initialValue: _equipmentIdFilter,
-                    items: [
-                      const DropdownMenuItem<int?>(
-                        value: null,
-                        child: Text('全部设备'),
-                      ),
-                      ..._equipmentList.map(
-                        (e) => DropdownMenuItem<int?>(
-                          value: e.id,
-                          child: Text(e.name),
-                        ),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      setState(() => _equipmentIdFilter = value);
-                    },
-                    decoration: const InputDecoration(
-                      labelText: '设备',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
+            ],
+          ],
+        ),
+      ],
+    );
+
+    return MesCrudPageScaffold(
+      header: CrudPageHeader(
+        title: '保养记录',
+        onRefresh: _loading ? null : () => _loadItems(page: _page),
+      ),
+      filters: filtersToolbar,
+      banner: _message.isEmpty
+          ? null
+          : Text(
+              _message,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.error,
+              ),
+            ),
+      content: CrudListTableSection(
+        loading: _loading,
+        isEmpty: _items.isEmpty,
+        emptyText: '暂无保养记录',
+        enableUnifiedHeaderStyle: true,
+        child: DataTable(
+          columns: const [
+            DataColumn(label: Text('记录编号')),
+            DataColumn(label: Text('工单编号')),
+            DataColumn(label: Text('设备')),
+            DataColumn(label: Text('项目')),
+            DataColumn(label: Text('到期日期')),
+            DataColumn(label: Text('执行人')),
+            DataColumn(label: Text('完成时间')),
+            DataColumn(label: Text('结果摘要')),
+            DataColumn(label: Text('备注')),
+            DataColumn(label: Text('附件')),
+            DataColumn(label: Text('操作')),
+          ],
+          rows: _items.map((item) {
+            return DataRow(
+              cells: [
+                DataCell(Text('#${item.id}')),
+                DataCell(Text('#${item.workOrderId}')),
+                DataCell(Text(item.equipmentName)),
+                DataCell(Text(item.itemName)),
+                DataCell(Text(_formatDate(item.dueDate))),
+                DataCell(Text(item.executorUsername ?? '-')),
+                DataCell(Text(_formatDateTime(item.completedAt))),
+                DataCell(Text(item.resultSummary)),
+                DataCell(Text(item.resultRemark ?? '-')),
+                DataCell(
+                  MaintenanceAttachmentAction(
+                    attachmentLink: item.attachmentLink,
+                    attachmentName: item.attachmentName,
+                    onOpen: widget.onOpenAttachment,
+                    showAttachmentName: false,
+                  ),
+                ),
+                DataCell(
+                  TextButton(
+                    onPressed: () => _showDetail(item),
+                    child: const Text('详情'),
                   ),
                 ),
               ],
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text('总数：$_total', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 12),
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                _message,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            ),
-          Expanded(
-            child: CrudListTableSection(
-              loading: _loading,
-              isEmpty: _items.isEmpty,
-              emptyText: '暂无保养记录',
-              enableUnifiedHeaderStyle: true,
-              child: DataTable(
-                columns: const [
-                  DataColumn(label: Text('记录编号')),
-                  DataColumn(label: Text('工单编号')),
-                  DataColumn(label: Text('设备')),
-                  DataColumn(label: Text('项目')),
-                  DataColumn(label: Text('到期日期')),
-                  DataColumn(label: Text('执行人')),
-                  DataColumn(label: Text('完成时间')),
-                  DataColumn(label: Text('结果摘要')),
-                  DataColumn(label: Text('备注')),
-                  DataColumn(label: Text('附件')),
-                  DataColumn(label: Text('操作')),
-                ],
-                rows: _items.map((item) {
-                  return DataRow(
-                    cells: [
-                      DataCell(Text('#${item.id}')),
-                      DataCell(Text('#${item.workOrderId}')),
-                      DataCell(Text(item.equipmentName)),
-                      DataCell(Text(item.itemName)),
-                      DataCell(Text(_formatDate(item.dueDate))),
-                      DataCell(Text(item.executorUsername ?? '-')),
-                      DataCell(Text(_formatDateTime(item.completedAt))),
-                      DataCell(Text(item.resultSummary)),
-                      DataCell(Text(item.resultRemark ?? '-')),
-                      DataCell(
-                        MaintenanceAttachmentAction(
-                          attachmentLink: item.attachmentLink,
-                          attachmentName: item.attachmentName,
-                          onOpen: widget.onOpenAttachment,
-                          showAttachmentName: false,
-                        ),
-                      ),
-                      DataCell(
-                        TextButton(
-                          onPressed: () => _showDetail(item),
-                          child: const Text('详情'),
-                        ),
-                      ),
-                    ],
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          MesPaginationBar(
-            page: _page,
-            totalPages: _totalPages,
-            total: _total,
-            loading: _loading,
-            onPrevious: () => _loadItems(page: _page - 1),
-            onNext: () => _loadItems(page: _page + 1),
-          ),
-        ],
+            );
+          }).toList(),
+        ),
+      ),
+      pagination: MesPaginationBar(
+        page: _page,
+        totalPages: _totalPages,
+        total: _total,
+        loading: _loading,
+        onPrevious: () => _loadItems(page: _page - 1),
+        onNext: () => _loadItems(page: _page + 1),
       ),
     );
   }
