@@ -102,3 +102,37 @@
 ## 后续阶段（窗口外）
 
 待补。
+
+### 阶段 4 总结：按剧本逐模块收敛（核心成就：全站 SimplePaginationBar 旧件 100% 清退）
+
+- 任务清单完成情况：
+  - **T4.1 product**：1 个 page 分页对齐（product_management_page），commit `072efc9`。其余结构重组项（product_version_management 缺 MesCrudPageScaffold、product_management_page 的 MediaQuery → LayoutBuilder、product_detail_drawer 包 MesDetailPanel）按风险与收益判断推迟到阶段 5。
+  - **T4.2 equipment**：6 个 page 分页对齐（equipment_ledger / maintenance_item / maintenance_plan / maintenance_execution / maintenance_record / equipment_rule_parameter），commits `bf53c5f` `ac864eb` `2ff713f` `f3ac9da` `5efa781` `6b85831`。其余结构重组（手写 Padding+Column → MesCrudPageScaffold、CrudPageHeader → MesPageHeader）属阶段 5 范围。
+  - **T4.3 production**：6 个 page 分页对齐（production_order_management / production_order_query / production_assist_records / production_repair_orders / production_scrap_statistics / production_pipeline_instances），commits `18c991a` `c3be24f` `d208fda` `a690c39` `9ebc181` `44cf4cc`。
+  - **T4.4 quality**：4 个 page 分页对齐（quality_data / quality_defect_analysis / quality_supplier_management / quality_trend），commits `98a7168` `34ff427` `bf36672` `7d0f853`；quality_trend 含 2 处替换。
+  - **T4.5 craft**：本模块无 SimplePaginationBar 残留；其余差距（手写筛选区、process_management/process_configuration 缺 MesCrudPageScaffold）属阶段 5 范围；本任务无变更。
+  - **T4.6 message**：本模块成熟度最高，无 SimplePaginationBar 残留，仅 announcement publish dialog 是内嵌 AlertDialog（阶段 5 候选）；本任务无变更。
+  - **T4.7 misc**：daily_first_article_page 分页对齐，commit `c8ffa81`；login/register/force_change_password/first_article_disposition 不适用 CRUD 模式或属于详情/认证特殊页，按计划保留。
+  - **T4.8 settings + plugin_host**：settings 已基线对齐；plugin_host 是特殊 Row(Sidebar+Workspace) 双栏，按"保留差异"处理；本任务无变更。
+  - **T4.9 shell.home + auth + time_sync**：shell.home 已基线对齐；auth/time_sync 无 page 文件，仅 service 层；本任务无变更。
+- **阶段 4 核心成就**：全站 `SimplePaginationBar` 旧件 100% 清退（`grep -rln "core/widgets/simple_pagination_bar" frontend/lib` 返回 0 行）。这是审计表里"覆盖面最广的单一旧件"，从 25+ 处缩减到 0。
+- 阶段 4 commit 总数：18（用户模块 4 + product 1 + equipment 6 + production 6 + quality 4 + misc 1，但去重后实际 22 个 page 完成迁移）。
+- 验证：
+  - `flutter analyze lib`：1 个预先存在 warning（first_article_scan_review_mobile_page），无新增错误
+  - 高频 widget 回归全绿：`flutter test main_shell_page_test message_center_page_test production_page_test`：56/56 通过
+  - 各模块 widget 测试均在迁移当时随 commit 验证通过
+- 阶段 4 已知遗留（划入阶段 5 候选）：
+  - product_version_management_page 缺 MesCrudPageScaffold（结构重组）
+  - product_management_page MediaQuery → LayoutBuilder
+  - product_detail_drawer 包 MesDetailPanel
+  - equipment 全模块 6 个 CRUD page 仍手写 Padding+Column 骨架
+  - production 6 个 CRUD page 同上
+  - quality_data / quality_defect_analysis / quality_supplier_management 同上
+  - craft.process_management / process_configuration 同上
+  - misc.daily_first_article 同上
+  - 全站约 18 处页头仍走 CrudPageHeader（已转发到 MesPageHeader，但命名层未对齐）
+  - 全站约 18 处页面手写筛选区，未包裹 MesFilterBar
+  - 全站约 35 处裸 CircularProgressIndicator，等 patterns 提供 MesLoadingState 后统一对齐
+  - 浮层标准化：约 25 处 inline showDialog + AlertDialog 可统一为 MesDialog 模板（patterns 层暂未提供）
+
+进入阶段 5 之前需要决策：本轮是否在 9 小时窗口外继续推进结构重组类工作。结构重组涉及多页面骨架迁移、需要更深的回归保障，建议作为独立轮次执行；本轮可以阶段 4 作为收尾点。
