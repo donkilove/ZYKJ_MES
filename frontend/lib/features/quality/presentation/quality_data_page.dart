@@ -10,6 +10,7 @@ import 'package:mes_client/features/quality/services/quality_service.dart';
 import 'package:mes_client/core/widgets/adaptive_table_container.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 
 class QualityDataPage extends StatefulWidget {
@@ -455,368 +456,357 @@ class _QualityDataPageState extends State<QualityDataPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: DefaultTabController(
-        length: 3,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return DefaultTabController(
+      length: 3,
+      child: MesCrudPageScaffold(
+        header: Row(
           children: [
+            Expanded(
+              child: CrudPageHeader(
+                title: '品质数据',
+                onRefresh: _loading ? null : _loadStats,
+              ),
+            ),
+            if (widget.canExport)
+              Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: OutlinedButton.icon(
+                  onPressed: (_loading || _exporting) ? null : _exportCsv,
+                  icon: const Icon(Icons.download),
+                  label: const Text('导出'),
+                ),
+              ),
+          ],
+        ),
+        banner: _message.isEmpty
+            ? null
+            : Text(
+                _message,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+              ),
+        content: ListView(
+          children: [
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _loading
+                      ? null
+                      : () => _pickDate(
+                          current: _startDate,
+                          helpText: '选择开始日期',
+                          onChanged: (value) {
+                            setState(() {
+                              _startDate = value;
+                            });
+                          },
+                        ),
+                  icon: const Icon(Icons.event),
+                  label: Text('开始：${_formatDate(_startDate)}'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _loading
+                      ? null
+                      : () => _pickDate(
+                          current: _endDate,
+                          helpText: '选择结束日期',
+                          onChanged: (value) {
+                            setState(() {
+                              _endDate = value;
+                            });
+                          },
+                        ),
+                  icon: const Icon(Icons.event_available),
+                  label: Text('结束：${_formatDate(_endDate)}'),
+                ),
+                FilledButton.icon(
+                  onPressed: _loading ? null : _loadStats,
+                  icon: const Icon(Icons.search),
+                  label: const Text('查询'),
+                ),
+                DropdownButton<String?>(
+                  value: _resultFilter,
+                  hint: const Text('全部结果'),
+                  items: const [
+                    DropdownMenuItem(value: null, child: Text('全部结果')),
+                    DropdownMenuItem(value: 'passed', child: Text('合格')),
+                    DropdownMenuItem(value: 'failed', child: Text('不合格')),
+                  ],
+                  onChanged: _loading
+                      ? null
+                      : (v) => setState(() => _resultFilter = v),
+                ),
+                Text(
+                  '时间范围默认最近30天（含当天）',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
-                  child: CrudPageHeader(
-                    title: '品质数据',
-                    onRefresh: _loading ? null : _loadStats,
+                  child: TextField(
+                    controller: _productNameController,
+                    decoration: const InputDecoration(
+                      labelText: '产品名称',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    onSubmitted: (_) => _loadStats(),
                   ),
                 ),
-                if (widget.canExport)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: OutlinedButton.icon(
-                      onPressed: (_loading || _exporting) ? null : _exportCsv,
-                      icon: const Icon(Icons.download),
-                      label: const Text('导出'),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _processCodeController,
+                    decoration: const InputDecoration(
+                      labelText: '工序编码',
+                      border: OutlineInputBorder(),
+                      isDense: true,
                     ),
+                    onSubmitted: (_) => _loadStats(),
                   ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _operatorUsernameController,
+                    decoration: const InputDecoration(
+                      labelText: '操作员',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    onSubmitted: (_) => _loadStats(),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 12),
-            Expanded(
-              child: ListView(
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                _buildOverviewCard(
+                  title: '首件总数',
+                  value: '${_overview.firstArticleTotal}',
+                  theme: theme,
+                ),
+                _buildOverviewCard(
+                  title: '通过数',
+                  value: '${_overview.passedTotal}',
+                  theme: theme,
+                ),
+                _buildOverviewCard(
+                  title: '不通过数',
+                  value: '${_overview.failedTotal}',
+                  theme: theme,
+                ),
+                _buildOverviewCard(
+                  title: '通过率',
+                  value: _formatRate(_overview.passRatePercent),
+                  theme: theme,
+                ),
+                _buildOverviewCard(
+                  title: '不良总数',
+                  value: '${_overview.defectTotal}',
+                  theme: theme,
+                ),
+                _buildOverviewCard(
+                  title: '报废总数',
+                  value: '${_overview.scrapTotal}',
+                  theme: theme,
+                ),
+                _buildOverviewCard(
+                  title: '维修总数',
+                  value: '${_overview.repairTotal}',
+                  theme: theme,
+                ),
+                _buildOverviewCard(
+                  title: '覆盖订单数',
+                  value: '${_overview.coveredOrderCount}',
+                  theme: theme,
+                ),
+                _buildOverviewCard(
+                  title: '覆盖工序数',
+                  value: '${_overview.coveredProcessCount}',
+                  theme: theme,
+                ),
+                _buildOverviewCard(
+                  title: '覆盖人员数',
+                  value: '${_overview.coveredOperatorCount}',
+                  theme: theme,
+                ),
+                _buildOverviewCard(
+                  title: '最近首件时间',
+                  value: _formatDateTime(_overview.latestFirstArticleAt),
+                  theme: theme,
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text('趋势分析', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            _buildTrendSection(),
+            const SizedBox(height: 12),
+            const TabBar(
+              tabs: [
+                Tab(text: '按工序'),
+                Tab(text: '按人员'),
+                Tab(text: '按产品'),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 420,
+              child: TabBarView(
                 children: [
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 8,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed: _loading
-                            ? null
-                            : () => _pickDate(
-                                current: _startDate,
-                                helpText: '选择开始日期',
-                                onChanged: (value) {
-                                  setState(() {
-                                    _startDate = value;
-                                  });
-                                },
-                              ),
-                        icon: const Icon(Icons.event),
-                        label: Text('开始：${_formatDate(_startDate)}'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: _loading
-                            ? null
-                            : () => _pickDate(
-                                current: _endDate,
-                                helpText: '选择结束日期',
-                                onChanged: (value) {
-                                  setState(() {
-                                    _endDate = value;
-                                  });
-                                },
-                              ),
-                        icon: const Icon(Icons.event_available),
-                        label: Text('结束：${_formatDate(_endDate)}'),
-                      ),
-                      FilledButton.icon(
-                        onPressed: _loading ? null : _loadStats,
-                        icon: const Icon(Icons.search),
-                        label: const Text('查询'),
-                      ),
-                      DropdownButton<String?>(
-                        value: _resultFilter,
-                        hint: const Text('全部结果'),
-                        items: const [
-                          DropdownMenuItem(value: null, child: Text('全部结果')),
-                          DropdownMenuItem(value: 'passed', child: Text('合格')),
-                          DropdownMenuItem(value: 'failed', child: Text('不合格')),
-                        ],
-                        onChanged: _loading
-                            ? null
-                            : (v) => setState(() => _resultFilter = v),
-                      ),
-                      Text(
-                        '时间范围默认最近30天（含当天）',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _productNameController,
-                          decoration: const InputDecoration(
-                            labelText: '产品名称',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          onSubmitted: (_) => _loadStats(),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: _processCodeController,
-                          decoration: const InputDecoration(
-                            labelText: '工序编码',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          onSubmitted: (_) => _loadStats(),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: _operatorUsernameController,
-                          decoration: const InputDecoration(
-                            labelText: '操作员',
-                            border: OutlineInputBorder(),
-                            isDense: true,
-                          ),
-                          onSubmitted: (_) => _loadStats(),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      _buildOverviewCard(
-                        title: '首件总数',
-                        value: '${_overview.firstArticleTotal}',
-                        theme: theme,
-                      ),
-                      _buildOverviewCard(
-                        title: '通过数',
-                        value: '${_overview.passedTotal}',
-                        theme: theme,
-                      ),
-                      _buildOverviewCard(
-                        title: '不通过数',
-                        value: '${_overview.failedTotal}',
-                        theme: theme,
-                      ),
-                      _buildOverviewCard(
-                        title: '通过率',
-                        value: _formatRate(_overview.passRatePercent),
-                        theme: theme,
-                      ),
-                      _buildOverviewCard(
-                        title: '不良总数',
-                        value: '${_overview.defectTotal}',
-                        theme: theme,
-                      ),
-                      _buildOverviewCard(
-                        title: '报废总数',
-                        value: '${_overview.scrapTotal}',
-                        theme: theme,
-                      ),
-                      _buildOverviewCard(
-                        title: '维修总数',
-                        value: '${_overview.repairTotal}',
-                        theme: theme,
-                      ),
-                      _buildOverviewCard(
-                        title: '覆盖订单数',
-                        value: '${_overview.coveredOrderCount}',
-                        theme: theme,
-                      ),
-                      _buildOverviewCard(
-                        title: '覆盖工序数',
-                        value: '${_overview.coveredProcessCount}',
-                        theme: theme,
-                      ),
-                      _buildOverviewCard(
-                        title: '覆盖人员数',
-                        value: '${_overview.coveredOperatorCount}',
-                        theme: theme,
-                      ),
-                      _buildOverviewCard(
-                        title: '最近首件时间',
-                        value: _formatDateTime(_overview.latestFirstArticleAt),
-                        theme: theme,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  if (_message.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Text(
-                        _message,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: theme.colorScheme.error,
-                        ),
-                      ),
+                  _buildPaginatedTableSection(
+                    cardKey: const ValueKey(
+                      'qualityDataProcessTableCard',
                     ),
-                  Text('趋势分析', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 8),
-                  _buildTrendSection(),
-                  const SizedBox(height: 12),
-                  const TabBar(
-                    tabs: [
-                      Tab(text: '按工序'),
-                      Tab(text: '按人员'),
-                      Tab(text: '按产品'),
+                    columns: const [
+                      DataColumn(label: Text('工序编码')),
+                      DataColumn(label: Text('工序名称')),
+                      DataColumn(label: Text('首件总数')),
+                      DataColumn(label: Text('通过数')),
+                      DataColumn(label: Text('不通过数')),
+                      DataColumn(label: Text('通过率')),
+                      DataColumn(label: Text('不良数')),
+                      DataColumn(label: Text('报废数')),
+                      DataColumn(label: Text('维修数')),
+                      DataColumn(label: Text('最近首件时间')),
                     ],
+                    rows: _slicePage(_processItems, _processPage)
+                        .map(
+                          (item) => DataRow(
+                            cells: [
+                              DataCell(Text(item.processCode)),
+                              DataCell(Text(item.processName)),
+                              DataCell(Text('${item.firstArticleTotal}')),
+                              DataCell(Text('${item.passedTotal}')),
+                              DataCell(Text('${item.failedTotal}')),
+                              DataCell(
+                                Text(_formatRate(item.passRatePercent)),
+                              ),
+                              DataCell(Text('${item.defectTotal}')),
+                              DataCell(Text('${item.scrapTotal}')),
+                              DataCell(Text('${item.repairTotal}')),
+                              DataCell(
+                                Text(
+                                  _formatDateTime(
+                                    item.latestFirstArticleAt,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                        .toList(),
+                    page: _processPage,
+                    total: _processItems.length,
+                    onPageChanged: (page) {
+                      setState(() {
+                        _processPage = page;
+                      });
+                    },
+                    emptyText: '暂无工序品质数据',
                   ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    height: 420,
-                    child: TabBarView(
-                      children: [
-                        _buildPaginatedTableSection(
-                          cardKey: const ValueKey(
-                            'qualityDataProcessTableCard',
-                          ),
-                          columns: const [
-                            DataColumn(label: Text('工序编码')),
-                            DataColumn(label: Text('工序名称')),
-                            DataColumn(label: Text('首件总数')),
-                            DataColumn(label: Text('通过数')),
-                            DataColumn(label: Text('不通过数')),
-                            DataColumn(label: Text('通过率')),
-                            DataColumn(label: Text('不良数')),
-                            DataColumn(label: Text('报废数')),
-                            DataColumn(label: Text('维修数')),
-                            DataColumn(label: Text('最近首件时间')),
-                          ],
-                          rows: _slicePage(_processItems, _processPage)
-                              .map(
-                                (item) => DataRow(
-                                  cells: [
-                                    DataCell(Text(item.processCode)),
-                                    DataCell(Text(item.processName)),
-                                    DataCell(Text('${item.firstArticleTotal}')),
-                                    DataCell(Text('${item.passedTotal}')),
-                                    DataCell(Text('${item.failedTotal}')),
-                                    DataCell(
-                                      Text(_formatRate(item.passRatePercent)),
-                                    ),
-                                    DataCell(Text('${item.defectTotal}')),
-                                    DataCell(Text('${item.scrapTotal}')),
-                                    DataCell(Text('${item.repairTotal}')),
-                                    DataCell(
-                                      Text(
-                                        _formatDateTime(
-                                          item.latestFirstArticleAt,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                              .toList(),
-                          page: _processPage,
-                          total: _processItems.length,
-                          onPageChanged: (page) {
-                            setState(() {
-                              _processPage = page;
-                            });
-                          },
-                          emptyText: '暂无工序品质数据',
-                        ),
-                        _buildPaginatedTableSection(
-                          cardKey: const ValueKey(
-                            'qualityDataOperatorTableCard',
-                          ),
-                          columns: const [
-                            DataColumn(label: Text('操作员')),
-                            DataColumn(label: Text('首件总数')),
-                            DataColumn(label: Text('通过数')),
-                            DataColumn(label: Text('不通过数')),
-                            DataColumn(label: Text('通过率')),
-                            DataColumn(label: Text('不良数')),
-                            DataColumn(label: Text('报废数')),
-                            DataColumn(label: Text('维修数')),
-                            DataColumn(label: Text('最近首件时间')),
-                          ],
-                          rows: _slicePage(_operatorItems, _operatorPage)
-                              .map(
-                                (item) => DataRow(
-                                  cells: [
-                                    DataCell(Text(item.operatorUsername)),
-                                    DataCell(Text('${item.firstArticleTotal}')),
-                                    DataCell(Text('${item.passedTotal}')),
-                                    DataCell(Text('${item.failedTotal}')),
-                                    DataCell(
-                                      Text(_formatRate(item.passRatePercent)),
-                                    ),
-                                    DataCell(Text('${item.defectTotal}')),
-                                    DataCell(Text('${item.scrapTotal}')),
-                                    DataCell(Text('${item.repairTotal}')),
-                                    DataCell(
-                                      Text(
-                                        _formatDateTime(
-                                          item.latestFirstArticleAt,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                              .toList(),
-                          page: _operatorPage,
-                          total: _operatorItems.length,
-                          onPageChanged: (page) {
-                            setState(() {
-                              _operatorPage = page;
-                            });
-                          },
-                          emptyText: '暂无人员品质数据',
-                        ),
-                        _buildPaginatedTableSection(
-                          cardKey: const ValueKey(
-                            'qualityDataProductTableCard',
-                          ),
-                          columns: const [
-                            DataColumn(label: Text('产品编码')),
-                            DataColumn(label: Text('产品名称')),
-                            DataColumn(label: Text('首件总数')),
-                            DataColumn(label: Text('通过数')),
-                            DataColumn(label: Text('不通过数')),
-                            DataColumn(label: Text('通过率')),
-                            DataColumn(label: Text('不良数')),
-                            DataColumn(label: Text('报废数')),
-                            DataColumn(label: Text('维修数')),
-                          ],
-                          rows: _slicePage(_productItems, _productPage)
-                              .map(
-                                (item) => DataRow(
-                                  cells: [
-                                    DataCell(Text(item.productCode)),
-                                    DataCell(Text(item.productName)),
-                                    DataCell(Text('${item.firstArticleTotal}')),
-                                    DataCell(Text('${item.passedTotal}')),
-                                    DataCell(Text('${item.failedTotal}')),
-                                    DataCell(
-                                      Text(_formatRate(item.passRatePercent)),
-                                    ),
-                                    DataCell(Text('${item.defectTotal}')),
-                                    DataCell(Text('${item.scrapTotal}')),
-                                    DataCell(Text('${item.repairTotal}')),
-                                  ],
-                                ),
-                              )
-                              .toList(),
-                          page: _productPage,
-                          total: _productItems.length,
-                          onPageChanged: (page) {
-                            setState(() {
-                              _productPage = page;
-                            });
-                          },
-                          emptyText: '暂无产品品质数据',
-                        ),
-                      ],
+                  _buildPaginatedTableSection(
+                    cardKey: const ValueKey(
+                      'qualityDataOperatorTableCard',
                     ),
+                    columns: const [
+                      DataColumn(label: Text('操作员')),
+                      DataColumn(label: Text('首件总数')),
+                      DataColumn(label: Text('通过数')),
+                      DataColumn(label: Text('不通过数')),
+                      DataColumn(label: Text('通过率')),
+                      DataColumn(label: Text('不良数')),
+                      DataColumn(label: Text('报废数')),
+                      DataColumn(label: Text('维修数')),
+                      DataColumn(label: Text('最近首件时间')),
+                    ],
+                    rows: _slicePage(_operatorItems, _operatorPage)
+                        .map(
+                          (item) => DataRow(
+                            cells: [
+                              DataCell(Text(item.operatorUsername)),
+                              DataCell(Text('${item.firstArticleTotal}')),
+                              DataCell(Text('${item.passedTotal}')),
+                              DataCell(Text('${item.failedTotal}')),
+                              DataCell(
+                                Text(_formatRate(item.passRatePercent)),
+                              ),
+                              DataCell(Text('${item.defectTotal}')),
+                              DataCell(Text('${item.scrapTotal}')),
+                              DataCell(Text('${item.repairTotal}')),
+                              DataCell(
+                                Text(
+                                  _formatDateTime(
+                                    item.latestFirstArticleAt,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                        .toList(),
+                    page: _operatorPage,
+                    total: _operatorItems.length,
+                    onPageChanged: (page) {
+                      setState(() {
+                        _operatorPage = page;
+                      });
+                    },
+                    emptyText: '暂无人员品质数据',
+                  ),
+                  _buildPaginatedTableSection(
+                    cardKey: const ValueKey(
+                      'qualityDataProductTableCard',
+                    ),
+                    columns: const [
+                      DataColumn(label: Text('产品编码')),
+                      DataColumn(label: Text('产品名称')),
+                      DataColumn(label: Text('首件总数')),
+                      DataColumn(label: Text('通过数')),
+                      DataColumn(label: Text('不通过数')),
+                      DataColumn(label: Text('通过率')),
+                      DataColumn(label: Text('不良数')),
+                      DataColumn(label: Text('报废数')),
+                      DataColumn(label: Text('维修数')),
+                    ],
+                    rows: _slicePage(_productItems, _productPage)
+                        .map(
+                          (item) => DataRow(
+                            cells: [
+                              DataCell(Text(item.productCode)),
+                              DataCell(Text(item.productName)),
+                              DataCell(Text('${item.firstArticleTotal}')),
+                              DataCell(Text('${item.passedTotal}')),
+                              DataCell(Text('${item.failedTotal}')),
+                              DataCell(
+                                Text(_formatRate(item.passRatePercent)),
+                              ),
+                              DataCell(Text('${item.defectTotal}')),
+                              DataCell(Text('${item.scrapTotal}')),
+                              DataCell(Text('${item.repairTotal}')),
+                            ],
+                          ),
+                        )
+                        .toList(),
+                    page: _productPage,
+                    total: _productItems.length,
+                    onPageChanged: (page) {
+                      setState(() {
+                        _productPage = page;
+                      });
+                    },
+                    emptyText: '暂无产品品质数据',
                   ),
                 ],
               ),
