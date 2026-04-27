@@ -6,7 +6,7 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
-import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/production_order_detail_page.dart';
@@ -552,7 +552,7 @@ class _ProductionPipelineInstancesPageState
   }
 
   Widget _buildPagination() {
-    return SimplePaginationBar(
+    return MesPaginationBar(
       page: _page,
       totalPages: _totalPages,
       total: _total,
