@@ -10,7 +10,7 @@ import 'package:mes_client/features/quality/services/quality_service.dart';
 import 'package:mes_client/core/widgets/adaptive_table_container.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
-import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 
 class QualityDataPage extends StatefulWidget {
   const QualityDataPage({
@@ -394,7 +394,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
           ),
         ),
         const SizedBox(height: 12),
-        SimplePaginationBar(
+        MesPaginationBar(
           page: page,
           totalPages: totalPages,
           total: total,
