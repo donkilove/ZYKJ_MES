@@ -9,7 +9,7 @@ import 'package:mes_client/core/services/export_file_service.dart';
 import 'package:mes_client/features/quality/services/quality_service.dart';
 import 'package:mes_client/core/widgets/adaptive_table_container.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
-import 'package:mes_client/core/widgets/crud_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 
@@ -462,7 +462,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
         header: Row(
           children: [
             Expanded(
-              child: CrudPageHeader(
+              child: MesRefreshPageHeader(
                 title: '品质数据',
                 onRefresh: _loading ? null : _loadStats,
               ),

@@ -5,7 +5,7 @@ import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/production_pipeline_instances_page.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
-import 'package:mes_client/core/widgets/crud_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 
 class _FakeProductionPipelineInstancesService extends ProductionService {
   _FakeProductionPipelineInstancesService()
@@ -134,7 +134,7 @@ void main() {
     expect(find.widgetWithText(TextField, '工序'), findsOneWidget);
     expect(find.widgetWithText(TextField, '子订单ID'), findsOneWidget);
     expect(find.widgetWithText(TextField, '实例编号'), findsOneWidget);
-    expect(find.byType(CrudPageHeader), findsOneWidget);
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(find.byType(CrudListTableSection), findsOneWidget);
     expect(find.text('121'), findsWidgets);
     expect(find.text('切割 (CUT-01)'), findsNWidgets(2));

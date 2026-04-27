@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mes_client/core/widgets/crud_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 
 void main() {
   testWidgets('公共页头渲染标题和刷新按钮', (tester) async {
@@ -9,7 +9,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: CrudPageHeader(
+          body: MesRefreshPageHeader(
             title: '测试页',
             onRefresh: () {
               refreshCalls += 1;

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
 
-class CrudPageHeader extends StatelessWidget {
-  const CrudPageHeader({super.key, required this.title, this.onRefresh});
+/// 带刷新按钮的页面头部。语义化 `MesPageHeader` 的常见模式：
+/// 标题 + 右侧 40x40 的圆形刷新动作按钮。
+class MesRefreshPageHeader extends StatelessWidget {
+  const MesRefreshPageHeader({super.key, required this.title, this.onRefresh});
 
   final String title;
   final VoidCallback? onRefresh;

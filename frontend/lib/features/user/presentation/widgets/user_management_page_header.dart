@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mes_client/core/widgets/crud_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 
 class UserManagementPageHeader extends StatelessWidget {
   const UserManagementPageHeader({
@@ -13,6 +13,6 @@ class UserManagementPageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CrudPageHeader(title: '用户管理', onRefresh: loading ? null : onRefresh);
+    return MesRefreshPageHeader(title: '用户管理', onRefresh: loading ? null : onRefresh);
   }
 }

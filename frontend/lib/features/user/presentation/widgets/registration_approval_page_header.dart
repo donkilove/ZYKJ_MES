@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mes_client/core/widgets/crud_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 
 class RegistrationApprovalPageHeader extends StatelessWidget {
   const RegistrationApprovalPageHeader({
@@ -13,6 +13,6 @@ class RegistrationApprovalPageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CrudPageHeader(title: '注册审批', onRefresh: loading ? null : onRefresh);
+    return MesRefreshPageHeader(title: '注册审批', onRefresh: loading ? null : onRefresh);
   }
 }

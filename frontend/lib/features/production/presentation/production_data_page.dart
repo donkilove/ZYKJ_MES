@@ -7,7 +7,7 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
-import 'package:mes_client/core/widgets/crud_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
@@ -643,7 +643,7 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
   @override
   Widget build(BuildContext context) {
     return MesCrudPageScaffold(
-      header: CrudPageHeader(
+      header: MesRefreshPageHeader(
         title: _pageTitle,
         onRefresh: _anyLoading ? null : _reloadAll,
       ),

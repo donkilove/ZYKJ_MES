@@ -7,7 +7,7 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
-import 'package:mes_client/core/widgets/crud_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
@@ -850,7 +850,7 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
     );
 
     return MesCrudPageScaffold(
-      header: CrudPageHeader(
+      header: MesRefreshPageHeader(
         title: '保养计划',
         onRefresh: _loading
             ? null

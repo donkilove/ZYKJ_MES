@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/widgets/adaptive_table_container.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 
@@ -37,7 +38,7 @@ class CrudListTableSection extends StatelessWidget {
     final Widget body;
 
     if (loading) {
-      body = loadingWidget ?? const Center(child: CircularProgressIndicator());
+      body = loadingWidget ?? const MesLoadingState();
     } else if (isEmpty) {
       body = emptyWidget ?? MesEmptyState(title: emptyText);
     } else {

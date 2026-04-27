@@ -5,7 +5,7 @@ import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/production_data_page.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
-import 'package:mes_client/core/widgets/crud_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 
 class _FakeProductionService extends ProductionService {
   _FakeProductionService() : super(AppSession(baseUrl: '', accessToken: ''));
@@ -110,7 +110,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('工序统计'), findsOneWidget);
-    expect(find.byType(CrudPageHeader), findsOneWidget);
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(find.text('待生产'), findsWidgets);
     expect(find.text('生产中'), findsWidgets);
     expect(find.text('生产完成'), findsWidgets);

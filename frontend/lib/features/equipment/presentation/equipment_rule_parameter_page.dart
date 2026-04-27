@@ -5,7 +5,7 @@ import 'package:mes_client/features/equipment/models/equipment_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
-import 'package:mes_client/core/widgets/crud_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
@@ -168,7 +168,7 @@ class _EquipmentRuleParameterPageState extends State<EquipmentRuleParameterPage>
       return const Center(child: Text('当前账号没有可访问的规则/参数页面。'));
     }
     return MesCrudPageScaffold(
-      header: CrudPageHeader(title: '规则与参数', onRefresh: _refreshCurrentTab),
+      header: MesRefreshPageHeader(title: '规则与参数', onRefresh: _refreshCurrentTab),
       filters: Material(
         color: Theme.of(context).colorScheme.surface,
         child: TabBar(controller: _innerTabController, tabs: tabs),
