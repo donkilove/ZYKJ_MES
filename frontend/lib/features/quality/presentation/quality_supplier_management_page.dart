@@ -6,6 +6,7 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/quality/presentation/widgets/quality_supplier_management_page_header.dart';
 import 'package:mes_client/features/quality/services/quality_supplier_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 
@@ -280,107 +281,92 @@ class _QualitySupplierManagementPageState
     }
   }
 
-  Widget _buildToolbar() {
-    return Row(
-      children: [
-        Expanded(
-          child: QualitySupplierManagementPageHeader(
-            total: _total,
-            loading: _loading,
-            onRefresh: _loadSuppliers,
-            onCreate: () => _showEditDialog(),
-          ),
-        ),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    return MesCrudPageScaffold(
+      header: Row(
         children: [
-          _buildToolbar(),
-          if (_message.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
+          Expanded(
+            child: QualitySupplierManagementPageHeader(
+              total: _total,
+              loading: _loading,
+              onRefresh: _loadSuppliers,
+              onCreate: () => _showEditDialog(),
+            ),
+          ),
+        ],
+      ),
+      banner: _message.isEmpty
+          ? null
+          : Text(
               _message,
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
+      content: CrudListTableSection(
+        cardKey: const ValueKey('qualitySupplierListCard'),
+        loading: _loading,
+        isEmpty: _pagedItems.isEmpty,
+        emptyText: '暂无供应商数据',
+        enableUnifiedHeaderStyle: true,
+        child: DataTable(
+          columns: const [
+            DataColumn(label: Text('名称')),
+            DataColumn(label: Text('备注')),
+            DataColumn(label: Text('启用状态')),
+            DataColumn(label: Text('更新时间')),
+            DataColumn(label: Text('操作')),
           ],
-          const SizedBox(height: 16),
-          Expanded(
-            child: CrudListTableSection(
-              cardKey: const ValueKey('qualitySupplierListCard'),
-              loading: _loading,
-              isEmpty: _pagedItems.isEmpty,
-              emptyText: '暂无供应商数据',
-              enableUnifiedHeaderStyle: true,
-              child: DataTable(
-                columns: const [
-                  DataColumn(label: Text('名称')),
-                  DataColumn(label: Text('备注')),
-                  DataColumn(label: Text('启用状态')),
-                  DataColumn(label: Text('更新时间')),
-                  DataColumn(label: Text('操作')),
-                ],
-                rows: _pagedItems
-                    .map(
-                      (item) => DataRow(
-                        cells: [
-                          DataCell(Text(item.name)),
-                          DataCell(
-                            Text(
-                              item.remark?.trim().isNotEmpty == true
-                                  ? item.remark!
-                                  : '-',
-                            ),
+          rows: _pagedItems
+              .map(
+                (item) => DataRow(
+                  cells: [
+                    DataCell(Text(item.name)),
+                    DataCell(
+                      Text(
+                        item.remark?.trim().isNotEmpty == true
+                            ? item.remark!
+                            : '-',
+                      ),
+                    ),
+                    DataCell(Text(item.isEnabled ? '启用' : '停用')),
+                    DataCell(Text(_formatDateTime(item.updatedAt))),
+                    DataCell(
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          OutlinedButton(
+                            onPressed: () => _showEditDialog(item: item),
+                            child: const Text('编辑'),
                           ),
-                          DataCell(Text(item.isEnabled ? '启用' : '停用')),
-                          DataCell(Text(_formatDateTime(item.updatedAt))),
-                          DataCell(
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                OutlinedButton(
-                                  onPressed: () => _showEditDialog(item: item),
-                                  child: const Text('编辑'),
-                                ),
-                                OutlinedButton(
-                                  onPressed: () => _deleteSupplier(item),
-                                  child: const Text('删除'),
-                                ),
-                              ],
-                            ),
+                          OutlinedButton(
+                            onPressed: () => _deleteSupplier(item),
+                            child: const Text('删除'),
                           ),
                         ],
                       ),
-                    )
-                    .toList(),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          MesPaginationBar(
-            page: _page,
-            totalPages: _totalPages,
-            total: _total,
-            loading: _loading,
-            onPrevious: () {
-              setState(() {
-                _page -= 1;
-              });
-            },
-            onNext: () {
-              setState(() {
-                _page += 1;
-              });
-            },
-          ),
-        ],
+                    ),
+                  ],
+                ),
+              )
+              .toList(),
+        ),
+      ),
+      pagination: MesPaginationBar(
+        page: _page,
+        totalPages: _totalPages,
+        total: _total,
+        loading: _loading,
+        onPrevious: () {
+          setState(() {
+            _page -= 1;
+          });
+        },
+        onNext: () {
+          setState(() {
+            _page += 1;
+          });
+        },
       ),
     );
   }
