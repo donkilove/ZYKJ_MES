@@ -8,6 +8,7 @@ import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/crud_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 
@@ -625,349 +626,331 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: CrudPageHeader(
-                  title: '保养计划',
-                  onRefresh: _loading
-                      ? null
-                      : () => _loadAll(page: _page, reloadOptions: true),
+
+    final filtersToolbar = Row(
+      children: [
+        Expanded(
+          child: DropdownButtonFormField<int?>(
+            initialValue: _equipmentFilterId,
+            isExpanded: true,
+            items: [
+              const DropdownMenuItem<int?>(
+                value: null,
+                child: Text(
+                  '全部设备',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              ..._equipmentOptions.map(
+                (entry) => DropdownMenuItem<int?>(
+                  value: entry.id,
+                  child: _buildFilterDropdownText(
+                    _equipmentFilterLabel(entry),
+                  ),
                 ),
               ),
             ],
+            selectedItemBuilder: (context) {
+              return [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: _buildFilterDropdownText('全部设备'),
+                ),
+                ..._equipmentOptions.map(
+                  (entry) => Align(
+                    alignment: Alignment.centerLeft,
+                    child: _buildFilterDropdownText(
+                      _equipmentFilterLabel(entry),
+                    ),
+                  ),
+                ),
+              ];
+            },
+            onChanged: (value) {
+              setState(() {
+                _equipmentFilterId = value;
+              });
+            },
+            decoration: const InputDecoration(
+              labelText: '设备筛选',
+              border: OutlineInputBorder(),
+            ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<int?>(
-                  initialValue: _equipmentFilterId,
-                  isExpanded: true,
-                  items: [
-                    const DropdownMenuItem<int?>(
-                      value: null,
-                      child: Text(
-                        '全部设备',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    ..._equipmentOptions.map(
-                      (entry) => DropdownMenuItem<int?>(
-                        value: entry.id,
-                        child: _buildFilterDropdownText(
-                          _equipmentFilterLabel(entry),
-                        ),
-                      ),
-                    ),
-                  ],
-                  selectedItemBuilder: (context) {
-                    return [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: _buildFilterDropdownText('全部设备'),
-                      ),
-                      ..._equipmentOptions.map(
-                        (entry) => Align(
-                          alignment: Alignment.centerLeft,
-                          child: _buildFilterDropdownText(
-                            _equipmentFilterLabel(entry),
-                          ),
-                        ),
-                      ),
-                    ];
-                  },
-                  onChanged: (value) {
-                    setState(() {
-                      _equipmentFilterId = value;
-                    });
-                  },
-                  decoration: const InputDecoration(
-                    labelText: '设备筛选',
-                    border: OutlineInputBorder(),
-                  ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: DropdownButtonFormField<int?>(
+            initialValue: _itemFilterId,
+            isExpanded: true,
+            items: [
+              const DropdownMenuItem<int?>(
+                value: null,
+                child: Text(
+                  '全部项目',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: DropdownButtonFormField<int?>(
-                  initialValue: _itemFilterId,
-                  isExpanded: true,
-                  items: [
-                    const DropdownMenuItem<int?>(
-                      value: null,
-                      child: Text(
-                        '全部项目',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    ..._itemOptions.map(
-                      (entry) => DropdownMenuItem<int?>(
-                        value: entry.id,
-                        child: _buildFilterDropdownText(entry.name),
-                      ),
-                    ),
-                  ],
-                  selectedItemBuilder: (context) {
-                    return [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: _buildFilterDropdownText('全部项目'),
-                      ),
-                      ..._itemOptions.map(
-                        (entry) => Align(
-                          alignment: Alignment.centerLeft,
-                          child: _buildFilterDropdownText(entry.name),
-                        ),
-                      ),
-                    ];
-                  },
-                  onChanged: (value) {
-                    setState(() {
-                      _itemFilterId = value;
-                    });
-                  },
-                  decoration: const InputDecoration(
-                    labelText: '项目筛选',
-                    border: OutlineInputBorder(),
-                  ),
+              ..._itemOptions.map(
+                (entry) => DropdownMenuItem<int?>(
+                  value: entry.id,
+                  child: _buildFilterDropdownText(entry.name),
                 ),
-              ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 140,
-                child: DropdownButtonFormField<bool?>(
-                  initialValue: _enabledFilter,
-                  items: const [
-                    DropdownMenuItem<bool?>(value: null, child: Text('全部状态')),
-                    DropdownMenuItem<bool?>(value: true, child: Text('启用')),
-                    DropdownMenuItem<bool?>(value: false, child: Text('停用')),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _enabledFilter = value);
-                  },
-                  decoration: const InputDecoration(
-                    labelText: '状态',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: DropdownButtonFormField<String?>(
-                  initialValue: _executionStageCodeFilter,
-                  isExpanded: true,
-                  items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text(
-                        '全部执行工段',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    ..._stageOptions.map(
-                      (entry) => DropdownMenuItem<String?>(
-                        value: entry.code,
-                        child: _buildFilterDropdownText(entry.name),
-                      ),
-                    ),
-                  ],
-                  selectedItemBuilder: (context) {
-                    return [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: _buildFilterDropdownText('全部执行工段'),
-                      ),
-                      ..._stageOptions.map(
-                        (entry) => Align(
-                          alignment: Alignment.centerLeft,
-                          child: _buildFilterDropdownText(entry.name),
-                        ),
-                      ),
-                    ];
-                  },
-                  onChanged: (value) {
-                    setState(() => _executionStageCodeFilter = value);
-                  },
-                  decoration: const InputDecoration(
-                    labelText: '执行工段',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: DropdownButtonFormField<int?>(
-                  initialValue: _defaultExecutorFilterId,
-                  isExpanded: true,
-                  items: [
-                    const DropdownMenuItem<int?>(
-                      value: null,
-                      child: Text(
-                        '全部默认执行人',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    ..._ownerOptions.map(
-                      (entry) => DropdownMenuItem<int?>(
-                        value: entry.userId,
-                        child: _buildFilterDropdownText(entry.displayName),
-                      ),
-                    ),
-                  ],
-                  selectedItemBuilder: (context) {
-                    return [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: _buildFilterDropdownText('全部默认执行人'),
-                      ),
-                      ..._ownerOptions.map(
-                        (entry) => Align(
-                          alignment: Alignment.centerLeft,
-                          child: _buildFilterDropdownText(entry.displayName),
-                        ),
-                      ),
-                    ];
-                  },
-                  onChanged: (value) {
-                    setState(() => _defaultExecutorFilterId = value);
-                  },
-                  decoration: const InputDecoration(
-                    labelText: '默认执行人',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: _loading ? null : () => _loadAll(page: 1),
-                icon: const Icon(Icons.search),
-                label: const Text('查询'),
-              ),
-              const SizedBox(width: 12),
-              FilledButton.icon(
-                onPressed: (_loading || !widget.canWrite)
-                    ? null
-                    : () => _showPlanEditDialog(),
-                icon: const Icon(Icons.add),
-                label: const Text('新增计划'),
               ),
             ],
-          ),
-          const SizedBox(height: 12),
-          Text('总数: $_total', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 12),
-          if (_message.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                _message,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.error,
+            selectedItemBuilder: (context) {
+              return [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: _buildFilterDropdownText('全部项目'),
                 ),
+                ..._itemOptions.map(
+                  (entry) => Align(
+                    alignment: Alignment.centerLeft,
+                    child: _buildFilterDropdownText(entry.name),
+                  ),
+                ),
+              ];
+            },
+            onChanged: (value) {
+              setState(() {
+                _itemFilterId = value;
+              });
+            },
+            decoration: const InputDecoration(
+              labelText: '项目筛选',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        SizedBox(
+          width: 140,
+          child: DropdownButtonFormField<bool?>(
+            initialValue: _enabledFilter,
+            items: const [
+              DropdownMenuItem<bool?>(value: null, child: Text('全部状态')),
+              DropdownMenuItem<bool?>(value: true, child: Text('启用')),
+              DropdownMenuItem<bool?>(value: false, child: Text('停用')),
+            ],
+            onChanged: (value) {
+              setState(() => _enabledFilter = value);
+            },
+            decoration: const InputDecoration(
+              labelText: '状态',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: DropdownButtonFormField<String?>(
+            initialValue: _executionStageCodeFilter,
+            isExpanded: true,
+            items: [
+              const DropdownMenuItem<String?>(
+                value: null,
+                child: Text(
+                  '全部执行工段',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              ..._stageOptions.map(
+                (entry) => DropdownMenuItem<String?>(
+                  value: entry.code,
+                  child: _buildFilterDropdownText(entry.name),
+                ),
+              ),
+            ],
+            selectedItemBuilder: (context) {
+              return [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: _buildFilterDropdownText('全部执行工段'),
+                ),
+                ..._stageOptions.map(
+                  (entry) => Align(
+                    alignment: Alignment.centerLeft,
+                    child: _buildFilterDropdownText(entry.name),
+                  ),
+                ),
+              ];
+            },
+            onChanged: (value) {
+              setState(() => _executionStageCodeFilter = value);
+            },
+            decoration: const InputDecoration(
+              labelText: '执行工段',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: DropdownButtonFormField<int?>(
+            initialValue: _defaultExecutorFilterId,
+            isExpanded: true,
+            items: [
+              const DropdownMenuItem<int?>(
+                value: null,
+                child: Text(
+                  '全部默认执行人',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              ..._ownerOptions.map(
+                (entry) => DropdownMenuItem<int?>(
+                  value: entry.userId,
+                  child: _buildFilterDropdownText(entry.displayName),
+                ),
+              ),
+            ],
+            selectedItemBuilder: (context) {
+              return [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: _buildFilterDropdownText('全部默认执行人'),
+                ),
+                ..._ownerOptions.map(
+                  (entry) => Align(
+                    alignment: Alignment.centerLeft,
+                    child: _buildFilterDropdownText(entry.displayName),
+                  ),
+                ),
+              ];
+            },
+            onChanged: (value) {
+              setState(() => _defaultExecutorFilterId = value);
+            },
+            decoration: const InputDecoration(
+              labelText: '默认执行人',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        FilledButton.icon(
+          onPressed: _loading ? null : () => _loadAll(page: 1),
+          icon: const Icon(Icons.search),
+          label: const Text('查询'),
+        ),
+        const SizedBox(width: 12),
+        FilledButton.icon(
+          onPressed: (_loading || !widget.canWrite)
+              ? null
+              : () => _showPlanEditDialog(),
+          icon: const Icon(Icons.add),
+          label: const Text('新增计划'),
+        ),
+      ],
+    );
+
+    return MesCrudPageScaffold(
+      header: CrudPageHeader(
+        title: '保养计划',
+        onRefresh: _loading
+            ? null
+            : () => _loadAll(page: _page, reloadOptions: true),
+      ),
+      filters: filtersToolbar,
+      banner: _message.isEmpty
+          ? null
+          : Text(
+              _message,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.error,
               ),
             ),
-          Expanded(
-            child: CrudListTableSection(
-              loading: _loading,
-              isEmpty: _plans.isEmpty,
-              emptyText: '暂无保养计划',
-              enableUnifiedHeaderStyle: true,
-              child: DataTable(
-                columns: const [
-                  DataColumn(label: Text('设备')),
-                  DataColumn(label: Text('保养项目')),
-                  DataColumn(label: Text('执行工段')),
-                  DataColumn(label: Text('周期天数')),
-                  DataColumn(label: Text('开始日期')),
-                  DataColumn(label: Text('下次到期日')),
-                  DataColumn(label: Text('默认执行人')),
-                  DataColumn(label: Text('预计时长')),
-                  DataColumn(label: Text('创建时间')),
-                  DataColumn(label: Text('更新时间')),
-                  DataColumn(label: Text('状态')),
-                  DataColumn(label: Text('操作')),
-                ],
-                rows: _plans.map((plan) {
-                  return DataRow(
-                    cells: [
-                      DataCell(Text(plan.equipmentName)),
-                      DataCell(Text(plan.itemName)),
-                      DataCell(Text(plan.executionProcessName)),
-                      DataCell(Text('${plan.cycleDays}')),
-                      DataCell(Text(_formatDate(plan.startDate))),
-                      DataCell(Text(_formatDate(plan.nextDueDate))),
-                      DataCell(Text(plan.defaultExecutorUsername ?? '-')),
-                      DataCell(
-                        Text(
-                          plan.estimatedDurationMinutes == null
-                              ? '-'
-                              : '${plan.estimatedDurationMinutes} 分钟',
-                        ),
+      content: CrudListTableSection(
+        loading: _loading,
+        isEmpty: _plans.isEmpty,
+        emptyText: '暂无保养计划',
+        enableUnifiedHeaderStyle: true,
+        child: DataTable(
+          columns: const [
+            DataColumn(label: Text('设备')),
+            DataColumn(label: Text('保养项目')),
+            DataColumn(label: Text('执行工段')),
+            DataColumn(label: Text('周期天数')),
+            DataColumn(label: Text('开始日期')),
+            DataColumn(label: Text('下次到期日')),
+            DataColumn(label: Text('默认执行人')),
+            DataColumn(label: Text('预计时长')),
+            DataColumn(label: Text('创建时间')),
+            DataColumn(label: Text('更新时间')),
+            DataColumn(label: Text('状态')),
+            DataColumn(label: Text('操作')),
+          ],
+          rows: _plans.map((plan) {
+            return DataRow(
+              cells: [
+                DataCell(Text(plan.equipmentName)),
+                DataCell(Text(plan.itemName)),
+                DataCell(Text(plan.executionProcessName)),
+                DataCell(Text('${plan.cycleDays}')),
+                DataCell(Text(_formatDate(plan.startDate))),
+                DataCell(Text(_formatDate(plan.nextDueDate))),
+                DataCell(Text(plan.defaultExecutorUsername ?? '-')),
+                DataCell(
+                  Text(
+                    plan.estimatedDurationMinutes == null
+                        ? '-'
+                        : '${plan.estimatedDurationMinutes} 分钟',
+                  ),
+                ),
+                DataCell(Text(_formatDate(plan.createdAt))),
+                DataCell(Text(_formatDate(plan.updatedAt))),
+                DataCell(Text(plan.isEnabled ? '启用' : '停用')),
+                DataCell(
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextButton(
+                        onPressed: widget.canWrite
+                            ? () => _showPlanEditDialog(plan: plan)
+                            : null,
+                        child: const Text('编辑'),
                       ),
-                      DataCell(Text(_formatDate(plan.createdAt))),
-                      DataCell(Text(_formatDate(plan.updatedAt))),
-                      DataCell(Text(plan.isEnabled ? '启用' : '停用')),
-                      DataCell(
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            TextButton(
-                              onPressed: widget.canWrite
-                                  ? () => _showPlanEditDialog(plan: plan)
-                                  : null,
-                              child: const Text('编辑'),
-                            ),
-                            const SizedBox(width: 8),
-                            TextButton(
-                              onPressed: widget.canWrite
-                                  ? () => _togglePlan(plan)
-                                  : null,
-                              child: Text(plan.isEnabled ? '停用' : '启用'),
-                            ),
-                            const SizedBox(width: 8),
-                            TextButton(
-                              onPressed: widget.canWrite
-                                  ? () => _deletePlan(plan)
-                                  : null,
-                              child: const Text('删除'),
-                            ),
-                            const SizedBox(width: 8),
-                            TextButton(
-                              onPressed: (widget.canWrite && plan.isEnabled)
-                                  ? () => _generateWorkOrder(plan)
-                                  : null,
-                              child: const Text('生成执行单'),
-                            ),
-                          ],
-                        ),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: widget.canWrite
+                            ? () => _togglePlan(plan)
+                            : null,
+                        child: Text(plan.isEnabled ? '停用' : '启用'),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: widget.canWrite
+                            ? () => _deletePlan(plan)
+                            : null,
+                        child: const Text('删除'),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton(
+                        onPressed: (widget.canWrite && plan.isEnabled)
+                            ? () => _generateWorkOrder(plan)
+                            : null,
+                        child: const Text('生成执行单'),
                       ),
                     ],
-                  );
-                }).toList(),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          MesPaginationBar(
-            page: _page,
-            totalPages: _totalPages,
-            total: _total,
-            loading: _loading,
-            onPrevious: () => _loadAll(page: _page - 1),
-            onNext: () => _loadAll(page: _page + 1),
-          ),
-        ],
+                  ),
+                ),
+              ],
+            );
+          }).toList(),
+        ),
+      ),
+      pagination: MesPaginationBar(
+        page: _page,
+        totalPages: _totalPages,
+        total: _total,
+        loading: _loading,
+        onPrevious: () => _loadAll(page: _page - 1),
+        onNext: () => _loadAll(page: _page + 1),
       ),
     );
   }
