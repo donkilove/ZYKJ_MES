@@ -5,6 +5,8 @@ import 'package:mes_client/features/equipment/models/equipment_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
+import 'package:mes_client/core/ui/patterns/mes_action_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
@@ -159,100 +161,98 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (innerContext, setInnerState) {
-            return AlertDialog(
+            return MesDialog(
               title: Text(isCreate ? '新增保养项目' : '编辑保养项目'),
-              content: SizedBox(
-                width: 520,
-                child: Form(
-                  key: formKey,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextFormField(
-                          controller: nameController,
-                          decoration: const InputDecoration(
-                            labelText: '项目名称',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return '请输入项目名称';
+              width: 520,
+              content: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: nameController,
+                        decoration: const InputDecoration(
+                          labelText: '项目名称',
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return '请输入项目名称';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: cycleDaysController,
+                        decoration: const InputDecoration(
+                          labelText: '默认周期天数',
+                          helperText: '常用值：7 / 30 / 90 / 365',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          final normalized = value?.trim() ?? '';
+                          if (normalized.isEmpty) {
+                            return '请输入默认周期天数';
+                          }
+                          final n = int.tryParse(normalized);
+                          if (n == null || n < 1 || n > 3650) {
+                            return '请输入1-3650之间的整数';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedCategory,
+                        items: categoryOptions
+                            .map(
+                              (c) => DropdownMenuItem<String>(
+                                value: c,
+                                child: Text(c.isEmpty ? '(不限)' : c),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          setInnerState(() {
+                            selectedCategory = value ?? '';
+                          });
+                        },
+                        decoration: const InputDecoration(
+                          labelText: '类别',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: durationController,
+                        decoration: const InputDecoration(
+                          labelText: '默认时长(分钟)',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          if (value != null && value.trim().isNotEmpty) {
+                            final n = int.tryParse(value.trim());
+                            if (n == null || n < 1 || n > 1440) {
+                              return '请输入1-1440之间的整数';
                             }
-                            return null;
-                          },
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: standardDescController,
+                        decoration: const InputDecoration(
+                          labelText: '标准描述',
+                          border: OutlineInputBorder(),
                         ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: cycleDaysController,
-                          decoration: const InputDecoration(
-                            labelText: '默认周期天数',
-                            helperText: '常用值：7 / 30 / 90 / 365',
-                            border: OutlineInputBorder(),
-                          ),
-                          keyboardType: TextInputType.number,
-                          validator: (value) {
-                            final normalized = value?.trim() ?? '';
-                            if (normalized.isEmpty) {
-                              return '请输入默认周期天数';
-                            }
-                            final n = int.tryParse(normalized);
-                            if (n == null || n < 1 || n > 3650) {
-                              return '请输入1-3650之间的整数';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<String>(
-                          initialValue: selectedCategory,
-                          items: categoryOptions
-                              .map(
-                                (c) => DropdownMenuItem<String>(
-                                  value: c,
-                                  child: Text(c.isEmpty ? '(不限)' : c),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            setInnerState(() {
-                              selectedCategory = value ?? '';
-                            });
-                          },
-                          decoration: const InputDecoration(
-                            labelText: '类别',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: durationController,
-                          decoration: const InputDecoration(
-                            labelText: '默认时长(分钟)',
-                            border: OutlineInputBorder(),
-                          ),
-                          keyboardType: TextInputType.number,
-                          validator: (value) {
-                            if (value != null && value.trim().isNotEmpty) {
-                              final n = int.tryParse(value.trim());
-                              if (n == null || n < 1 || n > 1440) {
-                                return '请输入1-1440之间的整数';
-                              }
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: standardDescController,
-                          decoration: const InputDecoration(
-                            labelText: '标准描述',
-                            border: OutlineInputBorder(),
-                          ),
-                          maxLines: 3,
-                        ),
-                      ],
-                    ),
+                        maxLines: 3,
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -338,19 +338,10 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
     }
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => MesActionDialog(
         title: Text('$action保养项目'),
         content: Text('确认$action项目“${item.name}”吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('确认'),
-          ),
-        ],
+        onConfirm: () => Navigator.of(dialogContext).pop(true),
       ),
     );
     if (confirmed != true) {
@@ -387,19 +378,12 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
     }
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => MesActionDialog(
         title: const Text('删除保养项目'),
         content: Text('确认删除项目“${item.name}”吗？此操作不可恢复。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('删除'),
-          ),
-        ],
+        confirmLabel: '删除',
+        isDestructive: true,
+        onConfirm: () => Navigator.of(dialogContext).pop(true),
       ),
     );
     if (confirmed != true) {

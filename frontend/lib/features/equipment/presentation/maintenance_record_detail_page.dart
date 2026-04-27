@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
@@ -168,7 +169,7 @@ class _MaintenanceRecordDetailPageState
     return Scaffold(
       appBar: AppBar(title: Text('保养记录详情 #${widget.recordId}')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const MesLoadingState(label: '保养记录详情加载中...')
           : detail == null
           ? Center(child: Text(_message.isEmpty ? '加载失败' : _message))
           : Padding(

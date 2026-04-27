@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/features/equipment/presentation/maintenance_execution_detail_page.dart';
 import 'package:mes_client/features/equipment/presentation/maintenance_record_detail_page.dart';
@@ -274,7 +275,7 @@ class _EquipmentDetailPageState extends State<EquipmentDetailPage> {
     return Scaffold(
       appBar: AppBar(title: Text('设备详情 #${widget.equipmentId}')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const MesLoadingState(label: '设备详情加载中...')
           : detail == null
           ? Center(child: Text(_message.isEmpty ? '加载失败' : _message))
           : Padding(

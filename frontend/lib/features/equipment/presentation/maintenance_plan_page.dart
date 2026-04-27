@@ -7,6 +7,8 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
+import 'package:mes_client/core/ui/patterns/mes_action_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
@@ -226,217 +228,215 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
               (entry) => entry.id == selectedItemId,
               orElse: () => _itemOptions.first,
             );
-            return AlertDialog(
+            return MesDialog(
               title: Text(isCreate ? '新增保养计划' : '编辑保养计划'),
-              content: SizedBox(
-                width: 680,
-                child: SingleChildScrollView(
-                  child: Form(
-                    key: formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        DropdownButtonFormField<int>(
-                          initialValue: selectedEquipmentId,
-                          items: _equipmentOptions
-                              .map(
-                                (entry) => DropdownMenuItem<int>(
-                                  value: entry.id,
-                                  child: Text('${entry.code} - ${entry.name}'),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            if (value == null) {
-                              return;
-                            }
-                            setInnerState(() {
-                              selectedEquipmentId = value;
-                            });
-                          },
-                          decoration: const InputDecoration(
-                            labelText: '设备',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<int>(
-                          initialValue: selectedItemId,
-                          items: _itemOptions
-                              .map(
-                                (entry) => DropdownMenuItem<int>(
-                                  value: entry.id,
-                                  child: Text(entry.name),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            if (value == null) {
-                              return;
-                            }
-                            setInnerState(() {
-                              selectedItemId = value;
-                            });
-                          },
-                          decoration: const InputDecoration(
-                            labelText: '保养项目',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<String>(
-                          initialValue: selectedExecutionProcessCode,
-                          items: _stageOptions
-                              .map(
-                                (stage) => DropdownMenuItem<String>(
-                                  value: stage.code,
-                                  child: Text('${stage.name} (${stage.code})'),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            if (value == null) {
-                              return;
-                            }
-                            setInnerState(() {
-                              selectedExecutionProcessCode = value;
-                            });
-                          },
-                          decoration: const InputDecoration(
-                            labelText: '执行工段',
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: cycleDaysController,
-                          decoration: InputDecoration(
-                            labelText:
-                                '周期(天，留空使用项目默认: ${selectedItem.defaultCycleDays}天)',
-                            border: const OutlineInputBorder(),
-                          ),
-                          keyboardType: TextInputType.number,
-                          validator: (value) {
-                            if (value != null && value.trim().isNotEmpty) {
-                              final n = int.tryParse(value.trim());
-                              if (n == null || n < 1 || n > 3650) {
-                                return '请输入1-3650之间的整数';
-                              }
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        InkWell(
-                          onTap: () async {
-                            final picked = await showDatePicker(
-                              context: innerContext,
-                              initialDate: selectedStartDate,
-                              firstDate: DateTime(2020),
-                              lastDate: DateTime(2099),
-                            );
-                            if (picked != null) {
-                              setInnerState(() {
-                                selectedStartDate = picked;
-                              });
-                            }
-                          },
-                          child: InputDecorator(
-                            decoration: const InputDecoration(
-                              labelText: '起始日期',
-                              border: OutlineInputBorder(),
-                            ),
-                            child: Text(_formatDate(selectedStartDate)),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        InkWell(
-                          onTap: () async {
-                            final picked = await showDatePicker(
-                              context: innerContext,
-                              initialDate:
-                                  selectedNextDueDate ?? selectedStartDate,
-                              firstDate: DateTime(2020),
-                              lastDate: DateTime(2099),
-                            );
-                            if (picked != null) {
-                              setInnerState(() {
-                                selectedNextDueDate = picked;
-                              });
-                            }
-                          },
-                          child: InputDecorator(
-                            decoration: const InputDecoration(
-                              labelText: '下次到期日（可选）',
-                              helperText: '留空时由系统按开始日期与周期自动计算',
-                              border: OutlineInputBorder(),
-                            ),
-                            child: Text(
-                              selectedNextDueDate == null
-                                  ? '未指定'
-                                  : _formatDate(selectedNextDueDate!),
-                            ),
-                          ),
-                        ),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: TextButton.icon(
-                            onPressed: selectedNextDueDate == null
-                                ? null
-                                : () {
-                                    setInnerState(() {
-                                      selectedNextDueDate = null;
-                                    });
-                                  },
-                            icon: const Icon(Icons.auto_awesome),
-                            label: const Text('改为自动计算'),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: estimatedDurationController,
-                          decoration: const InputDecoration(
-                            labelText: '预计时长(分钟，可选)',
-                            border: OutlineInputBorder(),
-                          ),
-                          keyboardType: TextInputType.number,
-                          validator: (value) {
-                            if (value != null && value.trim().isNotEmpty) {
-                              final n = int.tryParse(value.trim());
-                              if (n == null || n < 1 || n > 1440) {
-                                return '请输入1-1440之间的整数';
-                              }
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<int?>(
-                          initialValue: selectedDefaultExecutorUserId,
-                          items: [
-                            const DropdownMenuItem<int?>(
-                              value: null,
-                              child: Text('(不指定)'),
-                            ),
-                            ..._ownerOptions.map(
-                              (u) => DropdownMenuItem<int?>(
-                                value: u.userId,
-                                child: Text(u.displayName),
+              width: 680,
+              content: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      DropdownButtonFormField<int>(
+                        initialValue: selectedEquipmentId,
+                        items: _equipmentOptions
+                            .map(
+                              (entry) => DropdownMenuItem<int>(
+                                value: entry.id,
+                                child: Text('${entry.code} - ${entry.name}'),
                               ),
-                            ),
-                          ],
-                          onChanged: (value) {
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          if (value == null) {
+                            return;
+                          }
+                          setInnerState(() {
+                            selectedEquipmentId = value;
+                          });
+                        },
+                        decoration: const InputDecoration(
+                          labelText: '设备',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<int>(
+                        initialValue: selectedItemId,
+                        items: _itemOptions
+                            .map(
+                              (entry) => DropdownMenuItem<int>(
+                                value: entry.id,
+                                child: Text(entry.name),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          if (value == null) {
+                            return;
+                          }
+                          setInnerState(() {
+                            selectedItemId = value;
+                          });
+                        },
+                        decoration: const InputDecoration(
+                          labelText: '保养项目',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedExecutionProcessCode,
+                        items: _stageOptions
+                            .map(
+                              (stage) => DropdownMenuItem<String>(
+                                value: stage.code,
+                                child: Text('${stage.name} (${stage.code})'),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          if (value == null) {
+                            return;
+                          }
+                          setInnerState(() {
+                            selectedExecutionProcessCode = value;
+                          });
+                        },
+                        decoration: const InputDecoration(
+                          labelText: '执行工段',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: cycleDaysController,
+                        decoration: InputDecoration(
+                          labelText:
+                              '周期(天，留空使用项目默认: ${selectedItem.defaultCycleDays}天)',
+                          border: const OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          if (value != null && value.trim().isNotEmpty) {
+                            final n = int.tryParse(value.trim());
+                            if (n == null || n < 1 || n > 3650) {
+                              return '请输入1-3650之间的整数';
+                            }
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: innerContext,
+                            initialDate: selectedStartDate,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime(2099),
+                          );
+                          if (picked != null) {
                             setInnerState(() {
-                              selectedDefaultExecutorUserId = value;
+                              selectedStartDate = picked;
                             });
-                          },
+                          }
+                        },
+                        child: InputDecorator(
                           decoration: const InputDecoration(
-                            labelText: '默认执行人',
+                            labelText: '起始日期',
                             border: OutlineInputBorder(),
                           ),
+                          child: Text(_formatDate(selectedStartDate)),
                         ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 12),
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: innerContext,
+                            initialDate:
+                                selectedNextDueDate ?? selectedStartDate,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime(2099),
+                          );
+                          if (picked != null) {
+                            setInnerState(() {
+                              selectedNextDueDate = picked;
+                            });
+                          }
+                        },
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: '下次到期日（可选）',
+                            helperText: '留空时由系统按开始日期与周期自动计算',
+                            border: OutlineInputBorder(),
+                          ),
+                          child: Text(
+                            selectedNextDueDate == null
+                                ? '未指定'
+                                : _formatDate(selectedNextDueDate!),
+                          ),
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: selectedNextDueDate == null
+                              ? null
+                              : () {
+                                  setInnerState(() {
+                                    selectedNextDueDate = null;
+                                  });
+                                },
+                          icon: const Icon(Icons.auto_awesome),
+                          label: const Text('改为自动计算'),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: estimatedDurationController,
+                        decoration: const InputDecoration(
+                          labelText: '预计时长(分钟，可选)',
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          if (value != null && value.trim().isNotEmpty) {
+                            final n = int.tryParse(value.trim());
+                            if (n == null || n < 1 || n > 1440) {
+                              return '请输入1-1440之间的整数';
+                            }
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<int?>(
+                        initialValue: selectedDefaultExecutorUserId,
+                        items: [
+                          const DropdownMenuItem<int?>(
+                            value: null,
+                            child: Text('(不指定)'),
+                          ),
+                          ..._ownerOptions.map(
+                            (u) => DropdownMenuItem<int?>(
+                              value: u.userId,
+                              child: Text(u.displayName),
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          setInnerState(() {
+                            selectedDefaultExecutorUserId = value;
+                          });
+                        },
+                        decoration: const InputDecoration(
+                          labelText: '默认执行人',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -581,21 +581,14 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
     }
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => MesActionDialog(
         title: const Text('删除保养计划'),
         content: Text(
           '确认删除计划“${plan.equipmentName} / ${plan.itemName}”吗？此操作不可恢复。',
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('删除'),
-          ),
-        ],
+        confirmLabel: '删除',
+        isDestructive: true,
+        onConfirm: () => Navigator.of(dialogContext).pop(true),
       ),
     );
     if (confirmed != true) {

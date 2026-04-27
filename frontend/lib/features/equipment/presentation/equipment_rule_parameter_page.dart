@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_action_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
@@ -345,8 +347,9 @@ class _RulesTabState extends State<_RulesTab> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
+        builder: (ctx, setS) => MesDialog(
           title: Text(item == null ? '新增设备规则' : '编辑设备规则'),
+          width: 560,
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -429,7 +432,7 @@ class _RulesTabState extends State<_RulesTab> {
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('取消'),
             ),
-            ElevatedButton(
+            FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
               child: const Text('保存'),
             ),
@@ -518,19 +521,12 @@ class _RulesTabState extends State<_RulesTab> {
   Future<void> _deleteRule(EquipmentRuleItem item) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => MesActionDialog(
         title: const Text('确认删除'),
         content: Text('确定删除规则「${item.ruleName}」？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('删除'),
-          ),
-        ],
+        confirmLabel: '删除',
+        isDestructive: true,
+        onConfirm: () => Navigator.pop(ctx, true),
       ),
     );
     if (confirmed != true || !mounted) return;
@@ -1001,8 +997,9 @@ class _ParametersTabState extends State<_ParametersTab> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setStateDialog) => AlertDialog(
+        builder: (ctx, setStateDialog) => MesDialog(
           title: Text(item == null ? '新增运行参数' : '编辑运行参数'),
+          width: 560,
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1101,7 +1098,7 @@ class _ParametersTabState extends State<_ParametersTab> {
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('取消'),
             ),
-            ElevatedButton(
+            FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
               child: const Text('保存'),
             ),
@@ -1199,19 +1196,12 @@ class _ParametersTabState extends State<_ParametersTab> {
   Future<void> _deleteParam(EquipmentRuntimeParameterItem item) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => MesActionDialog(
         title: const Text('确认删除'),
         content: Text('确定删除参数「${item.paramName}」？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('删除'),
-          ),
-        ],
+        confirmLabel: '删除',
+        isDestructive: true,
+        onConfirm: () => Navigator.pop(ctx, true),
       ),
     );
     if (confirmed != true || !mounted) return;

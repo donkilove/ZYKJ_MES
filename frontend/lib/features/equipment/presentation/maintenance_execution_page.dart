@@ -10,6 +10,8 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
+import 'package:mes_client/core/ui/patterns/mes_action_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
@@ -240,72 +242,70 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
         return StatefulBuilder(
           builder: (dialogBuildContext, setDialogState) {
             final needExceptionReport = selectedSummary == '失败';
-            return AlertDialog(
+            return MesDialog(
               title: const Text('完成保养执行'),
-              content: SizedBox(
-                width: 560,
-                child: Form(
-                  key: formKey,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        DropdownButtonFormField<String>(
-                          initialValue: selectedSummary,
-                          decoration: const InputDecoration(
-                            labelText: '结果摘要',
-                            border: OutlineInputBorder(),
-                          ),
-                          items: const [
-                            DropdownMenuItem<String>(
-                              value: '完成',
-                              child: Text('完成'),
-                            ),
-                            DropdownMenuItem<String>(
-                              value: '失败',
-                              child: Text('失败'),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            if (value == null) {
-                              return;
-                            }
-                            setDialogState(() {
-                              selectedSummary = value;
-                              if (selectedSummary != '失败') {
-                                remarkController.clear();
-                              }
-                            });
-                          },
+              width: 560,
+              content: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedSummary,
+                        decoration: const InputDecoration(
+                          labelText: '结果摘要',
+                          border: OutlineInputBorder(),
                         ),
-                        if (needExceptionReport) ...[
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: remarkController,
-                            maxLines: 3,
-                            decoration: const InputDecoration(
-                              labelText: '异常上报',
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (value) {
-                              if (selectedSummary == '失败' &&
-                                  (value == null || value.trim().isEmpty)) {
-                                return '结果摘要为失败时必须填写异常上报';
-                              }
-                              return null;
-                            },
+                        items: const [
+                          DropdownMenuItem<String>(
+                            value: '完成',
+                            child: Text('完成'),
+                          ),
+                          DropdownMenuItem<String>(
+                            value: '失败',
+                            child: Text('失败'),
                           ),
                         ],
+                        onChanged: (value) {
+                          if (value == null) {
+                            return;
+                          }
+                          setDialogState(() {
+                            selectedSummary = value;
+                            if (selectedSummary != '失败') {
+                              remarkController.clear();
+                            }
+                          });
+                        },
+                      ),
+                      if (needExceptionReport) ...[
                         const SizedBox(height: 12),
                         TextFormField(
-                          controller: attachmentController,
+                          controller: remarkController,
+                          maxLines: 3,
                           decoration: const InputDecoration(
-                            labelText: '附件地址（可选，支持下载链接或 UNC 路径）',
+                            labelText: '异常上报',
                             border: OutlineInputBorder(),
                           ),
+                          validator: (value) {
+                            if (selectedSummary == '失败' &&
+                                (value == null || value.trim().isEmpty)) {
+                              return '结果摘要为失败时必须填写异常上报';
+                            }
+                            return null;
+                          },
                         ),
                       ],
-                    ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: attachmentController,
+                        decoration: const InputDecoration(
+                          labelText: '附件地址（可选，支持下载链接或 UNC 路径）',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -378,19 +378,10 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
     if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => MesActionDialog(
         title: const Text('取消工单'),
         content: Text('确认取消工单"${item.equipmentName} / ${item.itemName}"吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('确认'),
-          ),
-        ],
+        onConfirm: () => Navigator.of(dialogContext).pop(true),
       ),
     );
     if (confirmed != true) return;

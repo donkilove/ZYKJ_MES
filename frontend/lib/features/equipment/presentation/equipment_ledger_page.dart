@@ -4,10 +4,12 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
 import 'package:mes_client/features/equipment/presentation/equipment_detail_page.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_action_dialog.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 
@@ -168,114 +170,112 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (innerContext, setInnerState) {
-            return AlertDialog(
+            return MesDialog(
               title: Text(isCreate ? '新增设备' : '编辑设备'),
-              content: SizedBox(
-                width: 560,
-                child: Form(
-                  key: formKey,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        TextFormField(
-                          controller: codeController,
-                          decoration: const InputDecoration(
-                            labelText: '设备编号',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return '请输入设备编号';
-                            }
-                            return null;
-                          },
+              width: 560,
+              content: Form(
+                key: formKey,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextFormField(
+                        controller: codeController,
+                        decoration: const InputDecoration(
+                          labelText: '设备编号',
+                          border: OutlineInputBorder(),
                         ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: nameController,
-                          decoration: const InputDecoration(
-                            labelText: '设备名称',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return '请输入设备名称';
-                            }
-                            return null;
-                          },
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return '请输入设备编号';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: nameController,
+                        decoration: const InputDecoration(
+                          labelText: '设备名称',
+                          border: OutlineInputBorder(),
                         ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: modelController,
-                          decoration: const InputDecoration(
-                            labelText: '型号',
-                            border: OutlineInputBorder(),
-                          ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return '请输入设备名称';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: modelController,
+                        decoration: const InputDecoration(
+                          labelText: '型号',
+                          border: OutlineInputBorder(),
                         ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: locationController,
-                          decoration: const InputDecoration(
-                            labelText: '位置',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.trim().isEmpty) {
-                              return '请输入位置';
-                            }
-                            return null;
-                          },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: locationController,
+                        decoration: const InputDecoration(
+                          labelText: '位置',
+                          border: OutlineInputBorder(),
                         ),
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<String>(
-                          initialValue: selectedOwner.isEmpty
-                              ? null
-                              : selectedOwner,
-                          isExpanded: true,
-                          items: _ownerOptions
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return '请输入位置';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        initialValue: selectedOwner.isEmpty
+                            ? null
+                            : selectedOwner,
+                        isExpanded: true,
+                        items: _ownerOptions
+                            .map(
+                              (entry) => DropdownMenuItem<String>(
+                                value: entry.username,
+                                child: _buildOwnerDropdownText(
+                                  entry.displayName,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        selectedItemBuilder: (context) {
+                          return _ownerOptions
                               .map(
-                                (entry) => DropdownMenuItem<String>(
-                                  value: entry.username,
+                                (entry) => Align(
+                                  alignment: Alignment.centerLeft,
                                   child: _buildOwnerDropdownText(
                                     entry.displayName,
                                   ),
                                 ),
                               )
-                              .toList(),
-                          selectedItemBuilder: (context) {
-                            return _ownerOptions
-                                .map(
-                                  (entry) => Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: _buildOwnerDropdownText(
-                                      entry.displayName,
-                                    ),
-                                  ),
-                                )
-                                .toList();
-                          },
-                          onChanged: (value) {
-                            setInnerState(() {
-                              selectedOwner = value ?? '';
-                            });
-                          },
-                          decoration: const InputDecoration(
-                            labelText: '负责人',
-                            border: OutlineInputBorder(),
-                          ),
+                              .toList();
+                        },
+                        onChanged: (value) {
+                          setInnerState(() {
+                            selectedOwner = value ?? '';
+                          });
+                        },
+                        decoration: const InputDecoration(
+                          labelText: '负责人',
+                          border: OutlineInputBorder(),
                         ),
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: remarkController,
-                          decoration: const InputDecoration(
-                            labelText: '备注',
-                            border: OutlineInputBorder(),
-                          ),
-                          maxLines: 3,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: remarkController,
+                        decoration: const InputDecoration(
+                          labelText: '备注',
+                          border: OutlineInputBorder(),
                         ),
-                      ],
-                    ),
+                        maxLines: 3,
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -367,19 +367,10 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
     }
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => MesActionDialog(
         title: Text('$action设备'),
         content: Text('确认$action设备“${item.name}”吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('确认'),
-          ),
-        ],
+        onConfirm: () => Navigator.of(dialogContext).pop(true),
       ),
     );
     if (confirmed != true) {
@@ -416,19 +407,12 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
     }
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (dialogContext) => MesActionDialog(
         title: const Text('删除设备'),
         content: Text('确认删除设备“${item.name}”吗？此操作不可恢复。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('删除'),
-          ),
-        ],
+        confirmLabel: '删除',
+        isDestructive: true,
+        onConfirm: () => Navigator.of(dialogContext).pop(true),
       ),
     );
     if (confirmed != true) {
