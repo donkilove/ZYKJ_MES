@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_error_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_inline_banner.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/shell/presentation/main_shell_state.dart';
 
 class MainShellScaffold extends StatelessWidget {
@@ -157,17 +161,9 @@ class MainShellScaffold extends StatelessWidget {
               child: Column(
                 children: [
                   if (state.message.isNotEmpty)
-                    Container(
-                      width: double.infinity,
-                      color: theme.colorScheme.surfaceContainer,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      child: Text(
-                        state.message,
-                        style: theme.textTheme.bodyMedium,
-                      ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                      child: MesInlineBanner.info(message: state.message),
                     ),
                   Expanded(
                     child: Container(
@@ -188,37 +184,31 @@ class MainShellScaffold extends StatelessWidget {
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 420),
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.block, size: 40),
-                const SizedBox(height: 12),
-                const Text('当前账号暂无可访问页面'),
-                const SizedBox(height: 8),
-                const Text('请联系系统管理员分配页面可见权限'),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: state.manualRefreshing ? null : onRetry,
-                        child: const Text('刷新'),
-                      ),
+        child: MesSectionCard(
+          title: '暂无可访问页面',
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const MesEmptyState(description: '请联系系统管理员分配页面可见权限', title: '当前账号暂无可访问页面'),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: state.manualRefreshing ? null : onRetry,
+                      child: const Text('刷新'),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: onLogout,
-                        child: const Text('退出登录'),
-                      ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: onLogout,
+                      child: const Text('退出登录'),
                     ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
@@ -229,35 +219,24 @@ class MainShellScaffold extends StatelessWidget {
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 460),
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.error_outline, size: 40),
-                const SizedBox(height: 12),
-                Text(state.message.isEmpty ? '加载失败' : state.message),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: onLogout,
-                        child: const Text('退出登录'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: onRetry,
-                        child: const Text('重试'),
-                      ),
-                    ),
-                  ],
+        child: MesSectionCard(
+          title: '加载失败',
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              MesErrorState(
+                message: state.message.isEmpty ? '加载失败' : state.message,
+                onRetry: onRetry,
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: onLogout,
+                  child: const Text('退出登录'),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

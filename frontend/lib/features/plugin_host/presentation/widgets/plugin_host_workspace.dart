@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/plugin_host/models/plugin_session.dart';
 import 'package:mes_client/features/plugin_host/models/plugin_host_view_state.dart';
 import 'package:mes_client/features/plugin_host/presentation/plugin_host_controller.dart';
@@ -130,8 +132,10 @@ class _PluginHostWorkspaceState extends State<PluginHostWorkspace> {
       }
       return Padding(
         padding: const EdgeInsets.all(16),
-        child: Card(
-          clipBehavior: Clip.antiAlias,
+        child: MesSectionCard(
+          title: '插件运行中',
+          subtitle: activeSession.pluginId,
+          expandChild: true,
           child: Column(
             children: [
               toolbar,
@@ -146,27 +150,24 @@ class _PluginHostWorkspaceState extends State<PluginHostWorkspace> {
     _clearCachedWebview();
     final selectedPlugin = controller.selectedPlugin;
     if (selectedPlugin == null) {
-      return const Center(child: Text('选择一个插件以打开工作区'));
+      return const Center(
+        child: MesEmptyState(
+          title: '未选择插件',
+          description: '请先从左侧列表中选择一个插件。',
+        ),
+      );
     }
 
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                selectedPlugin.manifest?.name ?? '未知插件',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 12),
-              Text('版本：${selectedPlugin.manifest?.version ?? '-'}'),
-              const SizedBox(height: 12),
-              const Text('第一阶段工作区已接入，后续在这里承载插件会话与内嵌页面。'),
-            ],
-          ),
+      child: MesSectionCard(
+        title: selectedPlugin.manifest?.name ?? '未知插件',
+        subtitle: '第一阶段工作区已接入，后续在这里承载插件会话与内嵌页面。',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('版本：${selectedPlugin.manifest?.version ?? '-'}'),
+          ],
         ),
       ),
     );
@@ -209,22 +210,18 @@ class _PluginHostStatusPanel extends StatelessWidget {
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520),
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: Theme.of(context).textTheme.headlineSmall),
-                const SizedBox(height: 12),
-                Text(message),
-                if (actions.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  Row(children: actions),
-                ],
+        child: MesSectionCard(
+          title: title,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(message),
+              if (actions.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Row(children: actions),
               ],
-            ),
+            ],
           ),
         ),
       ),
