@@ -10,7 +10,7 @@ import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
-import 'package:mes_client/core/widgets/simple_pagination_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/features/user/presentation/widgets/registration_approval_feedback_banner.dart';
 import 'package:mes_client/features/user/presentation/widgets/registration_approval_filter_section.dart';
 import 'package:mes_client/features/user/presentation/widgets/registration_approval_page_header.dart';
@@ -717,7 +717,7 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
         onReject: _confirmReject,
         formatTime: _formatTime,
       ),
-      pagination: SimplePaginationBar(
+      pagination: MesPaginationBar(
         page: _requestPage,
         totalPages: _requestTotalPages,
         total: _total,
