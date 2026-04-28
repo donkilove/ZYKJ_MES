@@ -2458,17 +2458,25 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             self.assertEqual(len(process_rows), 2)
             admin = db.query(User).filter(User.username == "admin").first()
             assert admin is not None
+            first_process_row_id = int(process_rows[0].id)
             for process_row in process_rows:
-                db.add(
-                    ProductionSubOrder(
-                        order_process_id=process_row.id,
-                        operator_user_id=admin.id,
-                        assigned_quantity=5,
-                        completed_quantity=0,
-                        status="pending",
-                        is_visible=True,
+                existing = (
+                    db.query(ProductionSubOrder)
+                    .filter(
+                        ProductionSubOrder.order_process_id == process_row.id,
+                        ProductionSubOrder.operator_user_id == admin.id,
                     )
+                    .first()
                 )
+                if existing is None:
+                    db.add(
+                        ProductionSubOrder(
+                            order_process_id=process_row.id,
+                            operator_user_id=admin.id,
+                            completed_quantity=0,
+                            status="pending",
+                        )
+                    )
             db.commit()
         finally:
             db.close()
@@ -2482,6 +2490,27 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             },
         )
         self.assertEqual(enable_response.status_code, 200, enable_response.text)
+
+        empty_list_response = self.client.get(
+            "/api/v1/production/pipeline-instances",
+            headers=self._headers(),
+            params={
+                "order_id": order["id"],
+                "process_keyword": process_a["name"],
+            },
+        )
+        self.assertEqual(empty_list_response.status_code, 200, empty_list_response.text)
+        self.assertEqual(empty_list_response.json()["data"]["items"], [])
+
+        first_article_response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/first-article",
+            headers=self._headers(),
+            json={
+                "order_process_id": first_process_row_id,
+                "verification_code": "code-1",
+            },
+        )
+        self.assertEqual(first_article_response.status_code, 200, first_article_response.text)
 
         list_response = self.client.get(
             "/api/v1/production/pipeline-instances",
@@ -2511,20 +2540,6 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         no_items = no_response.json()["data"]["items"]
         self.assertEqual(len(no_items), 1)
         self.assertEqual(no_items[0]["pipeline_instance_no"], instance_no)
-        sub_order_id = items[0]["sub_order_id"]
-
-        sub_order_response = self.client.get(
-            "/api/v1/production/pipeline-instances",
-            headers=self._headers(),
-            params={
-                "order_id": order["id"],
-                "sub_order_id": sub_order_id,
-            },
-        )
-        self.assertEqual(sub_order_response.status_code, 200, sub_order_response.text)
-        sub_order_items = sub_order_response.json()["data"]["items"]
-        self.assertEqual(len(sub_order_items), 1)
-        self.assertEqual(sub_order_items[0]["sub_order_id"], sub_order_id)
 
     def test_pipeline_execution_requires_explicit_instance_binding_and_sequence(
         self,
@@ -2569,16 +2584,23 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             )
             self.assertEqual(len(process_rows), 2)
             for process_row in process_rows:
-                db.add(
-                    ProductionSubOrder(
-                        order_process_id=process_row.id,
-                        operator_user_id=admin.id,
-                        assigned_quantity=5,
-                        completed_quantity=0,
-                        status="pending",
-                        is_visible=True,
+                existing = (
+                    db.query(ProductionSubOrder)
+                    .filter(
+                        ProductionSubOrder.order_process_id == process_row.id,
+                        ProductionSubOrder.operator_user_id == admin.id,
                     )
+                    .first()
                 )
+                if existing is None:
+                    db.add(
+                        ProductionSubOrder(
+                            order_process_id=process_row.id,
+                            operator_user_id=admin.id,
+                            completed_quantity=0,
+                            status="pending",
+                        )
+                    )
             today_code = (
                 db.query(DailyVerificationCode)
                 .filter(DailyVerificationCode.verify_date == date.today())
@@ -2607,6 +2629,27 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(enable_response.status_code, 200, enable_response.text)
 
+        missing_binding_response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/first-article",
+            headers=self._headers(),
+            json={
+                "order_process_id": process_rows[1].id,
+                "verification_code": "code-1",
+            },
+        )
+        self.assertEqual(missing_binding_response.status_code, 409)
+        self.assertIn("missing or inactive", missing_binding_response.text)
+
+        first_article_first_process = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/first-article",
+            headers=self._headers(),
+            json={
+                "order_process_id": process_rows[0].id,
+                "verification_code": "code-1",
+            },
+        )
+        self.assertEqual(first_article_first_process.status_code, 200, first_article_first_process.text)
+
         list_response = self.client.get(
             "/api/v1/production/pipeline-instances",
             headers=self._headers(),
@@ -2617,37 +2660,31 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         first_instance = next(
             item for item in items if item["process_code"] == process_a["code"]
         )
+
+        second_first_article_response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/first-article",
+            headers=self._headers(),
+            json={
+                "order_process_id": process_rows[1].id,
+                "verification_code": "code-1",
+            },
+        )
+        self.assertEqual(second_first_article_response.status_code, 200, second_first_article_response.text)
+
+        list_response = self.client.get(
+            "/api/v1/production/pipeline-instances",
+            headers=self._headers(),
+            params={"order_id": order["id"]},
+        )
+        self.assertEqual(list_response.status_code, 200, list_response.text)
+        items = list_response.json()["data"]["items"]
         second_instance = next(
             item for item in items if item["process_code"] == process_b["code"]
         )
         self.assertEqual(
             first_instance["pipeline_link_id"], second_instance["pipeline_link_id"]
         )
-
-        missing_binding_response = self.client.post(
-            f"/api/v1/production/orders/{order['id']}/first-article",
-            headers=self._headers(),
-            json={
-                "order_process_id": second_instance["order_process_id"],
-                "verification_code": "code-1",
-            },
-        )
-        self.assertEqual(missing_binding_response.status_code, 400)
-        self.assertIn(
-            "Pipeline instance binding is required", missing_binding_response.text
-        )
-
-        blocked_response = self.client.post(
-            f"/api/v1/production/orders/{order['id']}/first-article",
-            headers=self._headers(),
-            json={
-                "order_process_id": second_instance["order_process_id"],
-                "pipeline_instance_id": second_instance["id"],
-                "verification_code": "code-1",
-            },
-        )
-        self.assertEqual(blocked_response.status_code, 409)
-        self.assertIn("previous pipeline instance progress", blocked_response.text)
+        self.assertEqual(first_instance["pipeline_seq"], second_instance["pipeline_seq"])
 
         db = SessionLocal()
         try:
@@ -2662,105 +2699,100 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             previous_process.completed_quantity = 1
             previous_process.status = "partial"
             current_process.visible_quantity = 1
-            previous_sub_order = (
-                db.query(ProductionSubOrder)
-                .filter(ProductionSubOrder.order_process_id == previous_process.id)
-                .first()
-            )
-            assert previous_sub_order is not None
-            previous_sub_order.completed_quantity = 1
-            previous_sub_order.status = "pending"
-            previous_instance = (
-                db.query(ProcessPipelineInstance)
-                .filter(
-                    ProcessPipelineInstance.order_process_id
-                    == previous_process.id,
-                    ProcessPipelineInstance.pipeline_seq
-                    == int(second_instance["pipeline_seq"]),
-                )
-                .first()
-            )
-            assert previous_instance is not None
-            previous_instance.pipeline_link_id = "BROKEN-LINK"
             db.commit()
         finally:
             db.close()
-
-        mismatched_link_response = self.client.post(
-            f"/api/v1/production/orders/{order['id']}/first-article",
-            headers=self._headers(),
-            json={
-                "order_process_id": second_instance["order_process_id"],
-                "pipeline_instance_id": second_instance["id"],
-                "verification_code": "code-1",
-            },
-        )
-        self.assertEqual(mismatched_link_response.status_code, 409)
-        self.assertIn("missing or inactive", mismatched_link_response.text)
-
-        db = SessionLocal()
-        try:
-            previous_process = (
-                db.query(ProductionOrderProcess)
-                .filter(
-                    ProductionOrderProcess.order_id == int(order["id"]),
-                    ProductionOrderProcess.process_order == 1,
-                )
-                .first()
-            )
-            assert previous_process is not None
-            previous_instance = (
-                db.query(ProcessPipelineInstance)
-                .filter(
-                    ProcessPipelineInstance.order_process_id
-                    == previous_process.id,
-                    ProcessPipelineInstance.pipeline_seq
-                    == int(second_instance["pipeline_seq"]),
-                )
-                .first()
-            )
-            assert previous_instance is not None
-            previous_instance.pipeline_link_id = second_instance["pipeline_link_id"]
-            db.commit()
-        finally:
-            db.close()
-
-        first_article_response = self.client.post(
-            f"/api/v1/production/orders/{order['id']}/first-article",
-            headers=self._headers(),
-            json={
-                "order_process_id": second_instance["order_process_id"],
-                "pipeline_instance_id": second_instance["id"],
-                "verification_code": "code-1",
-            },
-        )
-        self.assertEqual(
-            first_article_response.status_code, 200, first_article_response.text
-        )
-
-        missing_report_binding = self.client.post(
-            f"/api/v1/production/orders/{order['id']}/end-production",
-            headers=self._headers(),
-            json={
-                "order_process_id": second_instance["order_process_id"],
-                "quantity": 1,
-            },
-        )
-        self.assertEqual(missing_report_binding.status_code, 400)
-        self.assertIn(
-            "Pipeline instance binding is required", missing_report_binding.text
-        )
 
         report_response = self.client.post(
             f"/api/v1/production/orders/{order['id']}/end-production",
             headers=self._headers(),
             json={
                 "order_process_id": second_instance["order_process_id"],
-                "pipeline_instance_id": second_instance["id"],
                 "quantity": 1,
             },
         )
         self.assertEqual(report_response.status_code, 200, report_response.text)
+
+    def test_disable_pipeline_mode_rejects_when_selected_processes_unfinished(self) -> None:
+        stage_a = self._create_stage("PD1")
+        process_a = self._create_process(
+            stage_id=stage_a["id"], stage_code=stage_a["code"], suffix="PD1"
+        )
+        stage_b = self._create_stage("PD2")
+        process_b = self._create_process(
+            stage_id=stage_b["id"], stage_code=stage_b["code"], suffix="PD2"
+        )
+        product = self._create_product("流水线关闭门禁")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {
+                    "step_order": 1,
+                    "stage_id": stage_a["id"],
+                    "process_id": process_a["id"],
+                },
+                {
+                    "step_order": 2,
+                    "stage_id": stage_b["id"],
+                    "process_id": process_b["id"],
+                },
+            ],
+        )
+
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            admin = db.query(User).filter(User.username == "admin").first()
+            assert order_row is not None and admin is not None
+            process_rows = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == order_row.id)
+                .order_by(ProductionOrderProcess.process_order.asc())
+                .all()
+            )
+            self.assertEqual(len(process_rows), 2)
+            for process_row in process_rows:
+                existing = (
+                    db.query(ProductionSubOrder)
+                    .filter(
+                        ProductionSubOrder.order_process_id == process_row.id,
+                        ProductionSubOrder.operator_user_id == admin.id,
+                    )
+                    .first()
+                )
+                if existing is None:
+                    db.add(
+                        ProductionSubOrder(
+                            order_process_id=process_row.id,
+                            operator_user_id=admin.id,
+                            completed_quantity=0,
+                            status="pending",
+                        )
+                    )
+            db.commit()
+        finally:
+            db.close()
+
+        enable_response = self.client.put(
+            f"/api/v1/production/orders/{order['id']}/pipeline-mode",
+            headers=self._headers(),
+            json={
+                "enabled": True,
+                "process_codes": [process_a["code"], process_b["code"]],
+            },
+        )
+        self.assertEqual(enable_response.status_code, 200, enable_response.text)
+
+        disable_response = self.client.put(
+            f"/api/v1/production/orders/{order['id']}/pipeline-mode",
+            headers=self._headers(),
+            json={
+                "enabled": False,
+                "process_codes": [],
+            },
+        )
+        self.assertEqual(disable_response.status_code, 409, disable_response.text)
 
     def test_manual_production_export_uses_chinese_order_status_label(self) -> None:
         stage = self._create_stage("M1")

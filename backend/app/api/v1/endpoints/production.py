@@ -1847,7 +1847,6 @@ def _to_pipeline_instance_item(row: object) -> PipelineInstanceItem:
     return PipelineInstanceItem(
         id=row.id,
         pipeline_link_id=row.pipeline_link_id,
-        sub_order_id=row.sub_order_id,
         order_id=row.order_id,
         order_code=row.order.order_code if row.order else "",
         order_process_id=row.order_process_id,
@@ -2031,7 +2030,6 @@ def get_pipeline_instances_api(
     order_id: int | None = Query(default=None),
     order_code: str | None = Query(default=None),
     order_process_id: int | None = Query(default=None),
-    sub_order_id: int | None = Query(default=None),
     process_keyword: str | None = Query(default=None),
     pipeline_instance_no: str | None = Query(default=None),
     is_active: bool | None = Query(default=None),
@@ -2046,7 +2044,6 @@ def get_pipeline_instances_api(
             order_id=order_id,
             order_code=order_code,
             order_process_id=order_process_id,
-            sub_order_id=sub_order_id,
             process_keyword=process_keyword,
             pipeline_instance_no=pipeline_instance_no,
             is_active=is_active,

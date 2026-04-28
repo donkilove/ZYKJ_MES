@@ -252,6 +252,97 @@ def get_active_pipeline_instance_for_sub_order(
     return rows[0]
 
 
+def get_active_pipeline_instance_for_process(
+    db: Session,
+    *,
+    order_process_id: int,
+    pipeline_instance_id: int,
+) -> ProcessPipelineInstance | None:
+    return (
+        db.execute(
+            select(ProcessPipelineInstance)
+            .where(
+                ProcessPipelineInstance.id == pipeline_instance_id,
+                ProcessPipelineInstance.order_process_id == order_process_id,
+                ProcessPipelineInstance.is_active.is_(True),
+            )
+        )
+        .scalars()
+        .first()
+    )
+
+
+def allocate_pipeline_instance_for_process(
+    db: Session,
+    *,
+    order: ProductionOrder,
+    process_row: ProductionOrderProcess,
+    preferred_pipeline_seq: int | None = None,
+    preferred_pipeline_link_id: str | None = None,
+) -> ProcessPipelineInstance:
+    existing_rows = (
+        db.execute(
+            select(ProcessPipelineInstance)
+            .where(
+                ProcessPipelineInstance.order_id == order.id,
+                ProcessPipelineInstance.order_process_id == process_row.id,
+                ProcessPipelineInstance.is_active.is_(True),
+            )
+            .order_by(ProcessPipelineInstance.pipeline_seq.asc(), ProcessPipelineInstance.id.asc())
+            .with_for_update()
+        )
+        .scalars()
+        .all()
+    )
+
+    used_seqs = {int(row.pipeline_seq) for row in existing_rows}
+    if preferred_pipeline_seq is not None:
+        pipeline_seq = int(preferred_pipeline_seq)
+        if pipeline_seq in used_seqs:
+            raise RuntimeError("Current process pipeline instance already exists for requested sequence")
+    else:
+        pipeline_seq = 1
+        while pipeline_seq in used_seqs:
+            pipeline_seq += 1
+
+    previous_process = _find_previous_process_row(order=order, process_row=process_row)
+    pipeline_link_id = (preferred_pipeline_link_id or "").strip() or None
+    if previous_process is not None and _is_parallel_edge_enabled(
+        order=order,
+        previous_process_code=previous_process.process_code,
+        current_process_code=process_row.process_code,
+    ):
+        if pipeline_link_id is None:
+            previous_instance = get_active_pipeline_instance_for_process_sequence(
+                db,
+                order_id=order.id,
+                order_process_id=previous_process.id,
+                pipeline_seq=pipeline_seq,
+            )
+            if previous_instance is not None:
+                pipeline_link_id = previous_instance.pipeline_link_id
+
+    if not pipeline_link_id:
+        pipeline_link_id = f"PL{order.id}-{pipeline_seq}-{uuid4().hex[:10]}"
+
+    pipeline_no = f"P{order.id}-{process_row.process_order}-{pipeline_seq}-{uuid4().hex[:6]}"
+    row = ProcessPipelineInstance(
+        pipeline_link_id=pipeline_link_id,
+        sub_order_id=None,
+        order_id=order.id,
+        order_process_id=process_row.id,
+        process_code=process_row.process_code,
+        pipeline_seq=pipeline_seq,
+        pipeline_instance_no=pipeline_no,
+        is_active=True,
+        invalid_reason=None,
+        invalidated_at=None,
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
 def is_pipeline_start_allowed_for_process(
     *,
     order: ProductionOrder,
@@ -685,72 +776,7 @@ def _create_pipeline_instances_for_order(
     order: ProductionOrder,
     selected_codes: list[str],
 ) -> int:
-    if not selected_codes:
-        return 0
-    sub_rows = db.execute(
-        select(ProductionSubOrder, ProductionOrderProcess)
-        .join(ProductionSubOrder.order_process)
-        .where(
-            ProductionOrderProcess.order_id == order.id,
-            ProductionOrderProcess.process_code.in_(selected_codes),
-        )
-        .order_by(
-            ProductionOrderProcess.process_order.asc(),
-            ProductionSubOrder.operator_user_id.asc(),
-            ProductionSubOrder.id.asc(),
-        )
-    ).all()
-    grouped_by_process: dict[
-        int, list[tuple[ProductionSubOrder, ProductionOrderProcess]]
-    ] = {}
-    for sub_order, process_row in sub_rows:
-        grouped_by_process.setdefault(int(process_row.id), []).append(
-            (sub_order, process_row)
-        )
-
-    link_ids_by_seq: dict[int, str] = {}
-    max_pipeline_seq = 0
-    for process_code in selected_codes:
-        process_rows = [
-            item
-            for rows in grouped_by_process.values()
-            for item in rows
-            if item[1].process_code == process_code
-        ]
-        max_pipeline_seq = max(max_pipeline_seq, len(process_rows))
-    for pipeline_seq in range(1, max_pipeline_seq + 1):
-        link_ids_by_seq[pipeline_seq] = (
-            f"PL{order.id}-{pipeline_seq}-{uuid4().hex[:10]}"
-        )
-
-    created = 0
-    for process_code in selected_codes:
-        process_rows = [
-            item
-            for rows in grouped_by_process.values()
-            for item in rows
-            if item[1].process_code == process_code
-        ]
-        for pipeline_seq, (sub_order, process_row) in enumerate(process_rows, start=1):
-            pipeline_no = f"P{order.id}-{process_row.process_order}-{pipeline_seq}-{uuid4().hex[:6]}"
-            db.add(
-                ProcessPipelineInstance(
-                    pipeline_link_id=link_ids_by_seq[pipeline_seq],
-                    sub_order_id=sub_order.id,
-                    order_id=order.id,
-                    order_process_id=process_row.id,
-                    process_code=process_row.process_code,
-                    pipeline_seq=pipeline_seq,
-                    pipeline_instance_no=pipeline_no,
-                    is_active=True,
-                    invalid_reason=None,
-                    invalidated_at=None,
-                )
-            )
-            created += 1
-    if created:
-        db.flush()
-    return created
+    return 0
 
 
 def get_active_pipeline_instance_for_process_sequence(
@@ -921,6 +947,15 @@ def update_order_pipeline_mode(
             order.pipeline_process_codes
         ),
     )
+
+    if not enabled and previous_enabled:
+        unfinished_selected_rows = [
+            row
+            for row in process_rows
+            if row.process_code in previous_codes and row.status != PROCESS_STATUS_COMPLETED
+        ]
+        if unfinished_selected_rows:
+            raise RuntimeError("存在未完成工序，不能关闭流水线模式")
 
     order.pipeline_enabled = bool(enabled)
     order.pipeline_process_codes = _pipeline_process_codes_to_text(
@@ -2436,7 +2471,6 @@ def list_pipeline_instances(
     order_id: int | None = None,
     order_code: str | None = None,
     order_process_id: int | None = None,
-    sub_order_id: int | None = None,
     process_keyword: str | None = None,
     pipeline_instance_no: str | None = None,
     is_active: bool | None = None,
@@ -2461,8 +2495,6 @@ def list_pipeline_instances(
         stmt = stmt.where(
             ProcessPipelineInstance.order_process_id == order_process_id
         )
-    if sub_order_id is not None:
-        stmt = stmt.where(ProcessPipelineInstance.sub_order_id == sub_order_id)
     if process_keyword is not None and process_keyword.strip():
         like_pattern = f"%{process_keyword.strip()}%"
         stmt = stmt.join(

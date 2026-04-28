@@ -828,7 +828,6 @@ class OrdersExportRequest(BaseModel):
 class PipelineInstanceItem(BaseModel):
     id: int
     pipeline_link_id: str | None = None
-    sub_order_id: int
     order_id: int
     order_code: str
     order_process_id: int

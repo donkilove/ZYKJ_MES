@@ -38,7 +38,9 @@ from app.services.assist_authorization_service import (
 from app.services.authz_service import has_permission
 from app.services.production_event_log_service import add_order_event_log
 from app.services.production_order_service import (
+    allocate_pipeline_instance_for_process,
     ensure_sub_orders_visible_quantity,
+    get_active_pipeline_instance_for_process,
     get_active_pipeline_instance_for_sub_order,
     get_active_pipeline_instance_for_link_id,
     get_active_pipeline_instance_for_process_sequence,
@@ -186,19 +188,103 @@ def _get_required_pipeline_instance(
     if not pipeline_process_selected:
         return None
     if pipeline_instance_id is None:
-        raise ValueError("Pipeline instance binding is required for current process")
-    current_instance = get_active_pipeline_instance_for_sub_order(
+        return None
+    current_instance = get_active_pipeline_instance_for_process(
         db,
-        sub_order_id=sub_order.id,
         order_process_id=process_row.id,
+        pipeline_instance_id=pipeline_instance_id,
     )
     if current_instance is None:
-        raise RuntimeError("Current process has no active pipeline instance")
-    if current_instance.id != pipeline_instance_id:
-        raise RuntimeError(
-            "Pipeline instance binding does not match current executable task"
-        )
+        raise RuntimeError("Pipeline instance binding does not match current executable task")
     return current_instance
+
+
+def _resolve_pipeline_instance_for_first_article(
+    db: Session,
+    *,
+    order: ProductionOrder,
+    process_row: ProductionOrderProcess,
+    sub_order: ProductionSubOrder,
+    pipeline_instance_id: int | None,
+) -> ProcessPipelineInstance | None:
+    pipeline_process_selected = is_pipeline_process_selected_for_order(
+        order=order,
+        process_code=process_row.process_code,
+    )
+    if not pipeline_process_selected:
+        return None
+    if pipeline_instance_id is not None:
+        current_instance = get_active_pipeline_instance_for_process(
+            db,
+            order_process_id=process_row.id,
+            pipeline_instance_id=pipeline_instance_id,
+        )
+        if current_instance is None:
+            raise RuntimeError("Pipeline instance binding does not match current executable task")
+        return current_instance
+
+    previous_process = _lock_previous_process(
+        db,
+        order_id=order.id,
+        process_order=process_row.process_order,
+    )
+    if previous_process is None or not is_pipeline_parallel_edge_for_processes(
+        order=order,
+        previous_process_code=previous_process.process_code if previous_process else "",
+        current_process_code=process_row.process_code,
+    ):
+        return allocate_pipeline_instance_for_process(
+            db,
+            order=order,
+            process_row=process_row,
+        )
+
+    candidate_previous_instances = (
+        db.execute(
+            select(ProcessPipelineInstance)
+            .where(
+                ProcessPipelineInstance.order_id == order.id,
+                ProcessPipelineInstance.order_process_id == previous_process.id,
+                ProcessPipelineInstance.is_active.is_(True),
+            )
+            .order_by(ProcessPipelineInstance.pipeline_seq.asc(), ProcessPipelineInstance.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+    if not candidate_previous_instances:
+        raise RuntimeError("Previous process pipeline instance is missing or inactive")
+
+    existing_current_instances = (
+        db.execute(
+            select(ProcessPipelineInstance)
+            .where(
+                ProcessPipelineInstance.order_id == order.id,
+                ProcessPipelineInstance.order_process_id == process_row.id,
+                ProcessPipelineInstance.is_active.is_(True),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    used_seqs = {int(row.pipeline_seq) for row in existing_current_instances}
+    chosen_previous = next(
+        (
+            row
+            for row in candidate_previous_instances
+            if row.pipeline_seq not in used_seqs
+        ),
+        None,
+    )
+    if chosen_previous is None:
+        raise RuntimeError("Previous process pipeline instance is missing or inactive")
+    return allocate_pipeline_instance_for_process(
+        db,
+        order=order,
+        process_row=process_row,
+        preferred_pipeline_seq=int(chosen_previous.pipeline_seq),
+        preferred_pipeline_link_id=chosen_previous.pipeline_link_id,
+    )
 
 
 def _ensure_pipeline_sequence_gate(
@@ -242,21 +328,7 @@ def _ensure_pipeline_sequence_gate(
         )
     if previous_instance is None:
         raise RuntimeError("Previous process pipeline instance is missing or inactive")
-    previous_sub_order = (
-        db.execute(
-            select(ProductionSubOrder)
-            .where(ProductionSubOrder.id == previous_instance.sub_order_id)
-            .with_for_update()
-        )
-        .scalars()
-        .first()
-    )
-    if previous_sub_order is None:
-        raise RuntimeError("Previous process linked sub-order is missing")
-    if previous_sub_order.completed_quantity <= 0:
-        raise RuntimeError(
-            "Current process is blocked by previous pipeline instance progress"
-        )
+    return
 
 
 def _is_start_gate_allowed(
@@ -277,7 +349,11 @@ def _is_start_gate_allowed(
         previous_process_code=previous_process.process_code,
         current_process_code=process_row.process_code,
     ):
-        return previous_process.completed_quantity > 0
+        return previous_process.status in {
+            PROCESS_STATUS_IN_PROGRESS,
+            PROCESS_STATUS_PARTIAL,
+            PROCESS_STATUS_COMPLETED,
+        }
     return previous_process.status == PROCESS_STATUS_COMPLETED
 
 
@@ -490,7 +566,7 @@ def submit_first_article(
     )
     if sub_order.status != SUB_ORDER_STATUS_PENDING:
         raise ValueError("Current sub-order does not allow first-article operation")
-    pipeline_instance = _get_required_pipeline_instance(
+    pipeline_instance = _resolve_pipeline_instance_for_first_article(
         db,
         order=order,
         process_row=process_row,
@@ -520,7 +596,19 @@ def submit_first_article(
         or 0
     )
     pool_remaining = max(process_remaining - in_progress_count, 0)
-    if pool_remaining <= 0:
+    pipeline_parallel_edge = False
+    previous_process = _lock_previous_process(
+        db,
+        order_id=order.id,
+        process_order=process_row.process_order,
+    )
+    if previous_process is not None:
+        pipeline_parallel_edge = is_pipeline_parallel_edge_for_processes(
+            order=order,
+            previous_process_code=previous_process.process_code,
+            current_process_code=process_row.process_code,
+        )
+    if pool_remaining <= 0 and not (pipeline_parallel_edge and pipeline_instance is not None):
         raise ValueError("No producible quantity available for current user")
     if not _is_start_gate_allowed(db, order=order, process_row=process_row):
         raise ValueError("Current process is blocked by pipeline start gate")
