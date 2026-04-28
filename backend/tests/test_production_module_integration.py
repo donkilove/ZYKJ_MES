@@ -1599,6 +1599,156 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(switch_response.status_code, 400, switch_response.text)
         self.assertIn("供应商不存在或已停用", switch_response.text)
 
+    def test_update_order_preserves_historical_process_binding_rows(self) -> None:
+        stage_a = self._create_stage("UPH1")
+        process_a = self._create_process(
+            stage_id=stage_a["id"], stage_code=stage_a["code"], suffix="UPH1"
+        )
+        stage_b = self._create_stage("UPH2")
+        process_b = self._create_process(
+            stage_id=stage_b["id"], stage_code=stage_b["code"], suffix="UPH2"
+        )
+        product = self._create_product("改单保留历史工序")
+        self._activate_product(product)
+        supplier = self._create_supplier(f"改单历史供应商{int(time.time() * 1000)}")
+
+        with patch("app.services.production_order_service.create_message_for_users"):
+            create_response = self.client.post(
+                "/api/v1/production/orders",
+                headers=self._headers(),
+                json={
+                    "order_code": f"PO-UPH-{int(time.time() * 1000)}",
+                    "product_id": product["id"],
+                    "supplier_id": supplier["id"],
+                    "quantity": 10,
+                    "process_steps": [
+                        {
+                            "step_order": 1,
+                            "stage_id": stage_a["id"],
+                            "process_id": process_a["id"],
+                        }
+                    ],
+                },
+            )
+        self.assertEqual(create_response.status_code, 201, create_response.text)
+        order = create_response.json()["data"]
+        self.order_ids.append(int(order["id"]))
+
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            admin = db.query(User).filter(User.username == "admin").first()
+            assert order_row is not None and admin is not None
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == order_row.id)
+                .first()
+            )
+            assert process_row is not None
+
+            first_article = FirstArticleRecord(
+                order_id=order_row.id,
+                order_process_id=process_row.id,
+                operator_user_id=admin.id,
+                verification_date=date.today(),
+                verification_code="legacy-code",
+                result="passed",
+                check_content="原始首件",
+                test_value="原始值",
+            )
+            db.add(first_article)
+            db.flush()
+
+            production_record = ProductionRecord(
+                order_id=order_row.id,
+                order_process_id=process_row.id,
+                sub_order_id=None,
+                operator_user_id=admin.id,
+                production_quantity=3,
+                record_type="production",
+            )
+            db.add(production_record)
+            db.flush()
+
+            repair_order = RepairOrder(
+                repair_order_code=f"RW-UPH-{int(time.time() * 1000)}",
+                source_order_id=order_row.id,
+                source_order_code=order_row.order_code,
+                product_id=order_row.product_id,
+                product_name=order_row.product.name if order_row.product else None,
+                source_order_process_id=process_row.id,
+                source_process_code=process_row.process_code,
+                source_process_name=process_row.process_name,
+                sender_user_id=admin.id,
+                sender_username=admin.username,
+                production_quantity=3,
+                repair_quantity=1,
+                repaired_quantity=0,
+                scrap_quantity=0,
+                scrap_replenished=False,
+                repair_time=datetime.now(UTC),
+                status="completed",
+                completed_at=datetime.now(UTC),
+                repair_operator_user_id=admin.id,
+                repair_operator_username=admin.username,
+            )
+            db.add(repair_order)
+            db.commit()
+            original_process_row_id = int(process_row.id)
+        finally:
+            db.close()
+
+        with patch("app.services.production_order_service.create_message_for_users"):
+            update_response = self.client.put(
+                f"/api/v1/production/orders/{order['id']}",
+                headers=self._headers(),
+                json={
+                    "product_id": product["id"],
+                    "supplier_id": supplier["id"],
+                    "quantity": 12,
+                    "process_steps": [
+                        {
+                            "step_order": 1,
+                            "stage_id": stage_a["id"],
+                            "process_id": process_a["id"],
+                        },
+                        {
+                            "step_order": 2,
+                            "stage_id": stage_b["id"],
+                            "process_id": process_b["id"],
+                        },
+                    ],
+                },
+            )
+        self.assertEqual(update_response.status_code, 200, update_response.text)
+
+        db = SessionLocal()
+        try:
+            first_article = (
+                db.query(FirstArticleRecord)
+                .filter(FirstArticleRecord.order_id == int(order["id"]))
+                .order_by(FirstArticleRecord.id.desc())
+                .first()
+            )
+            production_record = (
+                db.query(ProductionRecord)
+                .filter(ProductionRecord.order_id == int(order["id"]))
+                .order_by(ProductionRecord.id.desc())
+                .first()
+            )
+            repair_order = (
+                db.query(RepairOrder)
+                .filter(RepairOrder.source_order_id == int(order["id"]))
+                .order_by(RepairOrder.id.desc())
+                .first()
+            )
+            assert first_article is not None and production_record is not None and repair_order is not None
+            self.assertEqual(first_article.order_process_id, original_process_row_id)
+            self.assertEqual(production_record.order_process_id, original_process_row_id)
+            self.assertEqual(repair_order.source_order_process_id, original_process_row_id)
+        finally:
+            db.close()
+
     def test_my_orders_contract_includes_supplier_due_date_and_remark(self) -> None:
         stage = self._create_stage("MYORD")
         process = self._create_process(

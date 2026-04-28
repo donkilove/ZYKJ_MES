@@ -35,6 +35,7 @@ from app.core.authz_catalog import (
 )
 from app.core.rbac import ROLE_OPERATOR, ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN
 from app.models.process import Process
+from app.models.first_article_record import FirstArticleRecord
 from app.models.first_article_review_session import FirstArticleReviewSession
 from app.models.order_sub_order_pipeline_instance import ProcessPipelineInstance
 from app.models.production_assist_authorization import ProductionAssistAuthorization
@@ -1092,6 +1093,23 @@ def _build_order_process_rows(
     return rows
 
 
+def _order_process_has_history(db: Session, *, order_process_id: int) -> bool:
+    has_first_article = db.execute(
+        select(FirstArticleRecord.id).where(FirstArticleRecord.order_process_id == order_process_id)
+    ).first()
+    if has_first_article is not None:
+        return True
+    has_production = db.execute(
+        select(ProductionRecord.id).where(ProductionRecord.order_process_id == order_process_id)
+    ).first()
+    if has_production is not None:
+        return True
+    has_repair = db.execute(
+        select(RepairOrder.id).where(RepairOrder.source_order_process_id == order_process_id)
+    ).first()
+    return has_repair is not None
+
+
 def _route_process_codes(route_steps: list[tuple[ProcessStage, Process]]) -> list[str]:
     return [process.code for _, process in route_steps]
 
@@ -1436,14 +1454,17 @@ def update_order(
         )
     resolved_process_codes = _route_process_codes(route_steps)
 
-    # Rebuild process/sub-order assignment for pending orders.
-    db.execute(
-        select(ProductionOrderProcess)
-        .where(ProductionOrderProcess.order_id == order.id)
-        .with_for_update()
+    existing_rows = (
+        db.execute(
+            select(ProductionOrderProcess)
+            .where(ProductionOrderProcess.order_id == order.id)
+            .options(selectinload(ProductionOrderProcess.sub_orders))
+            .order_by(ProductionOrderProcess.process_order.asc(), ProductionOrderProcess.id.asc())
+            .with_for_update()
+        )
+        .scalars()
+        .all()
     )
-    order.processes = []
-    db.flush()
 
     order.product_id = product_id
     order.supplier_id = supplier.id
@@ -1460,17 +1481,58 @@ def update_order(
     _set_order_supplier_snapshot(order=order, supplier=supplier)
     _set_order_template_snapshot(order=order, template=final_template)
 
-    process_rows = _build_order_process_rows(
-        db,
-        order=order,
-        route_steps=route_steps,
-    )
-    for row in process_rows:
-        ensure_sub_orders_visible_quantity(
-            db,
-            process_row=row,
-            target_visible_quantity=row.visible_quantity,
+    process_rows: list[ProductionOrderProcess] = []
+    for idx, (stage, process) in enumerate(route_steps, start=1):
+        existing_row = existing_rows[idx - 1] if idx <= len(existing_rows) else None
+        if existing_row is None:
+            row = ProductionOrderProcess(
+                order_id=order.id,
+                process_id=process.id,
+                stage_id=stage.id,
+                stage_code=stage.code,
+                stage_name=stage.name,
+                process_code=process.code,
+                process_name=process.name,
+                process_order=idx,
+                status=PROCESS_STATUS_PENDING,
+                visible_quantity=order.quantity if idx == 1 else 0,
+                completed_quantity=0,
+            )
+            db.add(row)
+            process_rows.append(row)
+            continue
+
+        has_history = _order_process_has_history(db, order_process_id=existing_row.id)
+        changed_snapshot = (
+            existing_row.process_id != process.id
+            or existing_row.stage_id != stage.id
+            or existing_row.process_code != process.code
+            or existing_row.stage_code != stage.code
         )
+        if has_history and changed_snapshot:
+            raise RuntimeError("存在历史记录绑定的工序，不能通过改单直接替换；请保留历史工序并追加后续工序")
+
+        existing_row.process_id = process.id
+        existing_row.stage_id = stage.id
+        existing_row.stage_code = stage.code
+        existing_row.stage_name = stage.name
+        existing_row.process_code = process.code
+        existing_row.process_name = process.name
+        existing_row.process_order = idx
+        if not has_history:
+            existing_row.status = PROCESS_STATUS_PENDING
+            existing_row.completed_quantity = 0
+            existing_row.visible_quantity = order.quantity if idx == 1 else 0
+        elif idx == 1:
+            existing_row.visible_quantity = max(int(existing_row.completed_quantity or 0), order.quantity)
+        process_rows.append(existing_row)
+
+    for extra_row in existing_rows[len(route_steps):]:
+        if _order_process_has_history(db, order_process_id=extra_row.id):
+            raise RuntimeError("存在历史记录绑定的尾部工序，不能通过改单直接删除")
+        db.delete(extra_row)
+
+    db.flush()
 
     add_order_event_log(
         db,
