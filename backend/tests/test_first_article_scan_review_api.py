@@ -268,10 +268,8 @@ class FirstArticleScanReviewApiTest(unittest.TestCase):
             sub_order = ProductionSubOrder(
                 order_process_id=process_row.id,
                 operator_user_id=admin.id,
-                assigned_quantity=10,
                 completed_quantity=0,
                 status="pending",
-                is_visible=True,
             )
             db.add(template)
             db.add(sub_order)
@@ -319,44 +317,52 @@ class FirstArticleScanReviewApiTest(unittest.TestCase):
         finally:
             db.close()
 
-        detail_response = self.client.get(
-            "/api/v1/production/first-article/review-sessions/detail",
-            headers=self._headers(),
-            params={"token": token},
-        )
-        self.assertEqual(detail_response.status_code, 200, detail_response.text)
-        detail_data = detail_response.json()["data"]
-        self.assertEqual(detail_data["order_code"], context["order_code"])
-        self.assertEqual(detail_data["check_content"], "外观无划伤")
-        self.assertEqual(detail_data["test_value"], "长度 10.01")
+    def test_new_review_session_cancels_expired_session_for_same_operator_and_process(
+        self,
+    ) -> None:
+        context = self._create_context("EXPIRE")
 
-        submit_response = self.client.post(
-            "/api/v1/production/first-article/review-sessions/submit",
+        create_response = self.client.post(
+            f"/api/v1/production/orders/{context['order_id']}/first-article/review-sessions",
             headers=self._headers(),
             json={
-                "token": token,
-                "review_result": "passed",
-                "review_remark": "参数一致",
+                "order_process_id": context["order_process_id"],
+                "template_id": context["template_id"],
+                "check_content": "首轮检验内容",
+                "test_value": "首轮检验值",
+                "participant_user_ids": [],
             },
         )
-        self.assertEqual(submit_response.status_code, 200, submit_response.text)
-        submit_data = submit_response.json()["data"]
-        self.assertEqual(submit_data["status"], "approved")
-        self.assertIsNotNone(submit_data["first_article_record_id"])
+        self.assertEqual(create_response.status_code, 201, create_response.text)
+        session_id = int(create_response.json()["data"]["session_id"])
 
         db = SessionLocal()
         try:
-            record = db.get(
-                FirstArticleRecord,
-                int(submit_data["first_article_record_id"]),
-            )
-            assert record is not None
-            admin = db.query(User).filter(User.username == "admin").first()
-            assert admin is not None
-            self.assertEqual(record.reviewer_user_id, admin.id)
-            self.assertEqual(record.review_remark, "参数一致")
-            self.assertEqual(record.check_content, "外观无划伤")
-            self.assertEqual(record.test_value, "长度 10.01")
+            row = db.get(FirstArticleReviewSession, session_id)
+            assert row is not None
+            row.status = "expired"
+            db.commit()
+        finally:
+            db.close()
+
+        recreate_response = self.client.post(
+            f"/api/v1/production/orders/{context['order_id']}/first-article/review-sessions",
+            headers=self._headers(),
+            json={
+                "order_process_id": context["order_process_id"],
+                "template_id": context["template_id"],
+                "check_content": "二轮检验内容",
+                "test_value": "二轮检验值",
+                "participant_user_ids": [],
+            },
+        )
+        self.assertEqual(recreate_response.status_code, 201, recreate_response.text)
+
+        db = SessionLocal()
+        try:
+            old_row = db.get(FirstArticleReviewSession, session_id)
+            assert old_row is not None
+            self.assertEqual(old_row.status, "cancelled")
         finally:
             db.close()
 

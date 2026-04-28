@@ -6,34 +6,34 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin
 
 
-class OrderSubOrderPipelineInstance(Base, TimestampMixin):
-    __tablename__ = "mes_order_sub_order_pipeline_instance"
+class ProcessPipelineInstance(Base, TimestampMixin):
+    __tablename__ = "mes_process_pipeline_instance"
     __table_args__ = (
         UniqueConstraint(
             "sub_order_id",
             "pipeline_seq",
-            name="uq_mes_order_sub_order_pipeline_instance_sub_order_seq",
+            name="uq_mes_process_pipeline_instance_sub_order_seq",
         ),
         UniqueConstraint(
-            "pipeline_sub_order_no",
-            name="uq_mes_order_sub_order_pipeline_instance_no",
+            "pipeline_instance_no",
+            name="uq_mes_process_pipeline_instance_no",
         ),
         Index(
-            "ix_mes_order_sub_order_pipeline_instance_order_process",
+            "ix_mes_process_pipeline_instance_order_process",
             "order_id",
             "order_process_id",
         ),
         Index(
-            "ix_mes_order_sub_order_pipeline_instance_is_active",
+            "ix_mes_process_pipeline_instance_is_active",
             "is_active",
         ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     pipeline_link_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
-    sub_order_id: Mapped[int] = mapped_column(
-        ForeignKey("mes_order_sub_order.id", ondelete="CASCADE"),
-        nullable=False,
+    sub_order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("mes_order_sub_order.id", ondelete="SET NULL"),
+        nullable=True,
         index=True,
     )
     order_id: Mapped[int] = mapped_column(
@@ -48,7 +48,7 @@ class OrderSubOrderPipelineInstance(Base, TimestampMixin):
     )
     process_code: Mapped[str] = mapped_column(String(64), nullable=False)
     pipeline_seq: Mapped[int] = mapped_column(Integer, nullable=False)
-    pipeline_sub_order_no: Mapped[str] = mapped_column(String(64), nullable=False)
+    pipeline_instance_no: Mapped[str] = mapped_column(String(64), nullable=False)
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

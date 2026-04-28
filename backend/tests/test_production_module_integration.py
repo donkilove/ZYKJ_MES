@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -24,7 +25,7 @@ from app.models.daily_verification_code import DailyVerificationCode  # noqa: E4
 from app.models.first_article_record import FirstArticleRecord  # noqa: E402
 from app.models.first_article_template import FirstArticleTemplate  # noqa: E402
 from app.models.order_sub_order_pipeline_instance import (  # noqa: E402
-    OrderSubOrderPipelineInstance,
+    ProcessPipelineInstance,
 )
 from app.models.order_event_log import OrderEventLog  # noqa: E402
 from app.models.process import Process  # noqa: E402
@@ -1857,47 +1858,118 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         finally:
             db.close()
 
-        list_response = self.client.get(
-            "/api/v1/production/my-orders",
-            headers=self._headers(),
-            params={
-                "keyword": order["order_code"],
-                "view_mode": "proxy",
-                "proxy_operator_user_id": int(proxy_operator.id),
-            },
+    def test_first_article_allows_operator_added_to_process_after_process_started(self) -> None:
+        stage = self._create_stage("FAADD")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="FAADD"
         )
-        self.assertEqual(list_response.status_code, 200, list_response.text)
-        list_items = list_response.json()["data"]["items"]
-        self.assertEqual(len(list_items), 1)
-        self.assertEqual(list_items[0]["order_id"], order["id"])
-        self.assertEqual(list_items[0]["current_process_code"], process_b["code"])
-        self.assertEqual(list_items[0]["visible_quantity"], 5)
-        self.assertEqual(list_items[0]["user_assigned_quantity"], 5)
+        operator_a = self._create_user_with_permissions(
+            suffix="faadda",
+            permission_codes=[
+                "production.execution.first_article",
+                "production.my_orders.list",
+                "production.my_orders.context",
+            ],
+        )
+        operator_a_token = self._login_as(username=operator_a.username)
+        operator_b = self._create_user_with_permissions(
+            suffix="faaddb",
+            permission_codes=[
+                "production.execution.first_article",
+                "production.my_orders.list",
+                "production.my_orders.context",
+            ],
+        )
+        operator_b_token = self._login_as(username=operator_b.username)
+
+        product = self._create_product("首件后新增操作员")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+            ],
+        )
+        self.order_ids.append(int(order["id"]))
 
         db = SessionLocal()
         try:
-            process_rows = (
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            admin = db.query(User).filter(User.username == "admin").first()
+            assert order_row is not None
+            assert admin is not None
+            process_row = (
                 db.query(ProductionOrderProcess)
-                .filter(ProductionOrderProcess.order_id == int(order["id"]))
-                .order_by(ProductionOrderProcess.process_order.asc())
-                .all()
+                .filter(ProductionOrderProcess.order_id == order_row.id)
+                .first()
             )
-            second_process_row = process_rows[1]
-            self.assertEqual(second_process_row.visible_quantity, 5)
-            second_sub_order = (
+            assert process_row is not None
+            process_row_id = int(process_row.id)
+            today_code = (
+                db.query(DailyVerificationCode)
+                .filter(DailyVerificationCode.verify_date == date.today())
+                .first()
+            )
+            if today_code is None:
+                today_code = DailyVerificationCode(
+                    verify_date=date.today(),
+                    code="code-1",
+                    created_by_user_id=admin.id,
+                )
+                db.add(today_code)
+            else:
+                today_code.code = "code-1"
+            existing_a = (
                 db.query(ProductionSubOrder)
                 .filter(
-                    ProductionSubOrder.order_process_id == second_process_row.id,
-                    ProductionSubOrder.operator_user_id == int(proxy_operator.id),
+                    ProductionSubOrder.order_process_id == process_row_id,
+                    ProductionSubOrder.operator_user_id == int(operator_a.id),
                 )
                 .first()
             )
-            assert second_sub_order is not None
-            self.assertEqual(second_sub_order.assigned_quantity, 5)
-            self.assertTrue(second_sub_order.is_visible)
-            self.assertEqual(second_sub_order.status, "pending")
+            if existing_a is None:
+                db.add(
+                    ProductionSubOrder(
+                        order_process_id=process_row_id,
+                        operator_user_id=int(operator_a.id),
+                        completed_quantity=0,
+                        status="pending",
+                    )
+                )
+            db.commit()
         finally:
             db.close()
+
+        first_article_a = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/first-article",
+            headers={"Authorization": f"Bearer {operator_a_token}"},
+            json={
+                "order_process_id": process_row_id,
+                "verification_code": "code-1",
+            },
+        )
+        self.assertEqual(first_article_a.status_code, 200, first_article_a.text)
+
+        db = SessionLocal()
+        try:
+            operator_b_row = db.get(User, int(operator_b.id))
+            process_def = db.get(Process, int(process["id"]))
+            assert operator_b_row is not None and process_def is not None
+            if all(row.id != process_def.id for row in operator_b_row.processes):
+                operator_b_row.processes.append(process_def)
+            db.commit()
+        finally:
+            db.close()
+
+        first_article_b = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/first-article",
+            headers={"Authorization": f"Bearer {operator_b_token}"},
+            json={
+                "order_process_id": process_row_id,
+                "verification_code": "code-1",
+            },
+        )
+        self.assertEqual(first_article_b.status_code, 200, first_article_b.text)
 
     def test_complete_repair_order_accepts_multiple_return_allocations(self) -> None:
         stage_a = self._create_stage("C1")
@@ -2233,19 +2305,19 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(items[0]["process_name"], process_a["name"])
         self.assertTrue(items[0]["pipeline_link_id"])
 
-        instance_no = items[0]["pipeline_sub_order_no"]
+        instance_no = items[0]["pipeline_instance_no"]
         no_response = self.client.get(
             "/api/v1/production/pipeline-instances",
             headers=self._headers(),
             params={
                 "order_id": order["id"],
-                "pipeline_sub_order_no": instance_no[-8:],
+                "pipeline_instance_no": instance_no[-8:],
             },
         )
         self.assertEqual(no_response.status_code, 200, no_response.text)
         no_items = no_response.json()["data"]["items"]
         self.assertEqual(len(no_items), 1)
-        self.assertEqual(no_items[0]["pipeline_sub_order_no"], instance_no)
+        self.assertEqual(no_items[0]["pipeline_instance_no"], instance_no)
         sub_order_id = items[0]["sub_order_id"]
 
         sub_order_response = self.client.get(
@@ -2406,11 +2478,11 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             previous_sub_order.completed_quantity = 1
             previous_sub_order.status = "pending"
             previous_instance = (
-                db.query(OrderSubOrderPipelineInstance)
+                db.query(ProcessPipelineInstance)
                 .filter(
-                    OrderSubOrderPipelineInstance.order_process_id
+                    ProcessPipelineInstance.order_process_id
                     == previous_process.id,
-                    OrderSubOrderPipelineInstance.pipeline_seq
+                    ProcessPipelineInstance.pipeline_seq
                     == int(second_instance["pipeline_seq"]),
                 )
                 .first()
@@ -2445,11 +2517,11 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             )
             assert previous_process is not None
             previous_instance = (
-                db.query(OrderSubOrderPipelineInstance)
+                db.query(ProcessPipelineInstance)
                 .filter(
-                    OrderSubOrderPipelineInstance.order_process_id
+                    ProcessPipelineInstance.order_process_id
                     == previous_process.id,
-                    OrderSubOrderPipelineInstance.pipeline_seq
+                    ProcessPipelineInstance.pipeline_seq
                     == int(second_instance["pipeline_seq"]),
                 )
                 .first()

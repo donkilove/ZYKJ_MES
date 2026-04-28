@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.authz_catalog import PERM_PROD_MY_ORDERS_PROXY
@@ -16,7 +16,6 @@ from app.core.production_constants import (
     PROCESS_STATUS_PENDING,
     RECORD_TYPE_FIRST_ARTICLE,
     RECORD_TYPE_PRODUCTION,
-    SUB_ORDER_STATUS_DONE,
     SUB_ORDER_STATUS_IN_PROGRESS,
     SUB_ORDER_STATUS_PENDING,
 )
@@ -24,7 +23,7 @@ from app.models.daily_verification_code import DailyVerificationCode
 from app.models.first_article_participant import FirstArticleParticipant
 from app.models.first_article_record import FirstArticleRecord
 from app.models.first_article_template import FirstArticleTemplate
-from app.models.order_sub_order_pipeline_instance import OrderSubOrderPipelineInstance
+from app.models.order_sub_order_pipeline_instance import ProcessPipelineInstance
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_record import ProductionRecord
@@ -139,9 +138,14 @@ def _lock_sub_order(
         .first()
     )
     if not row:
-        raise ValueError("Sub-order assignment not found for current user")
-    if not row.is_visible:
-        raise ValueError("Sub-order is not visible for current user")
+        row = ProductionSubOrder(
+            order_process_id=order_process_id,
+            operator_user_id=operator_user_id,
+            completed_quantity=0,
+            status=SUB_ORDER_STATUS_PENDING,
+        )
+        db.add(row)
+        db.flush()
     return row
 
 
@@ -174,7 +178,7 @@ def _get_required_pipeline_instance(
     process_row: ProductionOrderProcess,
     sub_order: ProductionSubOrder,
     pipeline_instance_id: int | None,
-) -> OrderSubOrderPipelineInstance | None:
+) -> ProcessPipelineInstance | None:
     pipeline_process_selected = is_pipeline_process_selected_for_order(
         order=order,
         process_code=process_row.process_code,
@@ -203,7 +207,7 @@ def _ensure_pipeline_sequence_gate(
     order: ProductionOrder,
     process_row: ProductionOrderProcess,
     sub_order: ProductionSubOrder,
-    current_instance: OrderSubOrderPipelineInstance | None,
+    current_instance: ProcessPipelineInstance | None,
 ) -> None:
     if current_instance is None:
         return
@@ -313,17 +317,24 @@ def _refresh_order_status(db: Session, *, order: ProductionOrder) -> None:
         .scalars()
         .all()
     )
-    all_completed = all(row.status == PROCESS_STATUS_COMPLETED for row in process_rows)
-    if all_completed and process_rows:
+    first_incomplete = next(
+        (
+            row
+            for row in process_rows
+            if int(row.completed_quantity or 0) < int(row.visible_quantity or 0)
+        ),
+        None,
+    )
+    if first_incomplete is None and process_rows:
         order.status = ORDER_STATUS_COMPLETED
         order.current_process_code = None
         return
 
     order.status = ORDER_STATUS_IN_PROGRESS
-    for row in process_rows:
-        if row.status != PROCESS_STATUS_COMPLETED:
-            order.current_process_code = row.process_code
-            break
+    if first_incomplete is not None:
+        order.current_process_code = first_incomplete.process_code
+    elif process_rows:
+        order.current_process_code = process_rows[0].process_code
 
 
 def _normalize_first_article_result(result: str) -> str:
@@ -497,8 +508,19 @@ def submit_first_article(
     process_remaining = max(
         process_row.visible_quantity - process_row.completed_quantity, 0
     )
-    sub_remaining = max(sub_order.assigned_quantity - sub_order.completed_quantity, 0)
-    if min(process_remaining, sub_remaining) <= 0:
+    in_progress_count = (
+        db.execute(
+            select(func.count())
+            .select_from(ProductionSubOrder)
+            .where(
+                ProductionSubOrder.order_process_id == process_row.id,
+                ProductionSubOrder.status == SUB_ORDER_STATUS_IN_PROGRESS,
+            )
+        ).scalar()
+        or 0
+    )
+    pool_remaining = max(process_remaining - in_progress_count, 0)
+    if pool_remaining <= 0:
         raise ValueError("No producible quantity available for current user")
     if not _is_start_gate_allowed(db, order=order, process_row=process_row):
         raise ValueError("Current process is blocked by pipeline start gate")
@@ -538,7 +560,6 @@ def submit_first_article(
         if process_row.status == PROCESS_STATUS_PENDING:
             process_row.status = PROCESS_STATUS_IN_PROGRESS
         sub_order.status = SUB_ORDER_STATUS_IN_PROGRESS
-        sub_order.is_visible = True
         order.status = ORDER_STATUS_IN_PROGRESS
         if not order.current_process_code:
             order.current_process_code = process_row.process_code
@@ -607,7 +628,7 @@ def submit_first_article(
             "effective_operator_user_id": effective_user_id,
             "assist_authorization_id": assist_row.id if assist_row else None,
             "pipeline_instance_id": pipeline_instance.id if pipeline_instance else None,
-            "pipeline_instance_no": pipeline_instance.pipeline_sub_order_no
+            "pipeline_instance_no": pipeline_instance.pipeline_instance_no
             if pipeline_instance
             else None,
         },
@@ -694,8 +715,18 @@ def end_production(
     process_remaining = max(
         process_row.visible_quantity - process_row.completed_quantity, 0
     )
-    sub_remaining = max(sub_order.assigned_quantity - sub_order.completed_quantity, 0)
-    max_producible = min(process_remaining, sub_remaining)
+    in_progress_count = (
+        db.execute(
+            select(func.count())
+            .select_from(ProductionSubOrder)
+            .where(
+                ProductionSubOrder.order_process_id == process_row.id,
+                ProductionSubOrder.status == SUB_ORDER_STATUS_IN_PROGRESS,
+            )
+        ).scalar()
+        or 0
+    )
+    max_producible = max(process_remaining - in_progress_count + 1, 0)
     if max_producible <= 0:
         raise ValueError("No producible quantity available for current user")
     defect_quantity = 0
@@ -725,12 +756,7 @@ def end_production(
     else:
         process_row.status = PROCESS_STATUS_PARTIAL
 
-    if sub_order.completed_quantity >= sub_order.assigned_quantity:
-        sub_order.status = SUB_ORDER_STATUS_DONE
-        sub_order.is_visible = False
-    else:
-        sub_order.status = SUB_ORDER_STATUS_PENDING
-        sub_order.is_visible = True
+    sub_order.status = SUB_ORDER_STATUS_PENDING
 
     next_process = (
         db.execute(
@@ -821,7 +847,7 @@ def end_production(
             "pipeline_link_id": pipeline_instance.pipeline_link_id
             if pipeline_instance
             else None,
-            "pipeline_instance_no": pipeline_instance.pipeline_sub_order_no
+            "pipeline_instance_no": pipeline_instance.pipeline_instance_no
             if pipeline_instance
             else None,
             "repair_order_id": repair_row.id if repair_row else None,

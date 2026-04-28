@@ -79,7 +79,7 @@ class ProductionOrder(Base, TimestampMixin):
         passive_deletes=True,
     )
     pipeline_instances = relationship(
-        "OrderSubOrderPipelineInstance",
+        "ProcessPipelineInstance",
         back_populates="order",
         cascade="all, delete-orphan",
         passive_deletes=True,

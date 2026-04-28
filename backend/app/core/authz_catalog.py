@@ -77,6 +77,7 @@ PERM_PROD_REPAIR_ORDERS_COMPLETE = "production.repair_orders.complete"
 PERM_PROD_REPAIR_ORDERS_EXPORT = "production.repair_orders.export"
 PERM_PROD_ASSIST_AUTHORIZATIONS_LIST = "production.assist_authorizations.list"
 PERM_PROD_ASSIST_AUTHORIZATIONS_CREATE = "production.assist_authorizations.create"
+PERM_PROD_ASSIST_AUTHORIZATIONS_CANCEL = "production.assist_authorizations.cancel"
 PERM_PROD_ASSIST_USER_OPTIONS_LIST = "production.assist_user_options.list"
 PERM_PROD_ORDERS_EXPORT = "production.orders.export"
 PERM_PROD_PIPELINE_INSTANCES_LIST = "production.pipeline_instances.list"
@@ -1012,6 +1013,12 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
     (
         PERM_PROD_ASSIST_AUTHORIZATIONS_CREATE,
         "发起代班",
+        AUTHZ_MODULE_PRODUCTION,
+        "production_order_query",
+    ),
+    (
+        PERM_PROD_ASSIST_AUTHORIZATIONS_CANCEL,
+        "撤销代班",
         AUTHZ_MODULE_PRODUCTION,
         "production_order_query",
     ),

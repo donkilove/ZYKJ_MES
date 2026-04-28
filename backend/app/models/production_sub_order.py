@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, ForeignKey, Integer, String, UniqueConstraint, text
+from sqlalchemy import ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -25,17 +25,13 @@ class ProductionSubOrder(Base, TimestampMixin):
         nullable=False,
         index=True,
     )
-    assigned_quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     completed_quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)
-    is_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
 
     order_process = relationship("ProductionOrderProcess", back_populates="sub_orders")
     operator = relationship("User")
     production_records = relationship("ProductionRecord", back_populates="sub_order")
     pipeline_instances = relationship(
-        "OrderSubOrderPipelineInstance",
+        "ProcessPipelineInstance",
         back_populates="sub_order",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
     )

@@ -35,7 +35,7 @@ class FirstArticleReviewSession(Base, TimestampMixin):
         index=True,
     )
     pipeline_instance_id: Mapped[int | None] = mapped_column(
-        ForeignKey("mes_order_sub_order_pipeline_instance.id", ondelete="SET NULL"),
+        ForeignKey("mes_process_pipeline_instance.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
     )
@@ -77,7 +77,7 @@ class FirstArticleReviewSession(Base, TimestampMixin):
 
     order = relationship("ProductionOrder")
     order_process = relationship("ProductionOrderProcess")
-    pipeline_instance = relationship("OrderSubOrderPipelineInstance")
+    pipeline_instance = relationship("ProcessPipelineInstance")
     operator = relationship("User", foreign_keys=[operator_user_id])
     reviewer = relationship("User", foreign_keys=[reviewer_user_id])
     assist_authorization = relationship("ProductionAssistAuthorization")

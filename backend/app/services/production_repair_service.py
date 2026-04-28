@@ -344,22 +344,12 @@ def create_repair_order(
     return repair_row
 
 
-def _recompute_order_status_by_quantities(order: ProductionOrder) -> None:
-    process_rows = sorted(order.processes, key=lambda row: (row.process_order, row.id))
-    first_incomplete = next(
-        (
-            row
-            for row in process_rows
-            if int(row.completed_quantity or 0) < int(row.visible_quantity or 0)
-        ),
-        None,
-    )
-    if first_incomplete is None:
-        order.status = ORDER_STATUS_COMPLETED
-        order.current_process_code = None
-        return
-    order.status = ORDER_STATUS_IN_PROGRESS
-    order.current_process_code = first_incomplete.process_code
+def _recompute_order_status_by_quantities(
+    db: Session, *, order: ProductionOrder
+) -> None:
+    from app.services.production_execution_service import _refresh_order_status
+
+    _refresh_order_status(db, order=order)
 
 
 def complete_repair_order(
@@ -569,7 +559,7 @@ def complete_repair_order(
             affected_process_ids.add(first_process.id)
 
     if source_order is not None:
-        _recompute_order_status_by_quantities(source_order)
+        _recompute_order_status_by_quantities(db, order=source_order)
 
     scrap_reason_bucket: dict[str, int] = {}
     for item in normalized_causes:

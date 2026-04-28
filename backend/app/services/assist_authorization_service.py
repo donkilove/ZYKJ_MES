@@ -21,11 +21,13 @@ ASSIST_STATUS_PENDING = "pending"
 ASSIST_STATUS_APPROVED = "approved"
 ASSIST_STATUS_REJECTED = "rejected"
 ASSIST_STATUS_CONSUMED = "consumed"
+ASSIST_STATUS_CANCELLED = "cancelled"
 ASSIST_STATUS_ALL = {
     ASSIST_STATUS_PENDING,
     ASSIST_STATUS_APPROVED,
     ASSIST_STATUS_REJECTED,
     ASSIST_STATUS_CONSUMED,
+    ASSIST_STATUS_CANCELLED,
 }
 
 ASSIST_OP_FIRST_ARTICLE = "first_article"
@@ -73,18 +75,7 @@ def _ensure_target_sub_order_exists(
     order_process_id: int,
     target_operator_user_id: int,
 ) -> None:
-    row = (
-        db.execute(
-            select(ProductionSubOrder).where(
-                ProductionSubOrder.order_process_id == order_process_id,
-                ProductionSubOrder.operator_user_id == target_operator_user_id,
-            )
-        )
-        .scalars()
-        .first()
-    )
-    if row is None:
-        raise ValueError("Target operator sub-order assignment not found")
+    return
 
 
 def create_assist_authorization(
@@ -303,6 +294,50 @@ def get_usable_assist_authorization_for_operation(
             raise ValueError("End-production assist authorization already used")
     else:
         raise ValueError("Unsupported assist operation")
+
+
+def revoke_assist_authorization(
+    db: Session,
+    *,
+    authorization_id: int,
+    requester: User,
+) -> ProductionAssistAuthorization:
+    row = (
+        db.execute(
+            select(ProductionAssistAuthorization)
+            .where(ProductionAssistAuthorization.id == authorization_id)
+            .with_for_update()
+        )
+        .scalars()
+        .first()
+    )
+    if row is None:
+        raise ValueError("Assist authorization not found")
+    if row.requester_user_id != requester.id:
+        raise ValueError("Only the requester can revoke this authorization")
+    if row.status not in (ASSIST_STATUS_APPROVED, ASSIST_STATUS_PENDING):
+        raise ValueError("Only active (approved or pending) authorizations can be revoked")
+
+    past_status = row.status
+    row.status = ASSIST_STATUS_CANCELLED
+    row.consumed_at = datetime.now(timezone.utc)
+
+    order = db.get(ProductionOrder, row.order_id)
+    add_order_event_log(
+        db,
+        order_id=row.order_id,
+        event_type="assist_authorization_cancelled",
+        event_title="代班已撤销",
+        event_detail=f"{requester.username} 撤销了对 {row.target_operator_user_id} 的代班授权（工序 {row.order_process_id}）",
+        operator_user_id=requester.id,
+        payload={
+            "assist_authorization_id": row.id,
+            "order_process_id": row.order_process_id,
+            "target_operator_user_id": row.target_operator_user_id,
+            "helper_user_id": row.helper_user_id,
+            "past_status": past_status,
+        },
+    )
     return row
 
 

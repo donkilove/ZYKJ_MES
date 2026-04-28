@@ -193,7 +193,11 @@ def create_first_article_review_session(
                 FirstArticleReviewSession.order_process_id == order_process_id,
                 FirstArticleReviewSession.operator_user_id == operator.id,
                 FirstArticleReviewSession.status.in_(
-                    [REVIEW_SESSION_PENDING, REVIEW_SESSION_REJECTED]
+                    [
+                        REVIEW_SESSION_PENDING,
+                        REVIEW_SESSION_REJECTED,
+                        REVIEW_SESSION_EXPIRED,
+                    ]
                 ),
             )
             .with_for_update()

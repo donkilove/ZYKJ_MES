@@ -15,7 +15,7 @@ from app.models.maintenance_record import MaintenanceRecord
 from app.models.maintenance_work_order import MaintenanceWorkOrder
 from app.models.message import Message
 from app.models.message_recipient import MessageRecipient
-from app.models.order_sub_order_pipeline_instance import OrderSubOrderPipelineInstance
+from app.models.order_sub_order_pipeline_instance import ProcessPipelineInstance
 from app.models.order_event_log import OrderEventLog
 from app.models.permission_catalog import PermissionCatalog
 from app.models.product import Product
@@ -83,7 +83,7 @@ __all__ = [
     "MaintenanceWorkOrder",
     "Message",
     "MessageRecipient",
-    "OrderSubOrderPipelineInstance",
+    "ProcessPipelineInstance",
     "Product",
     "ProductRevision",
     "ProductionOrder",

@@ -100,10 +100,8 @@ class ProductionSubOrderItem(BaseModel):
     process_name: str
     operator_user_id: int
     operator_username: str
-    assigned_quantity: int
     completed_quantity: int
     status: str
-    is_visible: bool
     created_at: datetime
     updated_at: datetime
 
@@ -230,7 +228,6 @@ class MyOrderItem(BaseModel):
     visible_quantity: int
     process_completed_quantity: int
     user_sub_order_id: int | None = None
-    user_assigned_quantity: int | None = None
     user_completed_quantity: int | None = None
     operator_user_id: int | None = None
     operator_username: str | None = None
@@ -838,7 +835,7 @@ class PipelineInstanceItem(BaseModel):
     process_code: str
     process_name: str
     pipeline_seq: int
-    pipeline_sub_order_no: str
+    pipeline_instance_no: str
     is_active: bool
     invalid_reason: str | None = None
     invalidated_at: datetime | None = None

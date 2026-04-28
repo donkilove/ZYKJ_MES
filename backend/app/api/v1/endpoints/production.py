@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, load_only, selectinload
 
 from app.api.deps import get_current_user, require_permission, require_permission_fast
 from app.core.authz_catalog import (
+    PERM_PROD_ASSIST_AUTHORIZATIONS_CANCEL,
     PERM_PROD_ASSIST_AUTHORIZATIONS_CREATE,
     PERM_PROD_ASSIST_AUTHORIZATIONS_LIST,
     PERM_PROD_ASSIST_USER_OPTIONS_LIST,
@@ -139,6 +140,7 @@ from app.services.product_service import (
 from app.services.assist_authorization_service import (
     create_assist_authorization,
     list_assist_authorizations,
+    revoke_assist_authorization,
 )
 from app.services.production_execution_service import (
     end_production,
@@ -298,10 +300,8 @@ def _to_sub_order_item(row: ProductionSubOrder) -> ProductionSubOrderItem:
         process_name=row.order_process.process_name if row.order_process else "",
         operator_user_id=row.operator_user_id,
         operator_username=row.operator.username if row.operator else "",
-        assigned_quantity=row.assigned_quantity,
         completed_quantity=row.completed_quantity,
         status=row.status,
-        is_visible=row.is_visible,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -1743,6 +1743,34 @@ def create_assist_authorization_api(
     )
 
 
+@router.delete(
+    "/orders/{order_id}/assist-authorizations/{authorization_id}",
+    response_model=ApiResponse[AssistAuthorizationItem],
+)
+def cancel_assist_authorization_api(
+    order_id: int,
+    authorization_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_permission(PERM_PROD_ASSIST_AUTHORIZATIONS_CANCEL)
+    ),
+) -> ApiResponse[AssistAuthorizationItem]:
+    try:
+        row = revoke_assist_authorization(
+            db,
+            authorization_id=authorization_id,
+            requester=current_user,
+        )
+        db.commit()
+    except Exception as error:
+        db.rollback()
+        _raise_service_error(error)
+    return success_response(
+        _to_assist_authorization_item(row),
+        message="cancelled",
+    )
+
+
 @router.get(
     "/assist-user-options",
     response_model=ApiResponse[AssistUserOptionListResult],
@@ -1826,7 +1854,7 @@ def _to_pipeline_instance_item(row: object) -> PipelineInstanceItem:
         process_code=row.process_code,
         process_name=row.order_process.process_name if row.order_process else "",
         pipeline_seq=row.pipeline_seq,
-        pipeline_sub_order_no=row.pipeline_sub_order_no,
+        pipeline_instance_no=row.pipeline_instance_no,
         is_active=row.is_active,
         invalid_reason=row.invalid_reason,
         invalidated_at=row.invalidated_at,
@@ -2005,7 +2033,7 @@ def get_pipeline_instances_api(
     order_process_id: int | None = Query(default=None),
     sub_order_id: int | None = Query(default=None),
     process_keyword: str | None = Query(default=None),
-    pipeline_sub_order_no: str | None = Query(default=None),
+    pipeline_instance_no: str | None = Query(default=None),
     is_active: bool | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=100, ge=1, le=500),
@@ -2020,7 +2048,7 @@ def get_pipeline_instances_api(
             order_process_id=order_process_id,
             sub_order_id=sub_order_id,
             process_keyword=process_keyword,
-            pipeline_sub_order_no=pipeline_sub_order_no,
+            pipeline_instance_no=pipeline_instance_no,
             is_active=is_active,
             page=page,
             page_size=page_size,
