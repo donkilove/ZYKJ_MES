@@ -791,6 +791,36 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             ],
         )
 
+        db = SessionLocal()
+        try:
+            admin = db.query(User).filter(User.username == "admin").first()
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .first()
+            )
+            assert admin is not None and process_row is not None
+            existing_sub_order = (
+                db.query(ProductionSubOrder)
+                .filter(
+                    ProductionSubOrder.order_process_id == process_row.id,
+                    ProductionSubOrder.operator_user_id == admin.id,
+                )
+                .first()
+            )
+            if existing_sub_order is None:
+                db.add(
+                    ProductionSubOrder(
+                        order_process_id=process_row.id,
+                        operator_user_id=admin.id,
+                        completed_quantity=0,
+                        status="pending",
+                    )
+                )
+            db.commit()
+        finally:
+            db.close()
+
         response = self.client.post(
             f"/api/v1/production/orders/{order['id']}/complete",
             headers=self._headers(),
@@ -806,6 +836,19 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             self.assertIsNotNone(order_row)
             assert order_row is not None
             self.assertEqual(order_row.status, "completed")
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == order_row.id)
+                .first()
+            )
+            assert process_row is not None
+            sub_orders = (
+                db.query(ProductionSubOrder)
+                .filter(ProductionSubOrder.order_process_id == process_row.id)
+                .all()
+            )
+            for sub_order in sub_orders:
+                self.assertEqual(sub_order.status, "done")
         finally:
             db.close()
 

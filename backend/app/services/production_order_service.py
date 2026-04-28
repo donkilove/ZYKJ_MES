@@ -20,6 +20,7 @@ from app.core.production_constants import (
     PROCESS_STATUS_PARTIAL,
     PROCESS_STATUS_PENDING,
     REPAIR_STATUS_IN_REPAIR,
+    SUB_ORDER_STATUS_DONE,
     SUB_ORDER_STATUS_IN_PROGRESS,
     SUB_ORDER_STATUS_PENDING,
     order_status_label,
@@ -1572,7 +1573,7 @@ def complete_order_manually(
         row.status = PROCESS_STATUS_COMPLETED
         for sub in row.sub_orders:
             sub.completed_quantity = max(sub.completed_quantity, row.visible_quantity)
-            sub.status = SUB_ORDER_STATUS_PENDING
+            sub.status = SUB_ORDER_STATUS_DONE
 
     order.status = ORDER_STATUS_COMPLETED
     order.current_process_code = None

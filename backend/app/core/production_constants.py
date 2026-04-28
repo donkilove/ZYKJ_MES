@@ -9,6 +9,7 @@ PROCESS_STATUS_COMPLETED = "completed"
 
 SUB_ORDER_STATUS_PENDING = "pending"
 SUB_ORDER_STATUS_IN_PROGRESS = "in_progress"
+SUB_ORDER_STATUS_DONE = "done"
 
 RECORD_TYPE_FIRST_ARTICLE = "first_article"
 RECORD_TYPE_PRODUCTION = "production"
@@ -41,6 +42,7 @@ PROCESS_STATUS_ALL = {
 SUB_ORDER_STATUS_ALL = {
     SUB_ORDER_STATUS_PENDING,
     SUB_ORDER_STATUS_IN_PROGRESS,
+    SUB_ORDER_STATUS_DONE,
 }
 
 
@@ -65,6 +67,7 @@ def sub_order_status_label(status: str) -> str:
     return {
         SUB_ORDER_STATUS_PENDING: "待执行",
         SUB_ORDER_STATUS_IN_PROGRESS: "执行中",
+        SUB_ORDER_STATUS_DONE: "已完成",
     }.get(status, status)
 
 
