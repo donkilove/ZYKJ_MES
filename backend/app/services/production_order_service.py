@@ -607,56 +607,6 @@ def ensure_sub_orders_visible_quantity(
     return False
 
 
-def _backfill_historical_release_quantity(
-    db: Session,
-    *,
-    process_row: ProductionOrderProcess,
-) -> bool:
-    if process_row.process_order <= 1:
-        return False
-
-    order = process_row.order
-    if order is None:
-        return False
-
-    previous_process_row = (
-        db.execute(
-            select(ProductionOrderProcess)
-            .where(
-                ProductionOrderProcess.order_id == process_row.order_id,
-                ProductionOrderProcess.process_order == process_row.process_order - 1,
-            )
-            .order_by(ProductionOrderProcess.id.asc())
-        )
-        .scalars()
-        .first()
-    )
-    if previous_process_row is None:
-        return False
-
-    released_visible_quantity = min(
-        previous_process_row.completed_quantity, order.quantity
-    )
-    target_visible_quantity = max(
-        process_row.completed_quantity,
-        released_visible_quantity,
-    )
-    if target_visible_quantity <= process_row.visible_quantity:
-        return False
-
-    process_row.visible_quantity = target_visible_quantity
-    db.flush()
-    return True
-
-
-def _backfill_historical_release_sub_orders(
-    db: Session,
-    *,
-    operator_user: User,
-) -> bool:
-    return False
-
-
 def get_order_by_id(
     db: Session, order_id: int, *, with_relations: bool = False
 ) -> ProductionOrder | None:
@@ -1973,9 +1923,6 @@ def _collect_my_order_items(
         proxy_operator = db.get(User, proxy_operator_user_id)
         if proxy_operator is None:
             raise ValueError("proxy_operator_user_id is invalid")
-        # 代理视角需要按目标操作员的工序范围执行同一套历史放行回填。
-        if _backfill_historical_release_sub_orders(db, operator_user=proxy_operator):
-            db.commit()
         stmt = (
             select(ProductionSubOrder)
             .join(ProductionSubOrder.order_process)

@@ -872,7 +872,27 @@ def end_production(
         else:
             target_visible = next_process.visible_quantity
         if target_visible > next_process.visible_quantity:
+            previous_visible = next_process.visible_quantity
             next_process.visible_quantity = target_visible
+            add_order_event_log(
+                db,
+                order_id=order.id,
+                event_type="process_visible_quantity_released",
+                event_title="下工序放行量已更新",
+                event_detail=(
+                    f"工序 {process_row.process_name} 向下工序 {next_process.process_name} 放行可见量，"
+                    f"从 {previous_visible} 变更为 {target_visible}"
+                ),
+                operator_user_id=operator.id,
+                payload={
+                    "source_order_process_id": process_row.id,
+                    "source_process_code": process_row.process_code,
+                    "target_order_process_id": next_process.id,
+                    "target_process_code": next_process.process_code,
+                    "previous_visible_quantity": previous_visible,
+                    "target_visible_quantity": target_visible,
+                },
+            )
         ensure_sub_orders_visible_quantity(
             db,
             process_row=next_process,

@@ -17,9 +17,12 @@ from app.core.rbac import (
     ROLE_QUALITY_ADMIN,
     ROLE_SYSTEM_ADMIN,
 )
+from app.core.production_constants import SUB_ORDER_STATUS_IN_PROGRESS
 from app.core.security import get_password_hash, verify_password
 from app.models.process import Process
 from app.models.process_stage import ProcessStage
+from app.models.production_order_process import ProductionOrderProcess
+from app.models.production_sub_order import ProductionSubOrder
 from app.models.registration_request import RegistrationRequest
 from app.models.role import Role
 from app.models.user import User
@@ -933,6 +936,26 @@ def update_user(
     )
     if processes_error:
         return None, processes_error
+
+    previous_process_ids = {int(process.id) for process in user.processes}
+    next_process_ids = {int(process.id) for process in (processes or [])}
+    removed_process_ids = previous_process_ids - next_process_ids
+    if removed_process_ids:
+        has_in_progress_sub_order = db.execute(
+            select(ProductionSubOrder.id)
+            .join(
+                ProductionOrderProcess,
+                ProductionOrderProcess.id == ProductionSubOrder.order_process_id,
+            )
+            .where(
+                ProductionSubOrder.operator_user_id == user.id,
+                ProductionSubOrder.status == SUB_ORDER_STATUS_IN_PROGRESS,
+                ProductionOrderProcess.process_id.in_(removed_process_ids),
+            )
+        ).first()
+        if has_in_progress_sub_order is not None:
+            return None, "存在生产中的工序参与，不能移除该用户的工序绑定"
+
     user.processes = processes or []
     user.stage_id = stage.id if stage else None
 

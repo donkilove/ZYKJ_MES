@@ -324,7 +324,7 @@ def create_repair_order(
     add_order_event_log(
         db,
         order_id=order.id,
-        event_type="repair_order_created_auto"
+        event_type="defect_repair_order_created"
         if auto_created
         else "repair_order_created_manual",
         event_title="维修单已创建",

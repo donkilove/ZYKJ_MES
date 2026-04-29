@@ -1,7 +1,7 @@
 import sys
 import time
 import unittest
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
@@ -19,6 +19,7 @@ from app.db.session import SessionLocal  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.daily_verification_code import DailyVerificationCode  # noqa: E402
 from app.models.first_article_record import FirstArticleRecord  # noqa: E402
+from app.models.order_event_log import OrderEventLog  # noqa: E402
 from app.models.first_article_review_session import (  # noqa: E402
     FirstArticleReviewSession,
 )
@@ -317,6 +318,21 @@ class FirstArticleScanReviewApiTest(unittest.TestCase):
         finally:
             db.close()
 
+        db = SessionLocal()
+        try:
+            log_row = (
+                db.query(OrderEventLog)
+                .filter(
+                    OrderEventLog.order_id == int(context["order_id"]),
+                    OrderEventLog.event_type == "first_article_review_session_created",
+                )
+                .order_by(OrderEventLog.id.desc())
+                .first()
+            )
+            self.assertIsNotNone(log_row)
+        finally:
+            db.close()
+
     def test_new_review_session_cancels_expired_session_for_same_operator_and_process(
         self,
     ) -> None:
@@ -340,10 +356,18 @@ class FirstArticleScanReviewApiTest(unittest.TestCase):
         try:
             row = db.get(FirstArticleReviewSession, session_id)
             assert row is not None
-            row.status = "expired"
+            row.status = "pending"
+            row.expires_at = datetime.now(UTC) - timedelta(minutes=1)
             db.commit()
         finally:
             db.close()
+
+        status_response = self.client.get(
+            f"/api/v1/production/orders/{context['order_id']}/first-article/review-sessions/{session_id}/status",
+            headers=self._headers(),
+        )
+        self.assertEqual(status_response.status_code, 200, status_response.text)
+        self.assertEqual(status_response.json()["data"]["status"], "expired")
 
         recreate_response = self.client.post(
             f"/api/v1/production/orders/{context['order_id']}/first-article/review-sessions",
@@ -363,6 +387,26 @@ class FirstArticleScanReviewApiTest(unittest.TestCase):
             old_row = db.get(FirstArticleReviewSession, session_id)
             assert old_row is not None
             self.assertEqual(old_row.status, "cancelled")
+            expired_log = (
+                db.query(OrderEventLog)
+                .filter(
+                    OrderEventLog.order_id == int(context["order_id"]),
+                    OrderEventLog.event_type == "first_article_review_session_expired",
+                )
+                .order_by(OrderEventLog.id.desc())
+                .first()
+            )
+            cancelled_log = (
+                db.query(OrderEventLog)
+                .filter(
+                    OrderEventLog.order_id == int(context["order_id"]),
+                    OrderEventLog.event_type == "first_article_review_session_cancelled",
+                )
+                .order_by(OrderEventLog.id.desc())
+                .first()
+            )
+            self.assertIsNotNone(expired_log)
+            self.assertIsNotNone(cancelled_log)
         finally:
             db.close()
 

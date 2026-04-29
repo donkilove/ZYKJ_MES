@@ -295,6 +295,8 @@ def get_usable_assist_authorization_for_operation(
     else:
         raise ValueError("Unsupported assist operation")
 
+    return row
+
 
 def revoke_assist_authorization(
     db: Session,
@@ -355,6 +357,20 @@ def mark_assist_authorization_used(
         authorization_row.end_production_used_at = datetime.now(timezone.utc)
         authorization_row.status = ASSIST_STATUS_CONSUMED
         authorization_row.consumed_at = datetime.now(timezone.utc)
+        add_order_event_log(
+            db,
+            order_id=authorization_row.order_id,
+            event_type="assist_authorization_consumed",
+            event_title="代班授权已消耗",
+            event_detail=f"代班授权 {authorization_row.id} 已在结束生产时消耗",
+            operator_user_id=authorization_row.helper_user_id,
+            payload={
+                "assist_authorization_id": authorization_row.id,
+                "order_process_id": authorization_row.order_process_id,
+                "target_operator_user_id": authorization_row.target_operator_user_id,
+                "helper_user_id": authorization_row.helper_user_id,
+            },
+        )
         return
 
     raise ValueError("Unsupported assist operation")

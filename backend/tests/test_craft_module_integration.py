@@ -793,13 +793,103 @@ class CraftModuleIntegrationTest(unittest.TestCase):
             {item["ref_type"] for item in ref_payload["items"]},
         )
 
+    def test_publish_template_with_apply_order_sync_does_not_mutate_existing_orders(self) -> None:
+        stage_a = self._create_stage("NS1")
+        process_a = self._create_process(
+            stage_id=stage_a["id"], stage_code=stage_a["code"], suffix="01"
+        )
+        stage_b = self._create_stage("NS2")
+        process_b = self._create_process(
+            stage_id=stage_b["id"], stage_code=stage_b["code"], suffix="01"
+        )
+        product = self._create_product("模板不回写订单")
+        detail = self._create_template(
+            product_id=product["id"],
+            template_name="模板不回写订单",
+            stage_id=stage_a["id"],
+            process_id=process_a["id"],
+        )
+        template_id = int(detail["template"]["id"])
+
+        publish_v1 = self.client.post(
+            f"/api/v1/craft/templates/{template_id}/publish",
+            headers=self._headers(),
+            json={"apply_order_sync": False, "confirmed": True, "expected_version": 1},
+        )
+        self.assertEqual(publish_v1.status_code, 200, publish_v1.text)
+
+        order = self._create_order_from_template(
+            product_id=product["id"],
+            template_id=template_id,
+        )
+
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            assert order_row is not None
+            process_rows = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == order_row.id)
+                .order_by(ProductionOrderProcess.process_order.asc())
+                .all()
+            )
+            self.assertEqual(len(process_rows), 1)
+            self.assertEqual(process_rows[0].process_id, int(process_a["id"]))
+        finally:
+            db.close()
+
+        draft_response = self.client.post(
+            f"/api/v1/craft/templates/{template_id}/draft",
+            headers=self._headers(),
+        )
+        self.assertEqual(draft_response.status_code, 200, draft_response.text)
+
+        update_response = self.client.put(
+            f"/api/v1/craft/templates/{template_id}",
+            headers=self._headers(),
+            json={
+                "template_name": "模板不回写订单",
+                "is_default": True,
+                "is_enabled": True,
+                "remark": "新增第二道工序",
+                "sync_orders": True,
+                "steps": [
+                    {"step_order": 1, "stage_id": stage_a["id"], "process_id": process_a["id"]},
+                    {"step_order": 2, "stage_id": stage_b["id"], "process_id": process_b["id"]},
+                ],
+            },
+        )
+        self.assertEqual(update_response.status_code, 200, update_response.text)
+
+        publish_v2 = self.client.post(
+            f"/api/v1/craft/templates/{template_id}/publish",
+            headers=self._headers(),
+            json={"apply_order_sync": True, "confirmed": True},
+        )
+        self.assertEqual(publish_v2.status_code, 200, publish_v2.text)
+
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            assert order_row is not None
+            process_rows = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == order_row.id)
+                .order_by(ProductionOrderProcess.process_order.asc())
+                .all()
+            )
+            self.assertEqual(len(process_rows), 1)
+            self.assertEqual(process_rows[0].process_id, int(process_a["id"]))
+        finally:
+            db.close()
+
         delete_response = self.client.delete(
             f"/api/v1/craft/templates/{template_id}",
             headers=self._headers(),
         )
         self.assertEqual(delete_response.status_code, 400, delete_response.text)
         self.assertIn(
-            "Template is reused by downstream templates", delete_response.text
+            "Template is referenced by production orders", delete_response.text
         )
 
     def test_disable_and_archive_are_blocked_by_in_progress_orders(self) -> None:

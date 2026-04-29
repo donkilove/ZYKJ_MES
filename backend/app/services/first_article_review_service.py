@@ -13,6 +13,7 @@ from app.models.first_article_review_session import FirstArticleReviewSession
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
 from app.models.user import User
+from app.services.production_event_log_service import add_order_event_log
 from app.services.production_execution_service import (
     _get_first_article_template,
     _get_required_pipeline_instance,
@@ -90,6 +91,18 @@ def _is_expired(row: FirstArticleReviewSession, *, now: datetime | None = None) 
 def _expire_if_needed(db: Session, row: FirstArticleReviewSession) -> None:
     if row.status == REVIEW_SESSION_PENDING and _is_expired(row):
         row.status = REVIEW_SESSION_EXPIRED
+        add_order_event_log(
+            db,
+            order_id=row.order_id,
+            event_type="first_article_review_session_expired",
+            event_title="首件扫码会话已过期",
+            event_detail=f"工序 {row.order_process_id} 的首件扫码会话已过期",
+            operator_user_id=row.operator_user_id,
+            payload={
+                "session_id": row.id,
+                "order_process_id": row.order_process_id,
+            },
+        )
         db.flush()
 
 
@@ -207,6 +220,18 @@ def create_first_article_review_session(
     )
     for existing_row in existing_rows:
         existing_row.status = REVIEW_SESSION_CANCELLED
+        add_order_event_log(
+            db,
+            order_id=existing_row.order_id,
+            event_type="first_article_review_session_cancelled",
+            event_title="首件扫码会话已取消",
+            event_detail=f"工序 {existing_row.order_process_id} 的旧首件扫码会话已取消",
+            operator_user_id=operator.id,
+            payload={
+                "session_id": existing_row.id,
+                "order_process_id": existing_row.order_process_id,
+            },
+        )
 
     token = _new_token()
     expires_at = _now() + REVIEW_TOKEN_TTL
@@ -225,6 +250,20 @@ def create_first_article_review_session(
         participant_user_ids=normalized_participant_user_ids,
     )
     db.add(row)
+    db.flush()
+    add_order_event_log(
+        db,
+        order_id=order_id,
+        event_type="first_article_review_session_created",
+        event_title="首件扫码会话已创建",
+        event_detail=f"工序 {order_process_id} 已创建新的首件扫码会话",
+        operator_user_id=operator.id,
+        payload={
+            "session_id": row.id,
+            "order_process_id": order_process_id,
+            "template_id": template_id,
+        },
+    )
     db.commit()
     db.refresh(row)
     return FirstArticleReviewSessionCommandResult(

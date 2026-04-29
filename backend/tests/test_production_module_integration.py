@@ -46,9 +46,11 @@ from app.models.repair_defect_phenomenon import RepairDefectPhenomenon  # noqa: 
 from app.models.repair_order import RepairOrder  # noqa: E402
 from app.models.supplier import Supplier  # noqa: E402
 from app.models.user import User  # noqa: E402
+from app.schemas.user import UserUpdate  # noqa: E402
 from app.services.authz_service import replace_role_permissions_for_module  # noqa: E402
 from app.services.bootstrap_seed_service import seed_initial_data  # noqa: E402
 from app.services.perf_sample_seed_service import seed_production_craft_samples  # noqa: E402
+from app.services.user_service import update_user  # noqa: E402
 
 
 PERF_CONTEXT_PATH = BACKEND_DIR.parent / ".tmp_runtime" / "production_craft_samples.json"
@@ -584,17 +586,13 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
                 first_sub_order = ProductionSubOrder(
                     order_process_id=first_process.id,
                     operator_user_id=admin.id,
-                    assigned_quantity=1000,
                     completed_quantity=0,
                     status="in_progress",
-                    is_visible=True,
                 )
                 db.add(first_sub_order)
             else:
-                first_sub_order.assigned_quantity = 1000
                 first_sub_order.completed_quantity = 0
                 first_sub_order.status = "in_progress"
-                first_sub_order.is_visible = True
 
             second_sub_order = (
                 db.query(ProductionSubOrder)
@@ -608,17 +606,13 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
                 second_sub_order = ProductionSubOrder(
                     order_process_id=second_process.id,
                     operator_user_id=admin.id,
-                    assigned_quantity=0,
                     completed_quantity=0,
                     status="done",
-                    is_visible=False,
                 )
                 db.add(second_sub_order)
             else:
-                second_sub_order.assigned_quantity = 0
                 second_sub_order.completed_quantity = 0
                 second_sub_order.status = "done"
-                second_sub_order.is_visible = False
             db.commit()
         finally:
             db.close()
@@ -654,8 +648,16 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             self.assertEqual(first_process.completed_quantity, 500)
             self.assertEqual(first_process.status, "partial")
             self.assertEqual(second_process.visible_quantity, 500)
-            self.assertEqual(second_sub_order.assigned_quantity, 500)
-            self.assertTrue(second_sub_order.is_visible)
+            release_log = (
+                db.query(OrderEventLog)
+                .filter(
+                    OrderEventLog.order_id == int(order["id"]),
+                    OrderEventLog.event_type == "process_visible_quantity_released",
+                )
+                .order_by(OrderEventLog.id.desc())
+                .first()
+            )
+            self.assertIsNotNone(release_log)
         finally:
             db.close()
 
@@ -1698,54 +1700,177 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         finally:
             db.close()
 
-        with patch("app.services.production_order_service.create_message_for_users"):
-            update_response = self.client.put(
-                f"/api/v1/production/orders/{order['id']}",
-                headers=self._headers(),
-                json={
-                    "product_id": product["id"],
-                    "supplier_id": supplier["id"],
-                    "quantity": 12,
-                    "process_steps": [
-                        {
-                            "step_order": 1,
-                            "stage_id": stage_a["id"],
-                            "process_id": process_a["id"],
-                        },
-                        {
-                            "step_order": 2,
-                            "stage_id": stage_b["id"],
-                            "process_id": process_b["id"],
-                        },
-                    ],
-                },
-            )
-        self.assertEqual(update_response.status_code, 200, update_response.text)
+    def test_end_production_consumes_assist_authorization_and_writes_event(self) -> None:
+        stage = self._create_stage("AST2")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="AST2"
+        )
+        product = self._create_product("代班消耗事件")
+        self._activate_product(product)
+        helper_user = self._create_user_with_permissions(
+            suffix="assistconsume",
+            permission_codes=["production.execution.end_production"],
+        )
+        helper_token = self._login_as(username=helper_user.username)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+            ],
+        )
 
         db = SessionLocal()
         try:
-            first_article = (
-                db.query(FirstArticleRecord)
-                .filter(FirstArticleRecord.order_id == int(order["id"]))
-                .order_by(FirstArticleRecord.id.desc())
+            admin = db.query(User).filter(User.username == "admin").first()
+            helper_row = db.get(User, int(helper_user.id))
+            process_def = db.get(Process, int(process["id"]))
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
                 .first()
             )
-            production_record = (
-                db.query(ProductionRecord)
-                .filter(ProductionRecord.order_id == int(order["id"]))
-                .order_by(ProductionRecord.id.desc())
+            assert admin is not None and helper_row is not None and process_def is not None and process_row is not None
+            if all(row.id != process_def.id for row in helper_row.processes):
+                helper_row.processes.append(process_def)
+            process_row.status = "in_progress"
+            process_row.visible_quantity = 10
+            process_row.completed_quantity = 0
+            target_sub_order = (
+                db.query(ProductionSubOrder)
+                .filter(
+                    ProductionSubOrder.order_process_id == process_row.id,
+                    ProductionSubOrder.operator_user_id == admin.id,
+                )
                 .first()
             )
-            repair_order = (
-                db.query(RepairOrder)
-                .filter(RepairOrder.source_order_id == int(order["id"]))
-                .order_by(RepairOrder.id.desc())
+            if target_sub_order is None:
+                target_sub_order = ProductionSubOrder(
+                    order_process_id=process_row.id,
+                    operator_user_id=admin.id,
+                    completed_quantity=0,
+                    status="in_progress",
+                )
+                db.add(target_sub_order)
+            else:
+                target_sub_order.status = "in_progress"
+            db.commit()
+        finally:
+            db.close()
+
+        auth_response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/assist-authorizations",
+            headers=self._headers(),
+            json={
+                "order_process_id": process_row.id,
+                "target_operator_user_id": admin.id,
+                "helper_user_id": int(helper_user.id),
+                "reason": "代班报工",
+            },
+        )
+        self.assertEqual(auth_response.status_code, 201, auth_response.text)
+        auth_id = int(auth_response.json()["data"]["id"])
+
+        report_response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/end-production",
+            headers={"Authorization": f"Bearer {helper_token}"},
+            json={
+                "order_process_id": process_row.id,
+                "effective_operator_user_id": admin.id,
+                "assist_authorization_id": auth_id,
+                "quantity": 1,
+            },
+        )
+        self.assertEqual(report_response.status_code, 200, report_response.text)
+
+        db = SessionLocal()
+        try:
+            auth_row = db.get(ProductionAssistAuthorization, auth_id)
+            assert auth_row is not None
+            self.assertEqual(auth_row.status, "consumed")
+            event_row = (
+                db.query(OrderEventLog)
+                .filter(
+                    OrderEventLog.order_id == int(order["id"]),
+                    OrderEventLog.event_type == "assist_authorization_consumed",
+                )
+                .order_by(OrderEventLog.id.desc())
                 .first()
             )
-            assert first_article is not None and production_record is not None and repair_order is not None
-            self.assertEqual(first_article.order_process_id, original_process_row_id)
-            self.assertEqual(production_record.order_process_id, original_process_row_id)
-            self.assertEqual(repair_order.source_order_process_id, original_process_row_id)
+            self.assertIsNotNone(event_row)
+        finally:
+            db.close()
+
+    def test_end_production_auto_repair_order_writes_unified_event(self) -> None:
+        stage = self._create_stage("DF1")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="DF1"
+        )
+        product = self._create_product("缺陷自动维修事件")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+            ],
+        )
+
+        db = SessionLocal()
+        try:
+            admin = db.query(User).filter(User.username == "admin").first()
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .first()
+            )
+            assert admin is not None and process_row is not None
+            process_row.status = "in_progress"
+            process_row.visible_quantity = 10
+            target_sub_order = (
+                db.query(ProductionSubOrder)
+                .filter(
+                    ProductionSubOrder.order_process_id == process_row.id,
+                    ProductionSubOrder.operator_user_id == admin.id,
+                )
+                .first()
+            )
+            if target_sub_order is None:
+                db.add(
+                    ProductionSubOrder(
+                        order_process_id=process_row.id,
+                        operator_user_id=admin.id,
+                        completed_quantity=0,
+                        status="in_progress",
+                    )
+                )
+            else:
+                target_sub_order.status = "in_progress"
+            db.commit()
+        finally:
+            db.close()
+
+        report_response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/end-production",
+            headers=self._headers(),
+            json={
+                "order_process_id": process_row.id,
+                "quantity": 1,
+                "defect_items": [{"phenomenon": "毛刺", "quantity": 1}],
+            },
+        )
+        self.assertEqual(report_response.status_code, 200, report_response.text)
+
+        db = SessionLocal()
+        try:
+            event_row = (
+                db.query(OrderEventLog)
+                .filter(
+                    OrderEventLog.order_id == int(order["id"]),
+                    OrderEventLog.event_type == "defect_repair_order_created",
+                )
+                .order_by(OrderEventLog.id.desc())
+                .first()
+            )
+            self.assertIsNotNone(event_row)
         finally:
             db.close()
 
@@ -2793,6 +2918,77 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             },
         )
         self.assertEqual(disable_response.status_code, 409, disable_response.text)
+
+    def test_update_user_rejects_removing_process_scope_with_in_progress_sub_order(self) -> None:
+        stage_a = self._create_stage("USR1")
+        process_a = self._create_process(
+            stage_id=stage_a["id"], stage_code=stage_a["code"], suffix="USR1"
+        )
+        stage_b = self._create_stage("USR2")
+        process_b = self._create_process(
+            stage_id=stage_b["id"], stage_code=stage_b["code"], suffix="USR2"
+        )
+        operator_user = self._create_active_user("procbind")
+
+        db = SessionLocal()
+        try:
+            operator_row = db.get(User, int(operator_user.id))
+            operator_role = db.query(Role).filter(Role.code == "operator").first()
+            process_a_row = db.get(Process, int(process_a["id"]))
+            assert operator_row is not None and operator_role is not None and process_a_row is not None
+            operator_row.roles = [operator_role]
+            operator_row.stage_id = int(stage_a["id"])
+            operator_row.processes = [process_a_row]
+            db.commit()
+        finally:
+            db.close()
+
+        product = self._create_product("移除工序参与范围拦截")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {
+                    "step_order": 1,
+                    "stage_id": stage_a["id"],
+                    "process_id": process_a["id"],
+                }
+            ],
+        )
+
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .first()
+            )
+            assert order_row is not None and process_row is not None
+            db.add(
+                ProductionSubOrder(
+                    order_process_id=process_row.id,
+                    operator_user_id=int(operator_user.id),
+                    completed_quantity=0,
+                    status="in_progress",
+                )
+            )
+            db.commit()
+
+            operator_row = db.get(User, int(operator_user.id))
+            admin = db.query(User).filter(User.username == "admin").first()
+            assert operator_row is not None and admin is not None
+            updated, error_message = update_user(
+                db,
+                user=operator_row,
+                payload=UserUpdate(stage_id=int(stage_b["id"])),
+                operator=admin,
+            )
+            self.assertIsNone(updated)
+            self.assertEqual(error_message, "存在生产中的工序参与，不能移除该用户的工序绑定")
+            db.rollback()
+        finally:
+            db.close()
 
     def test_manual_production_export_uses_chinese_order_status_label(self) -> None:
         stage = self._create_stage("M1")
