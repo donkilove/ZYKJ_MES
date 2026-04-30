@@ -5,16 +5,15 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
+import 'package:mes_client/features/equipment/presentation/widgets/maintenance_execution_complete_dialog.dart';
 import 'package:mes_client/features/equipment/presentation/maintenance_execution_detail_page.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_action_dialog.dart';
-import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
-import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 
 class MaintenanceExecutionPage extends StatefulWidget {
@@ -230,124 +229,21 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
     if (!mounted) {
       return;
     }
-    final pageContext = context;
-    final remarkController = TextEditingController();
-    final attachmentController = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-    String selectedSummary = '完成';
-
-    final confirmed = await showMesLockedFormDialog<bool>(
-      context: pageContext,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (dialogBuildContext, setDialogState) {
-            final needExceptionReport = selectedSummary == '失败';
-            return MesDialog(
-              title: const Text('完成保养执行'),
-              width: 560,
-              content: Form(
-                key: formKey,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedSummary,
-                        decoration: const InputDecoration(
-                          labelText: '结果摘要',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: const [
-                          DropdownMenuItem<String>(
-                            value: '完成',
-                            child: Text('完成'),
-                          ),
-                          DropdownMenuItem<String>(
-                            value: '失败',
-                            child: Text('失败'),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          if (value == null) {
-                            return;
-                          }
-                          setDialogState(() {
-                            selectedSummary = value;
-                            if (selectedSummary != '失败') {
-                              remarkController.clear();
-                            }
-                          });
-                        },
-                      ),
-                      if (needExceptionReport) ...[
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: remarkController,
-                          maxLines: 3,
-                          decoration: const InputDecoration(
-                            labelText: '异常上报',
-                            border: OutlineInputBorder(),
-                          ),
-                          validator: (value) {
-                            if (selectedSummary == '失败' &&
-                                (value == null || value.trim().isEmpty)) {
-                              return '结果摘要为失败时必须填写异常上报';
-                            }
-                            return null;
-                          },
-                        ),
-                      ],
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: attachmentController,
-                        decoration: const InputDecoration(
-                          labelText: '附件地址（可选，支持下载链接或 UNC 路径）',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogBuildContext).pop(false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    if (!formKey.currentState!.validate()) {
-                      return;
-                    }
-                    Navigator.of(dialogBuildContext).pop(true);
-                  },
-                  child: const Text('提交'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+    final result = await showMaintenanceExecutionCompleteDialog(
+      context: context,
+      workOrder: item,
     );
 
-    if (confirmed != true) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        remarkController.dispose();
-        attachmentController.dispose();
-      });
+    if (result == null) {
       return;
     }
 
     try {
       await _equipmentService.completeExecution(
         workOrderId: item.id,
-        resultSummary: selectedSummary,
-        resultRemark: selectedSummary == '失败'
-            ? remarkController.text.trim()
-            : null,
-        attachmentLink: attachmentController.text.trim().isEmpty
-            ? null
-            : attachmentController.text.trim(),
+        resultSummary: result.resultSummary,
+        resultRemark: result.resultRemark,
+        attachmentLink: result.attachmentLink,
       );
       if (mounted) {
         ScaffoldMessenger.of(
@@ -366,11 +262,6 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('完成执行失败：${_errorMessage(error)}')));
-    } finally {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        remarkController.dispose();
-        attachmentController.dispose();
-      });
     }
   }
 

@@ -4,9 +4,12 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
 import 'package:mes_client/features/equipment/presentation/equipment_ledger_page.dart';
+import 'package:mes_client/features/equipment/presentation/widgets/equipment_ledger_form_dialog.dart';
 import 'package:mes_client/features/equipment/presentation/maintenance_execution_page.dart';
 import 'package:mes_client/features/equipment/presentation/maintenance_item_page.dart';
 import 'package:mes_client/features/equipment/presentation/maintenance_plan_page.dart';
+import 'package:mes_client/features/equipment/presentation/widgets/maintenance_execution_complete_dialog.dart';
+import 'package:mes_client/features/equipment/presentation/widgets/maintenance_plan_form_dialog.dart';
 import 'package:mes_client/features/equipment/presentation/maintenance_record_page.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
@@ -81,6 +84,14 @@ class _FakeEquipmentService extends EquipmentService {
        super(AppSession(baseUrl: '', accessToken: 'token'));
 
   int ownersRequestCount = 0;
+  int createEquipmentCalls = 0;
+  int updateEquipmentCalls = 0;
+  int toggleEquipmentCalls = 0;
+  int deleteEquipmentCalls = 0;
+  int createPlanCalls = 0;
+  int updatePlanCalls = 0;
+  int togglePlanCalls = 0;
+  int deletePlanCalls = 0;
   int startExecutionCalls = 0;
   int completeExecutionCalls = 0;
   int cancelExecutionCalls = 0;
@@ -110,6 +121,89 @@ class _FakeEquipmentService extends EquipmentService {
       total: _equipmentItems.length,
       items: _equipmentItems,
     );
+  }
+
+  @override
+  Future<void> createEquipment({
+    required String code,
+    required String name,
+    required String model,
+    required String location,
+    required String ownerName,
+    String remark = '',
+  }) async {
+    createEquipmentCalls += 1;
+    _equipmentItems.add(
+      EquipmentLedgerItem(
+        id: _equipmentItems.length + 1,
+        code: code,
+        name: name,
+        model: model,
+        location: location,
+        ownerName: ownerName,
+        remark: remark,
+        isEnabled: true,
+        createdAt: DateTime.parse('2026-03-05T08:00:00Z'),
+        updatedAt: DateTime.parse('2026-03-05T08:00:00Z'),
+      ),
+    );
+  }
+
+  @override
+  Future<void> updateEquipment({
+    required int equipmentId,
+    required String code,
+    required String name,
+    required String model,
+    required String location,
+    required String ownerName,
+    String remark = '',
+  }) async {
+    updateEquipmentCalls += 1;
+    final index = _equipmentItems.indexWhere((item) => item.id == equipmentId);
+    if (index < 0) return;
+    final existing = _equipmentItems[index];
+    _equipmentItems[index] = EquipmentLedgerItem(
+      id: existing.id,
+      code: code,
+      name: name,
+      model: model,
+      location: location,
+      ownerName: ownerName,
+      remark: remark,
+      isEnabled: existing.isEnabled,
+      createdAt: existing.createdAt,
+      updatedAt: DateTime.parse('2026-03-06T09:00:00Z'),
+    );
+  }
+
+  @override
+  Future<void> toggleEquipment({
+    required int equipmentId,
+    required bool enabled,
+  }) async {
+    toggleEquipmentCalls += 1;
+    final index = _equipmentItems.indexWhere((item) => item.id == equipmentId);
+    if (index < 0) return;
+    final existing = _equipmentItems[index];
+    _equipmentItems[index] = EquipmentLedgerItem(
+      id: existing.id,
+      code: existing.code,
+      name: existing.name,
+      model: existing.model,
+      location: existing.location,
+      ownerName: existing.ownerName,
+      remark: existing.remark,
+      isEnabled: enabled,
+      createdAt: existing.createdAt,
+      updatedAt: DateTime.parse('2026-03-06T10:00:00Z'),
+    );
+  }
+
+  @override
+  Future<void> deleteEquipment({required int equipmentId}) async {
+    deleteEquipmentCalls += 1;
+    _equipmentItems.removeWhere((item) => item.id == equipmentId);
   }
 
   @override
@@ -159,6 +253,48 @@ class _FakeEquipmentService extends EquipmentService {
         ),
       ],
     );
+  }
+
+  @override
+  Future<void> createMaintenancePlan({
+    required int equipmentId,
+    required int itemId,
+    required String executionProcessCode,
+    required DateTime startDate,
+    required int? estimatedDurationMinutes,
+    required DateTime? nextDueDate,
+    required int? defaultExecutorUserId,
+    int? cycleDays,
+  }) async {
+    createPlanCalls += 1;
+  }
+
+  @override
+  Future<void> updateMaintenancePlan({
+    required int planId,
+    required int equipmentId,
+    required int itemId,
+    required String executionProcessCode,
+    required DateTime startDate,
+    required int? estimatedDurationMinutes,
+    required DateTime? nextDueDate,
+    required int? defaultExecutorUserId,
+    int? cycleDays,
+  }) async {
+    updatePlanCalls += 1;
+  }
+
+  @override
+  Future<void> toggleMaintenancePlan({
+    required int planId,
+    required bool enabled,
+  }) async {
+    togglePlanCalls += 1;
+  }
+
+  @override
+  Future<void> deleteMaintenancePlan({required int planId}) async {
+    deletePlanCalls += 1;
   }
 
   @override
@@ -562,6 +698,79 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('设备台账表单弹窗展示宽版双栏骨架', (tester) async {
+    final equipmentService = _FakeEquipmentService();
+    await _pumpPage(
+      tester,
+        EquipmentLedgerFormDialog(
+          equipmentService: equipmentService,
+          ownerOptions: [
+            EquipmentOwnerOption(userId: 7, username: 'm1', fullName: null),
+          ],
+        item: _buildEquipmentLedgerItem(id: 1, code: 'EQ-001', name: '冲压机-A'),
+      ),
+      size: const Size(1400, 1200),
+    );
+
+    expect(find.byKey(const ValueKey('equipment-ledger-form-dialog')), findsOneWidget);
+    expect(find.text('基本信息'), findsOneWidget);
+    expect(find.text('状态与说明'), findsOneWidget);
+    expect(find.text('设备编号'), findsOneWidget);
+    expect(find.text('设备名称'), findsOneWidget);
+    expect(find.text('负责人'), findsOneWidget);
+  });
+
+  testWidgets('设备台账页面可完成新增 编辑 启停 与 删除', (tester) async {
+    final equipmentService = _FakeEquipmentService();
+    await _pumpPage(
+      tester,
+      EquipmentLedgerPage(
+        session: session,
+        onLogout: () {},
+        canWrite: true,
+        equipmentService: equipmentService,
+      ),
+      size: const Size(1600, 1200),
+    );
+
+    await tester.tap(find.text('新增设备'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, '设备编号'), 'EQ-NEW-001');
+    await tester.enterText(find.widgetWithText(TextFormField, '设备名称'), '新设备');
+    await tester.enterText(find.widgetWithText(TextFormField, '位置'), '二车间-B02');
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    expect(equipmentService.createEquipmentCalls, 1);
+    expect(find.text('新设备'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, '编辑').first);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, '设备名称'), '新设备-已编辑');
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+
+    expect(equipmentService.updateEquipmentCalls, 1);
+    expect(find.text('新设备-已编辑'), findsOneWidget);
+
+    await tester.ensureVisible(find.widgetWithText(TextButton, '停用').first);
+    await tester.tap(find.widgetWithText(TextButton, '停用').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '确认').last);
+    await tester.pumpAndSettle();
+
+    expect(equipmentService.toggleEquipmentCalls, 1);
+    expect(find.text('启用'), findsWidgets);
+
+    await tester.ensureVisible(find.widgetWithText(TextButton, '删除').first);
+    await tester.tap(find.widgetWithText(TextButton, '删除').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '删除').last);
+    await tester.pumpAndSettle();
+
+    expect(equipmentService.deleteEquipmentCalls, 1);
+  });
+
   testWidgets('保养项目页面按需求字段展示创建时间与更新时间', (tester) async {
     final equipmentService = _FakeEquipmentService();
     await _pumpPage(
@@ -675,6 +884,85 @@ void main() {
     expect(find.textContaining('超长执行工段名称'), findsWidgets);
     expect(find.textContaining('executor_admin'), findsWidgets);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('保养计划表单弹窗展示宽版双栏骨架', (tester) async {
+    final equipmentService = _FakeEquipmentService();
+    await _pumpPage(
+      tester,
+      MaintenancePlanFormDialog(
+        equipmentService: equipmentService,
+        equipmentOptions: [_buildEquipmentLedgerItem(id: 1, code: 'EQ-001', name: '冲压机-A')],
+        itemOptions: [_buildMaintenanceItemEntry(id: 2, name: '月度润滑')],
+        stageOptions: [_buildCraftStageItem(id: 9, code: 'STAMPING', name: '冲压工段')],
+        ownerOptions: [EquipmentOwnerOption(userId: 7, username: 'm1', fullName: null)],
+      ),
+      size: const Size(1500, 1200),
+    );
+
+    expect(find.byKey(const ValueKey('maintenance-plan-form-dialog')), findsOneWidget);
+    expect(find.text('计划配置'), findsOneWidget);
+    expect(find.text('执行与排期'), findsOneWidget);
+    expect(find.text('设备'), findsOneWidget);
+    expect(find.text('保养项目'), findsOneWidget);
+    expect(find.text('执行工段'), findsOneWidget);
+  });
+
+  testWidgets('保养计划页面可完成新增 编辑 与 删除', (tester) async {
+    final equipmentService = _FakeEquipmentService();
+    await _pumpPage(
+      tester,
+      MaintenancePlanPage(
+        session: session,
+        onLogout: () {},
+        canWrite: true,
+        equipmentService: equipmentService,
+        craftService: craftService,
+      ),
+      size: const Size(1600, 1200),
+    );
+
+    await tester.tap(find.text('新增计划'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+    expect(equipmentService.createPlanCalls, 1);
+
+    await tester.ensureVisible(find.widgetWithText(TextButton, '编辑').first);
+    await tester.tap(find.widgetWithText(TextButton, '编辑').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+    expect(equipmentService.updatePlanCalls, 1);
+
+    await tester.ensureVisible(find.widgetWithText(TextButton, '删除').first);
+    await tester.tap(find.widgetWithText(TextButton, '删除').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '删除').last);
+    await tester.pumpAndSettle();
+    expect(equipmentService.deletePlanCalls, 1);
+  });
+
+  testWidgets('保养计划表单弹窗展示宽版双栏骨架', (tester) async {
+    final equipmentService = _FakeEquipmentService();
+    await _pumpPage(
+      tester,
+      MaintenancePlanFormDialog(
+        equipmentService: equipmentService,
+        equipmentOptions: [_buildEquipmentLedgerItem(id: 1, code: 'EQ-001', name: '冲压机-A')],
+        itemOptions: [_buildMaintenanceItemEntry(id: 2, name: '月度润滑')],
+        stageOptions: [_buildCraftStageItem(id: 9, code: 'STAMPING', name: '冲压工段')],
+        ownerOptions: [EquipmentOwnerOption(userId: 7, username: 'm1', fullName: null)],
+      ),
+      size: const Size(1500, 1200),
+    );
+
+    expect(find.byKey(const ValueKey('maintenance-plan-form-dialog')), findsOneWidget);
+    expect(find.text('计划配置'), findsOneWidget);
+    expect(find.text('设备'), findsOneWidget);
+    expect(find.text('保养项目'), findsOneWidget);
+    expect(find.text('执行工段'), findsOneWidget);
+    expect(find.text('默认执行人'), findsOneWidget);
   });
 
   testWidgets('保养执行页面展示工单关键字段', (tester) async {
@@ -820,6 +1108,26 @@ void main() {
           .then((result) => result.items.single.status),
       completion('done'),
     );
+  });
+
+  testWidgets('保养执行完成弹窗展示宽版骨架', (tester) async {
+    await _pumpPage(
+      tester,
+      MaintenanceExecutionCompleteDialog(
+        workOrder: _buildMaintenanceWorkOrderItem(
+          id: 4,
+          equipmentName: '冲压机-A',
+          itemName: '月度润滑',
+        ),
+      ),
+      size: const Size(1400, 1200),
+    );
+
+    expect(find.byKey(const ValueKey('maintenance-execution-complete-dialog')), findsOneWidget);
+    expect(find.text('完成保养执行'), findsOneWidget);
+    expect(find.text('执行结果'), findsOneWidget);
+    expect(find.text('结果摘要'), findsOneWidget);
+    expect(find.text('附件地址（可选，支持下载链接或 UNC 路径）'), findsOneWidget);
   });
 
   testWidgets('保养执行页面可取消工单', (tester) async {

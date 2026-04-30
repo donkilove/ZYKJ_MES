@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
+import 'package:mes_client/features/equipment/presentation/widgets/equipment_rule_form_dialog.dart';
+import 'package:mes_client/features/equipment/presentation/widgets/equipment_rule_parameter_action_dialogs.dart';
+import 'package:mes_client/features/equipment/presentation/widgets/equipment_runtime_parameter_form_dialog.dart';
 import 'package:mes_client/core/network/api_exception.dart';
-import 'package:mes_client/core/ui/patterns/mes_action_dialog.dart';
-import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
@@ -268,16 +269,6 @@ class _RulesTabState extends State<_RulesTab> {
   bool _isUnauthorized(Object e) => e is ApiException && e.statusCode == 401;
   String _errMsg(Object e) => e is ApiException ? e.message : e.toString();
 
-  Future<DateTime?> _pickEffectiveDate(DateTime? current) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: current ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
-    );
-    return picked;
-  }
-
   String _formatDateTime(DateTime? value) {
     if (value == null) return '-';
     final local = value.toLocal();
@@ -332,171 +323,13 @@ class _RulesTabState extends State<_RulesTab> {
   }
 
   Future<void> _showUpsertDialog({EquipmentRuleItem? item}) async {
-    final codeCtrl = TextEditingController(text: item?.ruleCode ?? '');
-    final nameCtrl = TextEditingController(text: item?.ruleName ?? '');
-    final typeCtrl = TextEditingController(text: item?.ruleType ?? '');
-    final condCtrl = TextEditingController(text: item?.conditionDesc ?? '');
-    final remarkCtrl = TextEditingController(text: item?.remark ?? '');
-    bool isEnabled = item?.isEnabled ?? true;
-    int? selectedEquipmentId = item?.equipmentId;
-    final equipmentTypeCtrl = TextEditingController(
-      text: item?.equipmentType ?? '',
-    );
-    DateTime? selectedEffectiveAt = item?.effectiveAt;
-
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showEquipmentRuleFormDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => MesDialog(
-          title: Text(item == null ? '新增设备规则' : '编辑设备规则'),
-          width: 560,
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: codeCtrl,
-                  decoration: const InputDecoration(labelText: '规则编码 *'),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: '规则名称 *'),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: typeCtrl,
-                  decoration: const InputDecoration(labelText: '规则类型'),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: condCtrl,
-                  decoration: const InputDecoration(labelText: '触发条件'),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: remarkCtrl,
-                  decoration: const InputDecoration(labelText: '备注'),
-                ),
-                const SizedBox(height: 8),
-                SwitchListTile(
-                  title: const Text('启用'),
-                  value: isEnabled,
-                  onChanged: (v) => setS(() => isEnabled = v),
-                  contentPadding: EdgeInsets.zero,
-                ),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<int?>(
-                  initialValue: selectedEquipmentId,
-                  items: [
-                    const DropdownMenuItem<int?>(
-                      value: null,
-                      child: Text('适用全部设备'),
-                    ),
-                    ...widget.equipmentOptions.map(
-                      (entry) => DropdownMenuItem<int?>(
-                        value: entry.id,
-                        child: Text('${entry.code} ${entry.name}'),
-                      ),
-                    ),
-                  ],
-                  onChanged: (value) => setS(() => selectedEquipmentId = value),
-                  decoration: const InputDecoration(labelText: '适用设备'),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: equipmentTypeCtrl,
-                  decoration: const InputDecoration(labelText: '适用设备类型'),
-                ),
-                const SizedBox(height: 8),
-                InkWell(
-                  onTap: () async {
-                    final picked = await _pickEffectiveDate(
-                      selectedEffectiveAt,
-                    );
-                    if (picked != null) {
-                      setS(() => selectedEffectiveAt = picked);
-                    }
-                  },
-                  child: InputDecorator(
-                    decoration: const InputDecoration(labelText: '生效时间'),
-                    child: Text(_formatDateTime(selectedEffectiveAt)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('保存'),
-            ),
-          ],
-        ),
-      ),
+      service: widget.service,
+      equipmentOptions: widget.equipmentOptions,
+      item: item,
     );
-
-    if (confirmed != true || !mounted) return;
-    if (codeCtrl.text.trim().isEmpty || nameCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('规则编码和名称不能为空')));
-      return;
-    }
-    if (selectedEquipmentId == null && equipmentTypeCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请至少选择适用设备或填写设备类型')));
-      return;
-    }
-
-    try {
-      if (item == null) {
-        await widget.service.createEquipmentRule(
-          equipmentId: selectedEquipmentId,
-          equipmentType: equipmentTypeCtrl.text.trim().isEmpty
-              ? null
-              : equipmentTypeCtrl.text.trim(),
-          ruleCode: codeCtrl.text.trim(),
-          ruleName: nameCtrl.text.trim(),
-          ruleType: typeCtrl.text.trim(),
-          conditionDesc: condCtrl.text.trim(),
-          isEnabled: isEnabled,
-          effectiveAt: selectedEffectiveAt,
-          remark: remarkCtrl.text.trim(),
-        );
-      } else {
-        await widget.service.updateEquipmentRule(
-          ruleId: item.id,
-          equipmentId: selectedEquipmentId,
-          equipmentType: equipmentTypeCtrl.text.trim().isEmpty
-              ? null
-              : equipmentTypeCtrl.text.trim(),
-          ruleCode: codeCtrl.text.trim(),
-          ruleName: nameCtrl.text.trim(),
-          ruleType: typeCtrl.text.trim(),
-          conditionDesc: condCtrl.text.trim(),
-          isEnabled: isEnabled,
-          effectiveAt: selectedEffectiveAt,
-          remark: remarkCtrl.text.trim(),
-        );
-      }
-      if (mounted) _load();
-    } catch (e) {
-      if (!mounted) return;
-      if (_isUnauthorized(e)) {
-        widget.onLogout();
-        return;
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(_errMsg(e))));
-    }
+    if (confirmed == true && mounted) _load();
   }
 
   Future<void> _toggleRule(EquipmentRuleItem item) async {
@@ -519,17 +352,11 @@ class _RulesTabState extends State<_RulesTab> {
   }
 
   Future<void> _deleteRule(EquipmentRuleItem item) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showEquipmentRuleDeleteDialog(
       context: context,
-      builder: (ctx) => MesActionDialog(
-        title: const Text('确认删除'),
-        content: Text('确定删除规则「${item.ruleName}」？'),
-        confirmLabel: '删除',
-        isDestructive: true,
-        onConfirm: () => Navigator.pop(ctx, true),
-      ),
+      ruleName: item.ruleName,
     );
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
     try {
       await widget.service.deleteEquipmentRule(item.id);
       if (mounted) _load();
@@ -913,16 +740,6 @@ class _ParametersTabState extends State<_ParametersTab> {
   bool _isUnauthorized(Object e) => e is ApiException && e.statusCode == 401;
   String _errMsg(Object e) => e is ApiException ? e.message : e.toString();
 
-  Future<DateTime?> _pickEffectiveDate(DateTime? current) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: current ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
-    );
-    return picked;
-  }
-
   String _formatDateTime(DateTime? value) {
     if (value == null) return '-';
     final local = value.toLocal();
@@ -980,231 +797,21 @@ class _ParametersTabState extends State<_ParametersTab> {
   }
 
   Future<void> _showUpsertDialog({EquipmentRuntimeParameterItem? item}) async {
-    final codeCtrl = TextEditingController(text: item?.paramCode ?? '');
-    final nameCtrl = TextEditingController(text: item?.paramName ?? '');
-    final unitCtrl = TextEditingController(text: item?.unit ?? '');
-    final stdCtrl = TextEditingController(text: item?.standardValue ?? '');
-    final upperCtrl = TextEditingController(text: item?.upperLimit ?? '');
-    final lowerCtrl = TextEditingController(text: item?.lowerLimit ?? '');
-    final remarkCtrl = TextEditingController(text: item?.remark ?? '');
-    int? selectedEquipmentId = item?.equipmentId;
-    final equipmentTypeCtrl = TextEditingController(
-      text: item?.equipmentType ?? '',
-    );
-    DateTime? selectedEffectiveAt = item?.effectiveAt;
-    bool isEnabled = item?.isEnabled ?? true;
-
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showEquipmentRuntimeParameterFormDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setStateDialog) => MesDialog(
-          title: Text(item == null ? '新增运行参数' : '编辑运行参数'),
-          width: 560,
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: codeCtrl,
-                  decoration: const InputDecoration(labelText: '参数编码 *'),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: '参数名称 *'),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: unitCtrl,
-                  decoration: const InputDecoration(labelText: '单位'),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: stdCtrl,
-                  decoration: const InputDecoration(labelText: '默认值'),
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: upperCtrl,
-                  decoration: const InputDecoration(labelText: '上限'),
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: lowerCtrl,
-                  decoration: const InputDecoration(labelText: '下限'),
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: remarkCtrl,
-                  decoration: const InputDecoration(labelText: '备注'),
-                ),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<int?>(
-                  initialValue: selectedEquipmentId,
-                  items: [
-                    const DropdownMenuItem<int?>(
-                      value: null,
-                      child: Text('适用全部设备'),
-                    ),
-                    ...widget.equipmentOptions.map(
-                      (entry) => DropdownMenuItem<int?>(
-                        value: entry.id,
-                        child: Text('${entry.code} ${entry.name}'),
-                      ),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    setStateDialog(() => selectedEquipmentId = value);
-                  },
-                  decoration: const InputDecoration(labelText: '适用设备'),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: equipmentTypeCtrl,
-                  decoration: const InputDecoration(labelText: '适用设备类型'),
-                ),
-                const SizedBox(height: 8),
-                InkWell(
-                  onTap: () async {
-                    final picked = await _pickEffectiveDate(
-                      selectedEffectiveAt,
-                    );
-                    if (picked != null) {
-                      setStateDialog(() => selectedEffectiveAt = picked);
-                    }
-                  },
-                  child: InputDecorator(
-                    decoration: const InputDecoration(labelText: '生效时间'),
-                    child: Text(_formatDateTime(selectedEffectiveAt)),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                SwitchListTile(
-                  title: const Text('启用'),
-                  value: isEnabled,
-                  onChanged: (value) {
-                    setStateDialog(() => isEnabled = value);
-                  },
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('保存'),
-            ),
-          ],
-        ),
-      ),
+      service: widget.service,
+      equipmentOptions: widget.equipmentOptions,
+      item: item,
     );
-
-    if (confirmed != true || !mounted) return;
-    if (codeCtrl.text.trim().isEmpty || nameCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('参数编码和名称不能为空')));
-      return;
-    }
-    final standardValue = stdCtrl.text.trim();
-    final upperLimit = upperCtrl.text.trim();
-    final lowerLimit = lowerCtrl.text.trim();
-    final parsedStandard = standardValue.isEmpty
-        ? null
-        : double.tryParse(standardValue);
-    final parsedUpper = upperLimit.isEmpty ? null : double.tryParse(upperLimit);
-    final parsedLower = lowerLimit.isEmpty ? null : double.tryParse(lowerLimit);
-    if ((standardValue.isNotEmpty && parsedStandard == null) ||
-        (upperLimit.isNotEmpty && parsedUpper == null) ||
-        (lowerLimit.isNotEmpty && parsedLower == null)) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('默认值、上限、下限必须为有效数字')));
-      return;
-    }
-    if (parsedUpper != null &&
-        parsedLower != null &&
-        parsedLower > parsedUpper) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('下限不能大于上限')));
-      return;
-    }
-    if (selectedEquipmentId == null && equipmentTypeCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请至少选择适用设备或填写设备类型')));
-      return;
-    }
-
-    try {
-      if (item == null) {
-        await widget.service.createRuntimeParameter(
-          equipmentId: selectedEquipmentId,
-          equipmentType: equipmentTypeCtrl.text.trim().isEmpty
-              ? null
-              : equipmentTypeCtrl.text.trim(),
-          paramCode: codeCtrl.text.trim(),
-          paramName: nameCtrl.text.trim(),
-          unit: unitCtrl.text.trim(),
-          standardValue: standardValue.isEmpty ? null : standardValue,
-          upperLimit: upperLimit.isEmpty ? null : upperLimit,
-          lowerLimit: lowerLimit.isEmpty ? null : lowerLimit,
-          effectiveAt: selectedEffectiveAt,
-          isEnabled: isEnabled,
-          remark: remarkCtrl.text.trim(),
-        );
-      } else {
-        await widget.service.updateRuntimeParameter(
-          paramId: item.id,
-          equipmentId: selectedEquipmentId,
-          equipmentType: equipmentTypeCtrl.text.trim().isEmpty
-              ? null
-              : equipmentTypeCtrl.text.trim(),
-          paramCode: codeCtrl.text.trim(),
-          paramName: nameCtrl.text.trim(),
-          unit: unitCtrl.text.trim(),
-          standardValue: standardValue.isEmpty ? null : standardValue,
-          upperLimit: upperLimit.isEmpty ? null : upperLimit,
-          lowerLimit: lowerLimit.isEmpty ? null : lowerLimit,
-          effectiveAt: selectedEffectiveAt,
-          isEnabled: isEnabled,
-          remark: remarkCtrl.text.trim(),
-        );
-      }
-      if (mounted) _load();
-    } catch (e) {
-      if (!mounted) return;
-      if (_isUnauthorized(e)) {
-        widget.onLogout();
-        return;
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(_errMsg(e))));
-    }
+    if (confirmed == true && mounted) _load();
   }
 
   Future<void> _deleteParam(EquipmentRuntimeParameterItem item) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showEquipmentRuntimeParameterDeleteDialog(
       context: context,
-      builder: (ctx) => MesActionDialog(
-        title: const Text('确认删除'),
-        content: Text('确定删除参数「${item.paramName}」？'),
-        confirmLabel: '删除',
-        isDestructive: true,
-        onConfirm: () => Navigator.pop(ctx, true),
-      ),
+      paramName: item.paramName,
     );
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
     try {
       await widget.service.deleteRuntimeParameter(item.id);
       if (mounted) _load();

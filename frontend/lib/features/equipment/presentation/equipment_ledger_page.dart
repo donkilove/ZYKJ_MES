@@ -3,14 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
 import 'package:mes_client/features/equipment/presentation/equipment_detail_page.dart';
+import 'package:mes_client/features/equipment/presentation/widgets/equipment_ledger_action_dialogs.dart';
+import 'package:mes_client/features/equipment/presentation/widgets/equipment_ledger_form_dialog.dart';
 import 'package:mes_client/core/network/api_exception.dart';
-import 'package:mes_client/core/ui/patterns/mes_action_dialog.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
-import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
-import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 
 class EquipmentLedgerPage extends StatefulWidget {
@@ -149,198 +148,12 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
     if (!mounted) {
       return;
     }
-    final pageContext = context;
-    final isCreate = item == null;
-    final codeController = TextEditingController(text: item?.code ?? '');
-    final nameController = TextEditingController(text: item?.name ?? '');
-    final modelController = TextEditingController(text: item?.model ?? '');
-    final locationController = TextEditingController(
-      text: item?.location ?? '',
+    final saved = await showEquipmentLedgerFormDialog(
+      context: context,
+      equipmentService: _equipmentService,
+      ownerOptions: _ownerOptions,
+      item: item,
     );
-    final remarkController = TextEditingController(text: item?.remark ?? '');
-    final formKey = GlobalKey<FormState>();
-    var selectedOwner = (item?.ownerName ?? '').trim();
-    final ownerNames = _ownerOptions.map((owner) => owner.username).toSet();
-    if (selectedOwner.isNotEmpty && !ownerNames.contains(selectedOwner)) {
-      selectedOwner = '';
-    }
-
-    final saved = await showMesLockedFormDialog<bool>(
-      context: pageContext,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (innerContext, setInnerState) {
-            return MesDialog(
-              title: Text(isCreate ? '新增设备' : '编辑设备'),
-              width: 560,
-              content: Form(
-                key: formKey,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextFormField(
-                        controller: codeController,
-                        decoration: const InputDecoration(
-                          labelText: '设备编号',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return '请输入设备编号';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: nameController,
-                        decoration: const InputDecoration(
-                          labelText: '设备名称',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return '请输入设备名称';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: modelController,
-                        decoration: const InputDecoration(
-                          labelText: '型号',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: locationController,
-                        decoration: const InputDecoration(
-                          labelText: '位置',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return '请输入位置';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedOwner.isEmpty
-                            ? null
-                            : selectedOwner,
-                        isExpanded: true,
-                        items: _ownerOptions
-                            .map(
-                              (entry) => DropdownMenuItem<String>(
-                                value: entry.username,
-                                child: _buildOwnerDropdownText(
-                                  entry.displayName,
-                                ),
-                              ),
-                            )
-                            .toList(),
-                        selectedItemBuilder: (context) {
-                          return _ownerOptions
-                              .map(
-                                (entry) => Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: _buildOwnerDropdownText(
-                                    entry.displayName,
-                                  ),
-                                ),
-                              )
-                              .toList();
-                        },
-                        onChanged: (value) {
-                          setInnerState(() {
-                            selectedOwner = value ?? '';
-                          });
-                        },
-                        decoration: const InputDecoration(
-                          labelText: '负责人',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: remarkController,
-                        decoration: const InputDecoration(
-                          labelText: '备注',
-                          border: OutlineInputBorder(),
-                        ),
-                        maxLines: 3,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    if (!formKey.currentState!.validate()) {
-                      return;
-                    }
-                    try {
-                      if (isCreate) {
-                        await _equipmentService.createEquipment(
-                          code: codeController.text.trim(),
-                          name: nameController.text.trim(),
-                          model: modelController.text.trim(),
-                          location: locationController.text.trim(),
-                          ownerName: selectedOwner,
-                          remark: remarkController.text.trim(),
-                        );
-                      } else {
-                        await _equipmentService.updateEquipment(
-                          equipmentId: item.id,
-                          code: codeController.text.trim(),
-                          name: nameController.text.trim(),
-                          model: modelController.text.trim(),
-                          location: locationController.text.trim(),
-                          ownerName: selectedOwner,
-                          remark: remarkController.text.trim(),
-                        );
-                      }
-                      if (dialogContext.mounted) {
-                        Navigator.of(dialogContext).pop(true);
-                      }
-                    } catch (error) {
-                      if (_isUnauthorized(error)) {
-                        widget.onLogout();
-                        return;
-                      }
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('保存设备失败: ${_errorMessage(error)}'),
-                          ),
-                        );
-                      }
-                    }
-                  },
-                  child: const Text('保存'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    codeController.dispose();
-    nameController.dispose();
-    modelController.dispose();
-    locationController.dispose();
-    remarkController.dispose();
 
     if (saved == true) {
       await _loadItems();
@@ -365,15 +178,12 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
     if (!mounted) {
       return;
     }
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showEquipmentLedgerToggleDialog(
       context: context,
-      builder: (dialogContext) => MesActionDialog(
-        title: Text('$action设备'),
-        content: Text('确认$action设备“${item.name}”吗？'),
-        onConfirm: () => Navigator.of(dialogContext).pop(true),
-      ),
+      item: item,
+      nextEnabled: nextEnabled,
     );
-    if (confirmed != true) {
+    if (!confirmed) {
       return;
     }
     try {
@@ -405,17 +215,11 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
     if (!mounted) {
       return;
     }
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showEquipmentLedgerDeleteDialog(
       context: context,
-      builder: (dialogContext) => MesActionDialog(
-        title: const Text('删除设备'),
-        content: Text('确认删除设备“${item.name}”吗？此操作不可恢复。'),
-        confirmLabel: '删除',
-        isDestructive: true,
-        onConfirm: () => Navigator.of(dialogContext).pop(true),
-      ),
+      item: item,
     );
-    if (confirmed != true) {
+    if (!confirmed) {
       return;
     }
     try {

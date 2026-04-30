@@ -3,15 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
+import 'package:mes_client/features/equipment/presentation/widgets/maintenance_plan_action_dialogs.dart';
+import 'package:mes_client/features/equipment/presentation/widgets/maintenance_plan_form_dialog.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
-import 'package:mes_client/core/ui/patterns/mes_action_dialog.dart';
-import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
-import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 
 class MaintenancePlanPage extends StatefulWidget {
@@ -186,332 +185,23 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
     if (!mounted) {
       return;
     }
-    final pageContext = context;
     if (_equipmentOptions.isEmpty ||
         _itemOptions.isEmpty ||
         _stageOptions.isEmpty) {
       ScaffoldMessenger.of(
-        pageContext,
+        context,
       ).showSnackBar(const SnackBar(content: Text('请先维护设备台账、保养项目和工艺工段')));
       return;
     }
-
-    final isCreate = plan == null;
-    final formKey = GlobalKey<FormState>();
-    var selectedEquipmentId = plan?.equipmentId ?? _equipmentOptions.first.id;
-    var selectedItemId = plan?.itemId ?? _itemOptions.first.id;
-    var selectedExecutionProcessCode =
-        plan?.executionProcessCode ?? _stageOptions.first.code;
-    if (!_stageOptions.any(
-      (stage) => stage.code == selectedExecutionProcessCode,
-    )) {
-      selectedExecutionProcessCode = _stageOptions.first.code;
-    }
-    var selectedStartDate = plan?.startDate ?? DateTime.now();
-    DateTime? selectedNextDueDate = plan?.nextDueDate;
-    var selectedDefaultExecutorUserId = plan?.defaultExecutorUserId;
-    final cycleDaysController = TextEditingController(
-      text: plan?.cycleDays != null ? '${plan!.cycleDays}' : '',
+    final saved = await showMaintenancePlanFormDialog(
+      context: context,
+      equipmentService: _equipmentService,
+      equipmentOptions: _equipmentOptions,
+      itemOptions: _itemOptions,
+      stageOptions: _stageOptions,
+      ownerOptions: _ownerOptions,
+      plan: plan,
     );
-    final estimatedDurationController = TextEditingController(
-      text: plan?.estimatedDurationMinutes != null
-          ? '${plan!.estimatedDurationMinutes}'
-          : '',
-    );
-
-    final saved = await showMesLockedFormDialog<bool>(
-      context: pageContext,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (innerContext, setInnerState) {
-            final selectedItem = _itemOptions.firstWhere(
-              (entry) => entry.id == selectedItemId,
-              orElse: () => _itemOptions.first,
-            );
-            return MesDialog(
-              title: Text(isCreate ? '新增保养计划' : '编辑保养计划'),
-              width: 680,
-              content: SingleChildScrollView(
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      DropdownButtonFormField<int>(
-                        initialValue: selectedEquipmentId,
-                        items: _equipmentOptions
-                            .map(
-                              (entry) => DropdownMenuItem<int>(
-                                value: entry.id,
-                                child: Text('${entry.code} - ${entry.name}'),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value == null) {
-                            return;
-                          }
-                          setInnerState(() {
-                            selectedEquipmentId = value;
-                          });
-                        },
-                        decoration: const InputDecoration(
-                          labelText: '设备',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<int>(
-                        initialValue: selectedItemId,
-                        items: _itemOptions
-                            .map(
-                              (entry) => DropdownMenuItem<int>(
-                                value: entry.id,
-                                child: Text(entry.name),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value == null) {
-                            return;
-                          }
-                          setInnerState(() {
-                            selectedItemId = value;
-                          });
-                        },
-                        decoration: const InputDecoration(
-                          labelText: '保养项目',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedExecutionProcessCode,
-                        items: _stageOptions
-                            .map(
-                              (stage) => DropdownMenuItem<String>(
-                                value: stage.code,
-                                child: Text('${stage.name} (${stage.code})'),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value == null) {
-                            return;
-                          }
-                          setInnerState(() {
-                            selectedExecutionProcessCode = value;
-                          });
-                        },
-                        decoration: const InputDecoration(
-                          labelText: '执行工段',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: cycleDaysController,
-                        decoration: InputDecoration(
-                          labelText:
-                              '周期(天，留空使用项目默认: ${selectedItem.defaultCycleDays}天)',
-                          border: const OutlineInputBorder(),
-                        ),
-                        keyboardType: TextInputType.number,
-                        validator: (value) {
-                          if (value != null && value.trim().isNotEmpty) {
-                            final n = int.tryParse(value.trim());
-                            if (n == null || n < 1 || n > 3650) {
-                              return '请输入1-3650之间的整数';
-                            }
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      InkWell(
-                        onTap: () async {
-                          final picked = await showDatePicker(
-                            context: innerContext,
-                            initialDate: selectedStartDate,
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime(2099),
-                          );
-                          if (picked != null) {
-                            setInnerState(() {
-                              selectedStartDate = picked;
-                            });
-                          }
-                        },
-                        child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: '起始日期',
-                            border: OutlineInputBorder(),
-                          ),
-                          child: Text(_formatDate(selectedStartDate)),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      InkWell(
-                        onTap: () async {
-                          final picked = await showDatePicker(
-                            context: innerContext,
-                            initialDate:
-                                selectedNextDueDate ?? selectedStartDate,
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime(2099),
-                          );
-                          if (picked != null) {
-                            setInnerState(() {
-                              selectedNextDueDate = picked;
-                            });
-                          }
-                        },
-                        child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: '下次到期日（可选）',
-                            helperText: '留空时由系统按开始日期与周期自动计算',
-                            border: OutlineInputBorder(),
-                          ),
-                          child: Text(
-                            selectedNextDueDate == null
-                                ? '未指定'
-                                : _formatDate(selectedNextDueDate!),
-                          ),
-                        ),
-                      ),
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          onPressed: selectedNextDueDate == null
-                              ? null
-                              : () {
-                                  setInnerState(() {
-                                    selectedNextDueDate = null;
-                                  });
-                                },
-                          icon: const Icon(Icons.auto_awesome),
-                          label: const Text('改为自动计算'),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: estimatedDurationController,
-                        decoration: const InputDecoration(
-                          labelText: '预计时长(分钟，可选)',
-                          border: OutlineInputBorder(),
-                        ),
-                        keyboardType: TextInputType.number,
-                        validator: (value) {
-                          if (value != null && value.trim().isNotEmpty) {
-                            final n = int.tryParse(value.trim());
-                            if (n == null || n < 1 || n > 1440) {
-                              return '请输入1-1440之间的整数';
-                            }
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<int?>(
-                        initialValue: selectedDefaultExecutorUserId,
-                        items: [
-                          const DropdownMenuItem<int?>(
-                            value: null,
-                            child: Text('(不指定)'),
-                          ),
-                          ..._ownerOptions.map(
-                            (u) => DropdownMenuItem<int?>(
-                              value: u.userId,
-                              child: Text(u.displayName),
-                            ),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          setInnerState(() {
-                            selectedDefaultExecutorUserId = value;
-                          });
-                        },
-                        decoration: const InputDecoration(
-                          labelText: '默认执行人',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    if (!formKey.currentState!.validate()) {
-                      return;
-                    }
-                    final cycleDaysText = cycleDaysController.text.trim();
-                    final cycleDays = cycleDaysText.isNotEmpty
-                        ? int.tryParse(cycleDaysText)
-                        : null;
-                    final durationText = estimatedDurationController.text
-                        .trim();
-                    final duration = durationText.isNotEmpty
-                        ? int.tryParse(durationText)
-                        : null;
-                    try {
-                      if (isCreate) {
-                        await _equipmentService.createMaintenancePlan(
-                          equipmentId: selectedEquipmentId,
-                          itemId: selectedItemId,
-                          executionProcessCode: selectedExecutionProcessCode,
-                          startDate: selectedStartDate,
-                          estimatedDurationMinutes: duration,
-                          nextDueDate: selectedNextDueDate,
-                          defaultExecutorUserId: selectedDefaultExecutorUserId,
-                          cycleDays: cycleDays,
-                        );
-                      } else {
-                        await _equipmentService.updateMaintenancePlan(
-                          planId: plan.id,
-                          equipmentId: selectedEquipmentId,
-                          itemId: selectedItemId,
-                          executionProcessCode: selectedExecutionProcessCode,
-                          startDate: selectedStartDate,
-                          estimatedDurationMinutes: duration,
-                          nextDueDate: selectedNextDueDate,
-                          defaultExecutorUserId: selectedDefaultExecutorUserId,
-                          cycleDays: cycleDays,
-                        );
-                      }
-                      if (dialogContext.mounted) {
-                        Navigator.of(dialogContext).pop(true);
-                      }
-                    } catch (error) {
-                      if (_isUnauthorized(error)) {
-                        widget.onLogout();
-                        return;
-                      }
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('保存保养计划失败: ${_errorMessage(error)}'),
-                          ),
-                        );
-                      }
-                    }
-                  },
-                  child: const Text('保存'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    cycleDaysController.dispose();
-    estimatedDurationController.dispose();
 
     if (saved == true) {
       await _loadAll();
@@ -579,19 +269,11 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
     if (!mounted) {
       return;
     }
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showMaintenancePlanDeleteDialog(
       context: context,
-      builder: (dialogContext) => MesActionDialog(
-        title: const Text('删除保养计划'),
-        content: Text(
-          '确认删除计划“${plan.equipmentName} / ${plan.itemName}”吗？此操作不可恢复。',
-        ),
-        confirmLabel: '删除',
-        isDestructive: true,
-        onConfirm: () => Navigator.of(dialogContext).pop(true),
-      ),
+      plan: plan,
     );
-    if (confirmed != true) {
+    if (!confirmed) {
       return;
     }
     try {

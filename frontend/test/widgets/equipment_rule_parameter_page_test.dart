@@ -476,7 +476,7 @@ void main() {
     await tester.enterText(_dialogTextFields().at(0), 'RULE-12');
     await tester.enterText(_dialogTextFields().at(1), '温度规则');
     await tester.enterText(_dialogTextFields().at(5), '热处理机');
-    await tester.tap(find.widgetWithText(ElevatedButton, '保存'));
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
     await tester.pumpAndSettle();
 
     expect(find.text('温度规则'), findsOneWidget);
@@ -488,7 +488,7 @@ void main() {
       '编辑',
     );
     await tester.enterText(_dialogTextFields().at(1), '温度规则-已编辑');
-    await tester.tap(find.widgetWithText(ElevatedButton, '保存'));
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
     await tester.pumpAndSettle();
 
     expect(find.text('温度规则-已编辑'), findsOneWidget);
@@ -508,7 +508,7 @@ void main() {
       const Key('equipment-rule-actions-12'),
       '删除',
     );
-    await tester.tap(find.widgetWithText(ElevatedButton, '删除'));
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
     await tester.pumpAndSettle();
 
     expect(service.rules.any((item) => item.id == 12), isFalse);
@@ -527,7 +527,7 @@ void main() {
     await tester.enterText(_dialogTextFields().at(0), 'TEMP');
     await tester.enterText(_dialogTextFields().at(1), '温度');
     await tester.enterText(_dialogTextFields().at(7), '热处理机');
-    await tester.tap(find.widgetWithText(ElevatedButton, '保存'));
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
     await tester.pumpAndSettle();
 
     expect(find.text('温度'), findsOneWidget);
@@ -539,7 +539,7 @@ void main() {
       '编辑',
     );
     await tester.enterText(_dialogTextFields().at(1), '温度-已编辑');
-    await tester.tap(find.widgetWithText(ElevatedButton, '保存'));
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
     await tester.pumpAndSettle();
 
     expect(find.text('温度-已编辑'), findsOneWidget);
@@ -559,7 +559,7 @@ void main() {
       const Key('equipment-parameter-actions-22'),
       '删除',
     );
-    await tester.tap(find.widgetWithText(ElevatedButton, '删除'));
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
     await tester.pumpAndSettle();
 
     expect(service.parameters.any((item) => item.id == 22), isFalse);
