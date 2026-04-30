@@ -3,6 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/production_first_article_page.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_first_article_parameters_dialog.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_first_article_participants_dialog.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_first_article_template_picker_dialog.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -291,5 +294,101 @@ void main() {
     await tester.pump();
 
     expect(find.text('首件扫码复核已通过'), findsOneWidget);
+  });
+
+  testWidgets('首件模板选择弹窗展示统一骨架', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionFirstArticleTemplatePickerDialog(
+            templates: [
+              FirstArticleTemplateItem(
+                id: 7,
+                productId: 1,
+                processCode: '01-01',
+                templateName: '默认模板',
+                checkContent: '模板检验内容',
+                testValue: '9.86',
+              ),
+            ],
+            selectedTemplateId: 7,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('production-first-article-template-dialog')),
+      findsOneWidget,
+    );
+    expect(find.text('选择首件模板'), findsOneWidget);
+    expect(find.text('默认模板'), findsOneWidget);
+  });
+
+  testWidgets('首件参数查看弹窗展示统一骨架', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionFirstArticleParametersDialog(
+            result: FirstArticleParameterListResult(
+              productId: 1,
+              productName: '产品A',
+              parameterScope: 'effective',
+              version: 2,
+              versionLabel: 'v2',
+              lifecycleStatus: 'active',
+              total: 1,
+              items: [
+                FirstArticleParameterItem(
+                  name: '长度',
+                  category: '尺寸',
+                  type: 'text',
+                  value: '10mm',
+                  description: '参数说明',
+                  sortOrder: 1,
+                  isPreset: true,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('production-first-article-parameters-dialog')),
+      findsOneWidget,
+    );
+    expect(find.text('首件参数查看'), findsOneWidget);
+    expect(find.text('长度'), findsOneWidget);
+  });
+
+  testWidgets('首件参与操作员弹窗展示统一骨架', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionFirstArticleParticipantsDialog(
+            participantOptions: [
+              FirstArticleParticipantOptionItem(
+                id: 8,
+                username: 'worker',
+                fullName: '张三',
+              ),
+            ],
+            selectedIds: {8},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('production-first-article-participants-dialog')),
+      findsOneWidget,
+    );
+    expect(find.text('添加参与操作员'), findsOneWidget);
+    expect(find.text('worker (张三)'), findsOneWidget);
   });
 }

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/production_assist_records_page.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_assist_record_detail_dialog.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 
 class _FakeAssistRecordsService extends ProductionService {
@@ -214,5 +215,49 @@ void main() {
     expect(service.lastOrderCode, 'PO-RESET');
     expect(service.listPageHistory.last, 1);
     expect(find.text('第 1 / 3 页'), findsOneWidget);
+  });
+
+  testWidgets('代班记录详情弹窗展示统一骨架', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionAssistRecordDetailDialog(
+            item: AssistAuthorizationItem(
+              id: 1,
+              orderId: 100,
+              orderCode: 'PO-ASSIST-1',
+              orderProcessId: 11,
+              processCode: '01-01',
+              processName: '切割',
+              targetOperatorUserId: 8,
+              targetOperatorUsername: 'operator-a',
+              requesterUserId: 9,
+              requesterUsername: 'requester',
+              helperUserId: 10,
+              helperUsername: 'helper',
+              status: 'pending',
+              reason: '需要代班',
+              reviewRemark: null,
+              reviewerUserId: null,
+              reviewerUsername: null,
+              reviewedAt: null,
+              firstArticleUsedAt: null,
+              endProductionUsedAt: null,
+              consumedAt: null,
+              createdAt: DateTime(2026, 3, 1, 8),
+              updatedAt: DateTime(2026, 3, 1, 8),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('production-assist-record-detail-dialog')),
+      findsOneWidget,
+    );
+    expect(find.text('代班记录详情'), findsOneWidget);
+    expect(find.text('PO-ASSIST-1'), findsWidgets);
   });
 }

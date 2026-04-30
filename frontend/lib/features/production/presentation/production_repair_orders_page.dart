@@ -6,70 +6,18 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/production_repair_order_detail_page.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_repair_complete_dialog.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_repair_phenomena_summary_dialog.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 import 'package:mes_client/features/quality/services/repair_scrap_service.dart';
-import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
-import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 
 enum _RepairOrderAction { detail, summary, complete }
-
-class _RepairCauseDraft {
-  _RepairCauseDraft({required this.phenomenon, required this.quantity})
-    : reasonController = TextEditingController();
-
-  final String phenomenon;
-  final int quantity;
-  final TextEditingController reasonController;
-  bool isScrap = false;
-
-  void dispose() {
-    reasonController.dispose();
-  }
-}
-
-class _RepairCompleteDialogResult {
-  const _RepairCompleteDialogResult({
-    required this.causeItems,
-    required this.scrapReplenished,
-    required this.returnAllocations,
-  });
-
-  final List<RepairCauseItemInput> causeItems;
-  final bool scrapReplenished;
-  final List<RepairReturnAllocationInput> returnAllocations;
-}
-
-class _ReturnProcessOption {
-  const _ReturnProcessOption({
-    required this.id,
-    required this.code,
-    required this.name,
-  });
-
-  final int id;
-  final String code;
-  final String name;
-}
-
-class _ReturnAllocationDraft {
-  _ReturnAllocationDraft({this.targetProcessId, int? quantity})
-    : quantityController = TextEditingController(
-        text: quantity == null || quantity <= 0 ? '' : '$quantity',
-      );
-
-  int? targetProcessId;
-  final TextEditingController quantityController;
-
-  void dispose() {
-    quantityController.dispose();
-  }
-}
 
 class ProductionRepairOrdersPage extends StatefulWidget {
   const ProductionRepairOrdersPage({
@@ -372,33 +320,9 @@ class _ProductionRepairOrdersPageState
       }
       await showDialog<void>(
         context: context,
-        builder: (context) => MesDialog(
-          title: Text('现象汇总 - ${item.repairOrderCode}'),
-          width: 420,
-          content: result.items.isEmpty
-              ? const Text('暂无现象明细')
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: result.items
-                      .map(
-                        (entry) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            children: [
-                              Expanded(child: Text(entry.phenomenon)),
-                              Text('数量：${entry.quantity}'),
-                            ],
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
+        builder: (context) => ProductionRepairPhenomenaSummaryDialog(
+          repairOrderCode: item.repairOrderCode,
+          items: result.items,
         ),
       );
     } catch (error) {
@@ -415,7 +339,7 @@ class _ProductionRepairOrdersPageState
     }
   }
 
-  Future<List<_ReturnProcessOption>> _loadReturnProcessOptions(
+  Future<List<ProductionRepairReturnProcessOption>> _loadReturnProcessOptions(
     RepairOrderItem item,
   ) async {
     if (item.sourceOrderId == null || item.sourceOrderProcessId == null) {
@@ -434,7 +358,7 @@ class _ProductionRepairOrdersPageState
     return processRows
         .where((row) => row.processOrder <= sourceOrder)
         .map(
-          (row) => _ReturnProcessOption(
+          (row) => ProductionRepairReturnProcessOption(
             id: row.id,
             code: row.processCode,
             name: row.processName,
@@ -473,292 +397,12 @@ class _ProductionRepairOrdersPageState
               ),
             ]
           : summary.items;
-      final causeDrafts = phenomena
-          .map(
-            (entry) => _RepairCauseDraft(
-              phenomenon: entry.phenomenon,
-              quantity: entry.quantity,
-            ),
-          )
-          .toList();
-      final allocationDrafts = processOptions.isNotEmpty
-          ? <_ReturnAllocationDraft>[
-              _ReturnAllocationDraft(
-                targetProcessId: processOptions.first.id,
-                quantity: item.repairQuantity,
-              ),
-            ]
-          : <_ReturnAllocationDraft>[];
-      var scrapReplenished = false;
-      var dialogError = '';
-      final result = await showMesLockedFormDialog<_RepairCompleteDialogResult?>(
+      final result = await showProductionRepairCompleteDialog(
         context: context,
-        builder: (context) => StatefulBuilder(
-          builder: (context, setDialogState) => MesDialog(
-            title: Text('完成维修 - ${item.repairOrderCode}'),
-            width: 680,
-            content: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('送修数量：${item.repairQuantity}'),
-                  const SizedBox(height: 12),
-                  ...causeDrafts.map((draft) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: [
-                          Expanded(flex: 3, child: Text(draft.phenomenon)),
-                          Expanded(
-                            flex: 2,
-                            child: Text('数量：${draft.quantity}'),
-                          ),
-                          Expanded(
-                            flex: 4,
-                            child: TextField(
-                              controller: draft.reasonController,
-                              decoration: const InputDecoration(
-                                labelText: '原因',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Column(
-                            children: [
-                              Checkbox(
-                                value: draft.isScrap,
-                                onChanged: (value) {
-                                  setDialogState(() {
-                                    draft.isScrap = value ?? false;
-                                  });
-                                },
-                              ),
-                              const Text('报废'),
-                            ],
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Checkbox(
-                        value: scrapReplenished,
-                        onChanged: (value) {
-                          setDialogState(() {
-                            scrapReplenished = value ?? false;
-                          });
-                        },
-                      ),
-                      const Text('报废已补充'),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Text('回流分配（仅对非报废数量生效）'),
-                      const Spacer(),
-                      OutlinedButton.icon(
-                        onPressed: processOptions.isEmpty
-                            ? null
-                            : () {
-                                setDialogState(() {
-                                  allocationDrafts.add(
-                                    _ReturnAllocationDraft(
-                                      targetProcessId: processOptions.first.id,
-                                    ),
-                                  );
-                                });
-                              },
-                        icon: const Icon(Icons.add, size: 16),
-                        label: const Text('新增回流项'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  if (processOptions.isEmpty)
-                    const Text('当前无可选回流工序')
-                  else
-                    ...List.generate(allocationDrafts.length, (index) {
-                      final draft = allocationDrafts[index];
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 4,
-                              child: DropdownButtonFormField<int>(
-                                initialValue: draft.targetProcessId,
-                                decoration: const InputDecoration(
-                                  labelText: '回流目标工序',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                ),
-                                items: processOptions
-                                    .map(
-                                      (entry) => DropdownMenuItem<int>(
-                                        value: entry.id,
-                                        child: Text(
-                                          '${entry.code} ${entry.name}',
-                                        ),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: (value) {
-                                  setDialogState(() {
-                                    draft.targetProcessId = value;
-                                  });
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              flex: 2,
-                              child: TextField(
-                                controller: draft.quantityController,
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  labelText: '数量',
-                                  border: OutlineInputBorder(),
-                                  isDense: true,
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              onPressed: allocationDrafts.length <= 1
-                                  ? null
-                                  : () {
-                                      setDialogState(() {
-                                        final removed = allocationDrafts
-                                            .removeAt(index);
-                                        removed.dispose();
-                                      });
-                                    },
-                              icon: const Icon(Icons.delete_outline),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                  if (dialogError.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Text(
-                        dialogError,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(null),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () {
-                  final causeItems = <RepairCauseItemInput>[];
-                  var total = 0;
-                  var scrapTotal = 0;
-                  for (final draft in causeDrafts) {
-                    final reason = draft.reasonController.text.trim();
-                    if (reason.isEmpty) {
-                      setDialogState(() {
-                        dialogError = '请填写每条现象的维修原因';
-                      });
-                      return;
-                    }
-                    causeItems.add(
-                      RepairCauseItemInput(
-                        phenomenon: draft.phenomenon,
-                        reason: reason,
-                        quantity: draft.quantity,
-                        isScrap: draft.isScrap,
-                      ),
-                    );
-                    total += draft.quantity;
-                    if (draft.isScrap) {
-                      scrapTotal += draft.quantity;
-                    }
-                  }
-                  if (total != item.repairQuantity) {
-                    setDialogState(() {
-                      dialogError = '原因数量合计必须等于送修数量 ${item.repairQuantity}';
-                    });
-                    return;
-                  }
-                  final repairedQuantity = item.repairQuantity - scrapTotal;
-                  final allocations = <RepairReturnAllocationInput>[];
-                  if (repairedQuantity > 0) {
-                    if (allocationDrafts.isEmpty) {
-                      setDialogState(() {
-                        dialogError = '存在可回流数量时必须至少配置一条回流分配';
-                      });
-                      return;
-                    }
-                    final seenTargets = <int>{};
-                    var allocationTotal = 0;
-                    for (final draft in allocationDrafts) {
-                      final targetProcessId = draft.targetProcessId;
-                      final allocationQty = int.tryParse(
-                        draft.quantityController.text.trim(),
-                      );
-                      if (targetProcessId == null ||
-                          allocationQty == null ||
-                          allocationQty <= 0) {
-                        setDialogState(() {
-                          dialogError = '请为每条回流分配填写目标工序和正整数数量';
-                        });
-                        return;
-                      }
-                      if (!seenTargets.add(targetProcessId)) {
-                        setDialogState(() {
-                          dialogError = '回流目标工序不可重复，请合并相同目标的数量';
-                        });
-                        return;
-                      }
-                      allocationTotal += allocationQty;
-                      allocations.add(
-                        RepairReturnAllocationInput(
-                          targetOrderProcessId: targetProcessId,
-                          quantity: allocationQty,
-                        ),
-                      );
-                    }
-                    if (allocationTotal != repairedQuantity) {
-                      setDialogState(() {
-                        dialogError = '回流数量合计必须等于非报废数量 $repairedQuantity';
-                      });
-                      return;
-                    }
-                  }
-                  Navigator.of(context).pop(
-                    _RepairCompleteDialogResult(
-                      causeItems: causeItems,
-                      scrapReplenished: scrapReplenished,
-                      returnAllocations: allocations,
-                    ),
-                  );
-                },
-                child: const Text('提交完成'),
-              ),
-            ],
-          ),
-        ),
+        repairOrder: item,
+        phenomena: phenomena,
+        processOptions: processOptions,
       );
-      for (final draft in causeDrafts) {
-        draft.dispose();
-      }
-      for (final draft in allocationDrafts) {
-        draft.dispose();
-      }
       if (result == null) {
         return;
       }

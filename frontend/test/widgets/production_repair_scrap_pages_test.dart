@@ -6,6 +6,8 @@ import 'package:mes_client/features/production/presentation/production_repair_or
 import 'package:mes_client/features/production/presentation/production_repair_orders_page.dart';
 import 'package:mes_client/features/production/presentation/production_scrap_statistics_detail_page.dart';
 import 'package:mes_client/features/production/presentation/production_scrap_statistics_page.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_repair_complete_dialog.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_repair_phenomena_summary_dialog.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 
 class _FakeRepairAndScrapService extends ProductionService {
@@ -413,5 +415,89 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('维修详情 - RW-1'), findsOneWidget);
+  });
+
+  testWidgets('维修现象汇总弹窗展示统一骨架', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionRepairPhenomenaSummaryDialog(
+            repairOrderCode: 'RW-1',
+            items: [
+              RepairOrderPhenomenonSummaryItem(
+                phenomenon: '毛刺',
+                quantity: 2,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('production-repair-phenomena-summary-dialog')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('现象汇总'), findsOneWidget);
+    expect(find.text('毛刺'), findsOneWidget);
+  });
+
+  testWidgets('维修完成弹窗展示统一骨架', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionRepairCompleteDialog(
+            repairOrder: RepairOrderItem.fromJson({
+              'id': 1,
+              'repair_order_code': 'RW-1',
+              'source_order_id': 1,
+              'source_order_code': 'PO-1',
+              'product_id': 1,
+              'product_name': '产品A',
+              'source_order_process_id': 11,
+              'source_process_code': '01-01',
+              'source_process_name': '切割',
+              'sender_user_id': 8,
+              'sender_username': 'worker',
+              'production_quantity': 6,
+              'repair_quantity': 2,
+              'repaired_quantity': 0,
+              'scrap_quantity': 0,
+              'scrap_replenished': false,
+              'repair_time': '2026-03-01T00:00:00Z',
+              'status': 'in_repair',
+              'completed_at': null,
+              'repair_operator_user_id': null,
+              'repair_operator_username': null,
+              'created_at': '2026-03-01T00:00:00Z',
+              'updated_at': '2026-03-01T00:00:00Z',
+            }),
+            phenomena: [
+              RepairOrderPhenomenonSummaryItem(
+                phenomenon: '毛刺',
+                quantity: 2,
+              ),
+            ],
+            processOptions: const [
+              ProductionRepairReturnProcessOption(
+                id: 11,
+                code: '01-01',
+                name: '切割',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('production-repair-complete-dialog')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('完成维修'), findsOneWidget);
+    expect(find.text('回流分配（仅对非报废数量生效）'), findsOneWidget);
+    expect(find.text('报废已补充'), findsOneWidget);
   });
 }

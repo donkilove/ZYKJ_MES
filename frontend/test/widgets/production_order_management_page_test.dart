@@ -5,6 +5,9 @@ import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
 import 'package:mes_client/features/production/presentation/production_order_management_page.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_complete_order_dialog.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_delete_order_dialog.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_pipeline_mode_dialog.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 import 'package:mes_client/features/quality/services/quality_supplier_service.dart';
@@ -536,5 +539,87 @@ void main() {
     expect(service.pipelineUpdateCallCount, 1);
     expect(service.lastPipelineEnabled, isTrue);
     expect(service.lastPipelineProcessCodes, ['01-01', '02-01']);
+  });
+
+  testWidgets('删除订单弹窗展示统一骨架', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionDeleteOrderDialog(
+            order: _FakeProductionOrderManagementService._buildItemStatic(1),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('production-delete-order-dialog')),
+      findsOneWidget,
+    );
+    expect(find.text('删除订单'), findsOneWidget);
+    expect(find.textContaining('PO-1'), findsOneWidget);
+    expect(find.text('确认删除'), findsOneWidget);
+  });
+
+  testWidgets('手工完工弹窗展示统一骨架', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionCompleteOrderDialog(
+            order: _FakeProductionOrderManagementService._buildItemStatic(
+              2,
+              status: 'in_progress',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('production-complete-order-dialog')),
+      findsOneWidget,
+    );
+    expect(find.text('结束订单'), findsOneWidget);
+    expect(find.text('完工确认'), findsOneWidget);
+    expect(find.text('当前登录密码'), findsOneWidget);
+  });
+
+  testWidgets('并行模式设置弹窗展示统一骨架', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionPipelineModeDialog(
+            order: _FakeProductionOrderManagementService._buildItemStatic(2),
+            processOptions: const [
+              ProductionPipelineModeProcessOption(
+                code: '01-01',
+                name: '切割',
+                processOrder: 1,
+                enabled: true,
+              ),
+              ProductionPipelineModeProcessOption(
+                code: '02-01',
+                name: '抛光',
+                processOrder: 2,
+                enabled: true,
+              ),
+            ],
+            initialSelectedCodes: const [],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('production-pipeline-mode-dialog')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('并行模式设置'), findsOneWidget);
+    expect(find.text('请选择参与并行的工序（至少 2 道）。'), findsOneWidget);
+    expect(find.text('切割 (01-01)'), findsOneWidget);
+    expect(find.text('抛光 (02-01)'), findsOneWidget);
   });
 }

@@ -6,6 +6,9 @@ import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/production_first_article_page.dart';
 import 'package:mes_client/features/production/presentation/production_order_query_detail_page.dart';
 import 'package:mes_client/features/production/presentation/production_order_query_page.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_apply_assist_dialog.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_end_production_dialog.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_manual_repair_dialog.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 
@@ -451,6 +454,48 @@ Finder _findDropdownByLabel(String labelText) {
     (widget) =>
         widget is DropdownButtonFormField &&
         widget.decoration.labelText == labelText,
+  );
+}
+
+MyOrderItem _buildDialogOrderItem() {
+  return MyOrderItem(
+    orderId: 1,
+    orderCode: 'PO-QUERY-001',
+    productId: 10,
+    productName: '产线试产件1',
+    supplierName: null,
+    quantity: 12,
+    orderStatus: 'in_progress',
+    currentProcessId: 21,
+    currentStageId: 5,
+    currentStageCode: 'CUT',
+    currentStageName: '切割段',
+    currentProcessCode: 'CUT-01',
+    currentProcessName: '切割',
+    currentProcessOrder: 1,
+    processStatus: 'in_progress',
+    visibleQuantity: 12,
+    processCompletedQuantity: 4,
+    userSubOrderId: 31,
+    userAssignedQuantity: 12,
+    userCompletedQuantity: 4,
+    operatorUserId: 8,
+    operatorUsername: 'zhangsan',
+    workView: 'own',
+    assistAuthorizationId: null,
+    pipelineInstanceId: 301,
+    pipelineInstanceNo: 'P1-31-1-PIPE0001',
+    pipelineModeEnabled: true,
+    pipelineStartAllowed: true,
+    pipelineEndAllowed: true,
+    maxProducibleQuantity: 8,
+    canFirstArticle: true,
+    canEndProduction: true,
+    canApplyAssist: true,
+    canCreateManualRepair: true,
+    dueDate: DateTime.parse('2026-03-18T00:00:00Z'),
+    remark: '',
+    updatedAt: DateTime.parse('2026-03-01T08:00:00Z'),
   );
 }
 
@@ -1155,5 +1200,87 @@ void main() {
     expect(service.lastTargetOperatorUserId, 8);
     expect(service.lastHelperUserId, 301);
     expect(service.lastAssistReason, '夜班支援');
+  });
+
+  testWidgets('结束生产弹窗展示宽版骨架', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionEndProductionDialog(
+            order: _buildDialogOrderItem(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('production-end-production-dialog')),
+      findsOneWidget,
+    );
+    expect(find.text('结束生产'), findsOneWidget);
+    expect(find.text('生产结果'), findsOneWidget);
+    expect(find.text('不良现象（可选）'), findsOneWidget);
+    expect(find.text('有效流转数量'), findsOneWidget);
+  });
+
+  testWidgets('手工送修弹窗展示宽版骨架', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionManualRepairDialog(
+            order: _buildDialogOrderItem(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('production-manual-repair-dialog')),
+      findsOneWidget,
+    );
+    expect(find.text('手工送修建单'), findsOneWidget);
+    expect(find.text('建单信息'), findsOneWidget);
+    expect(find.text('不良现象明细'), findsOneWidget);
+    expect(find.text('本次生产数量'), findsOneWidget);
+  });
+
+  testWidgets('发起代班弹窗展示宽版骨架', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionApplyAssistDialog(
+            order: _buildDialogOrderItem(),
+            targetOperators: [
+              AssistUserOptionItem(
+                id: 8,
+                username: 'zhangsan',
+                fullName: '张三',
+                roleCodes: ['operator'],
+              ),
+            ],
+            assistUsers: [
+              AssistUserOptionItem(
+                id: 301,
+                username: 'helper_user',
+                fullName: '代班人',
+                roleCodes: ['assist'],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('production-apply-assist-dialog')),
+      findsOneWidget,
+    );
+    expect(find.text('发起代班'), findsAtLeastNWidgets(2));
+    expect(find.text('代班安排'), findsOneWidget);
+    expect(find.text('目标操作员'), findsOneWidget);
+    expect(find.text('代班人'), findsOneWidget);
   });
 }

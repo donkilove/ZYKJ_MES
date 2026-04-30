@@ -10,14 +10,15 @@ import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
-import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
-import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_order_status_chip.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_apply_assist_dialog.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_end_production_dialog.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_manual_repair_dialog.dart';
 import 'package:mes_client/features/production/presentation/production_first_article_page.dart';
 import 'package:mes_client/features/production/presentation/production_order_query_detail_page.dart';
 
@@ -26,42 +27,6 @@ typedef ProductionOrderQueryExportSaver =
       required String filename,
       required String contentBase64,
     });
-
-class _DefectRowDraft {
-  _DefectRowDraft({String? phenomenon, int? quantity})
-    : phenomenonController = TextEditingController(text: phenomenon ?? ''),
-      quantityController = TextEditingController(
-        text: quantity == null ? '' : '$quantity',
-      );
-
-  final TextEditingController phenomenonController;
-  final TextEditingController quantityController;
-
-  void dispose() {
-    phenomenonController.dispose();
-    quantityController.dispose();
-  }
-}
-
-class _ProductionSubmitPayload {
-  const _ProductionSubmitPayload({
-    required this.quantity,
-    required this.defectItems,
-  });
-
-  final int quantity;
-  final List<ProductionDefectItemInput> defectItems;
-}
-
-class _ManualRepairSubmitPayload {
-  const _ManualRepairSubmitPayload({
-    required this.productionQuantity,
-    required this.defectItems,
-  });
-
-  final int productionQuantity;
-  final List<ProductionDefectItemInput> defectItems;
-}
 
 class ProductionOrderQueryPage extends StatefulWidget {
   const ProductionOrderQueryPage({
@@ -633,155 +598,10 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     MyOrderItem item, {
     bool reloadAfterAction = true,
   }) async {
-    final qtyController = TextEditingController(
-      text: '${item.maxProducibleQuantity.clamp(1, 999999)}',
-    );
-    final defectRows = <_DefectRowDraft>[];
     try {
-      final payload = await showMesLockedFormDialog<_ProductionSubmitPayload?>(
+      final payload = await showProductionEndProductionDialog(
         context: context,
-        builder: (context) => StatefulBuilder(
-          builder: (context, setDialogState) => MesDialog(
-            title: const Text('结束生产'),
-            width: 560,
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: qtyController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: '有效流转数量',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      const Text('不良现象（可选）'),
-                      const Spacer(),
-                      OutlinedButton.icon(
-                        onPressed: () {
-                          setDialogState(() {
-                            defectRows.add(_DefectRowDraft());
-                          });
-                        },
-                        icon: const Icon(Icons.add, size: 16),
-                        label: const Text('新增'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ...List.generate(defectRows.length, (index) {
-                    final row = defectRows[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: TextField(
-                              controller: row.phenomenonController,
-                              decoration: const InputDecoration(
-                                labelText: '现象',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            flex: 2,
-                            child: TextField(
-                              controller: row.quantityController,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: '数量',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () {
-                              setDialogState(() {
-                                final removed = defectRows.removeAt(index);
-                                removed.dispose();
-                              });
-                            },
-                            icon: const Icon(Icons.delete_outline),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(null),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () {
-                  final qty = int.tryParse(qtyController.text.trim());
-                  if (qty == null || qty <= 0) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('请输入有效结束生产数量')),
-                    );
-                    return;
-                  }
-                  final defects = <ProductionDefectItemInput>[];
-                  for (final row in defectRows) {
-                    final phenomenon = row.phenomenonController.text.trim();
-                    final qtyText = row.quantityController.text.trim();
-                    if (phenomenon.isEmpty && qtyText.isEmpty) {
-                      continue;
-                    }
-                    final defectQty = int.tryParse(qtyText);
-                    if (phenomenon.isEmpty ||
-                        defectQty == null ||
-                        defectQty <= 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('不良明细需同时填写现象与正整数数量')),
-                      );
-                      return;
-                    }
-                    defects.add(
-                      ProductionDefectItemInput(
-                        phenomenon: phenomenon,
-                        quantity: defectQty,
-                      ),
-                    );
-                  }
-                  final defectTotal = defects.fold<int>(
-                    0,
-                    (sum, entry) => sum + entry.quantity,
-                  );
-                  if (qty + defectTotal > item.maxProducibleQuantity) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          '结束生产数量与异常数量合计不能超过当前可生产数量 ${item.maxProducibleQuantity}',
-                        ),
-                      ),
-                    );
-                    return;
-                  }
-                  Navigator.of(context).pop(
-                    _ProductionSubmitPayload(
-                      quantity: qty,
-                      defectItems: defects,
-                    ),
-                  );
-                },
-                child: const Text('提交'),
-              ),
-            ],
-          ),
-        ),
+        order: item,
       );
       if (payload == null) {
         return false;
@@ -817,13 +637,6 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         context,
       ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
       return false;
-    } finally {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        qtyController.dispose();
-        for (final row in defectRows) {
-          row.dispose();
-        }
-      });
     }
   }
 
@@ -831,143 +644,10 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     MyOrderItem item, {
     bool reloadAfterAction = true,
   }) async {
-    final productionQtyController = TextEditingController(
-      text: '${item.maxProducibleQuantity.clamp(1, 999999)}',
-    );
-    final defectRows = <_DefectRowDraft>[_DefectRowDraft()];
     try {
-      final payload = await showMesLockedFormDialog<_ManualRepairSubmitPayload?>(
+      final payload = await showProductionManualRepairDialog(
         context: context,
-        builder: (context) => StatefulBuilder(
-          builder: (context, setDialogState) => MesDialog(
-            title: const Text('手工送修建单'),
-            width: 560,
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: productionQtyController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: '本次生产数量',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      const Text('不良现象明细'),
-                      const Spacer(),
-                      OutlinedButton.icon(
-                        onPressed: () {
-                          setDialogState(() {
-                            defectRows.add(_DefectRowDraft());
-                          });
-                        },
-                        icon: const Icon(Icons.add, size: 16),
-                        label: const Text('新增'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ...List.generate(defectRows.length, (index) {
-                    final row = defectRows[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: TextField(
-                              controller: row.phenomenonController,
-                              decoration: const InputDecoration(
-                                labelText: '现象',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            flex: 2,
-                            child: TextField(
-                              controller: row.quantityController,
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: '数量',
-                                border: OutlineInputBorder(),
-                                isDense: true,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: defectRows.length <= 1
-                                ? null
-                                : () {
-                                    setDialogState(() {
-                                      final removed = defectRows.removeAt(index);
-                                      removed.dispose();
-                                    });
-                                  },
-                            icon: const Icon(Icons.delete_outline),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(null),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () {
-                  final productionQty = int.tryParse(
-                    productionQtyController.text.trim(),
-                  );
-                  if (productionQty == null || productionQty <= 0) {
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(const SnackBar(content: Text('请输入本次生产数量')));
-                    return;
-                  }
-                  final defects = <ProductionDefectItemInput>[];
-                  for (final row in defectRows) {
-                    final phenomenon = row.phenomenonController.text.trim();
-                    final defectQty = int.tryParse(
-                      row.quantityController.text.trim(),
-                    );
-                    if (phenomenon.isEmpty ||
-                        defectQty == null ||
-                        defectQty <= 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('请完整填写不良现象明细')),
-                      );
-                      return;
-                    }
-                    defects.add(
-                      ProductionDefectItemInput(
-                        phenomenon: phenomenon,
-                        quantity: defectQty,
-                      ),
-                    );
-                  }
-                  Navigator.of(context).pop(
-                    _ManualRepairSubmitPayload(
-                      productionQuantity: productionQty,
-                      defectItems: defects,
-                    ),
-                  );
-                },
-                child: const Text('提交建单'),
-              ),
-            ],
-          ),
-        ),
+        order: item,
       );
       if (payload == null) {
         return false;
@@ -1000,13 +680,6 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         context,
       ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
       return false;
-    } finally {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        productionQtyController.dispose();
-        for (final row in defectRows) {
-          row.dispose();
-        }
-      });
     }
   }
 
@@ -1048,91 +721,22 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                 roleCodes: const ['operator'],
               ),
           ];
-    int? targetId = item.operatorUserId;
-    int? helperId;
-    final reasonController = TextEditingController();
     try {
-      final ok = await showMesLockedFormDialog<bool>(
+      final result = await showProductionApplyAssistDialog(
         context: context,
-        builder: (context) => StatefulBuilder(
-          builder: (context, setDialogState) => MesDialog(
-            title: const Text('发起代班'),
-            width: 440,
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<int>(
-                    initialValue: targetId,
-                    decoration: const InputDecoration(
-                      labelText: '目标操作员',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: targetOperators
-                        .map(
-                          (it) => DropdownMenuItem<int>(
-                            value: it.id,
-                            child: Text(it.displayName),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) =>
-                        setDialogState(() => targetId = value),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<int>(
-                    initialValue: helperId,
-                    decoration: const InputDecoration(
-                      labelText: '代班人',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: _assistUsers
-                        .map(
-                          (it) => DropdownMenuItem<int>(
-                            value: it.id,
-                            child: Text(it.displayName),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) =>
-                        setDialogState(() => helperId = value),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: reasonController,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      labelText: '代班原因（可选）',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('发起代班'),
-              ),
-            ],
-          ),
-        ),
+        order: item,
+        targetOperators: targetOperators,
+        assistUsers: _assistUsers,
       );
-      if (ok != true || targetId == null || helperId == null) {
+      if (result == null) {
         return false;
       }
       await _service.createAssistAuthorization(
         orderId: item.orderId,
         orderProcessId: item.currentProcessId,
-        targetOperatorUserId: targetId!,
-        helperUserId: helperId!,
-        reason: reasonController.text.trim().isEmpty
-            ? null
-            : reasonController.text.trim(),
+        targetOperatorUserId: result.targetOperatorUserId,
+        helperUserId: result.helperUserId,
+        reason: result.reason,
       );
       if (!mounted) {
         return false;
@@ -1156,10 +760,6 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         context,
       ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
       return false;
-    } finally {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        reasonController.dispose();
-      });
     }
   }
 
