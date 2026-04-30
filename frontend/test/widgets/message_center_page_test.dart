@@ -603,21 +603,24 @@ Widget _buildMessageCenterPageApp({
     home: Scaffold(
       body: SizedBox(
         width: 1280,
-        child: MessageCenterPage(
-          session: AppSession(baseUrl: '', accessToken: ''),
-          onLogout: onLogout ?? () {},
-          canPublishAnnouncement: canPublishAnnouncement,
-          canViewDetail: canViewDetail,
-          canUseJump: canUseJump,
-          pollingEnabled: pollingEnabled,
-          routePayloadJson: routePayloadJson,
-          service: service,
-          userService: userService ?? _FakeUserService(),
-          onUnreadCountChanged: onUnreadCountChanged,
-          onNavigateToPage:
-              onNavigateToPage ?? (pageCode, {tabCode, routePayloadJson}) {},
-          onPickDateRange: onPickDateRange,
-          nowProvider: nowProvider,
+        child: TickerMode(
+          enabled: false,
+          child: MessageCenterPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: onLogout ?? () {},
+            canPublishAnnouncement: canPublishAnnouncement,
+            canViewDetail: canViewDetail,
+            canUseJump: canUseJump,
+            pollingEnabled: pollingEnabled,
+            routePayloadJson: routePayloadJson,
+            service: service,
+            userService: userService ?? _FakeUserService(),
+            onUnreadCountChanged: onUnreadCountChanged,
+            onNavigateToPage:
+                onNavigateToPage ?? (pageCode, {tabCode, routePayloadJson}) {},
+            onPickDateRange: onPickDateRange,
+            nowProvider: nowProvider,
+          ),
         ),
       ),
     ),
@@ -1289,6 +1292,10 @@ void main() {
 
       await tester.tap(find.text('发布公告'));
       await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('announcement-publish-dialog')),
+        findsOneWidget,
+      );
       await tester.tap(find.text('指定用户'));
       await tester.pumpAndSettle();
       expect(find.textContaining('可选用户 205 人'), findsOneWidget);
@@ -1296,7 +1303,7 @@ void main() {
       await tester.enterText(find.widgetWithText(TextField, '正文'), '今晚发布公告');
       await tester.tap(find.text('指定角色'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('系统管理员(system_admin)'));
+      await tester.tap(find.text('系统管理员 (system_admin)'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('确认发布'));
       await tester.pumpAndSettle();

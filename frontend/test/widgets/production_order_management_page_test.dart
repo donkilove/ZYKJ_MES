@@ -7,6 +7,7 @@ import 'package:mes_client/features/quality/models/quality_models.dart';
 import 'package:mes_client/features/production/presentation/production_order_management_page.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_complete_order_dialog.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_delete_order_dialog.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_pipeline_action_dialogs.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_pipeline_mode_dialog.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
@@ -215,6 +216,7 @@ class _FakeProductionOrderManagementService extends ProductionService {
 
   @override
   Future<ProductionOrderDetail> getOrderDetail({required int orderId}) async {
+    final order = _items.firstWhere((item) => item.id == orderId);
     return ProductionOrderDetail.fromJson({
       'order': {
         'id': orderId,
@@ -225,6 +227,8 @@ class _FakeProductionOrderManagementService extends ProductionService {
         'supplier_name': '供应商A',
         'quantity': 10,
         'status': orderId == 2 ? 'in_progress' : 'pending',
+        'pipeline_enabled': order.pipelineEnabled,
+        'pipeline_process_codes': order.pipelineProcessCodes,
         'current_process_code': '01-01',
         'current_process_name': '切割',
         'created_at': '2026-03-01T00:00:00Z',
@@ -539,6 +543,41 @@ void main() {
     expect(service.pipelineUpdateCallCount, 1);
     expect(service.lastPipelineEnabled, isTrue);
     expect(service.lastPipelineProcessCodes, ['01-01', '02-01']);
+  });
+
+  testWidgets('关闭并行模式确认弹窗展示统一骨架', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => FilledButton(
+              onPressed: () {
+                showProductionDisablePipelineDialog(
+                  context: context,
+                  order: _FakeProductionOrderManagementService._buildItemStatic(
+                    1,
+                    pipelineEnabled: true,
+                    pipelineProcessCodes: const ['01-01', '02-01'],
+                  ),
+                );
+              },
+              child: const Text('打开弹窗'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('打开弹窗'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('production-disable-pipeline-dialog')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('PO-1'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '确认关闭'), findsOneWidget);
   });
 
   testWidgets('删除订单弹窗展示统一骨架', (tester) async {

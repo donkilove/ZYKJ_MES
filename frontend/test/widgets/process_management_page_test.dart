@@ -188,6 +188,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
+    expect(find.byKey(const ValueKey('process-reference-dialog')), findsOneWidget);
     expect(find.text('工序引用分析：激光切割'), findsOneWidget);
     expect(find.textContaining('编码/编号：TPL-21'), findsOneWidget);
   });

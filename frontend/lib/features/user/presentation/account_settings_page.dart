@@ -6,12 +6,12 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
-import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_inline_banner.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/auth/services/auth_service.dart';
+import 'package:mes_client/features/user/presentation/widgets/account_settings_action_dialogs.dart';
 import 'package:mes_client/features/user/presentation/widgets/account_settings_page_header.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 
@@ -155,33 +155,9 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     if (session.remainingSeconds <= 300 && !_timeoutWarningShown) {
       _timeoutWarningShown = true;
       if (mounted) {
-        showDialog(
+        showAccountSessionTimeoutDialog(
           context: context,
-          builder: (ctx) => MesDialog(
-            title: const Text('会话即将过期'),
-            width: 420,
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.warning_amber_rounded,
-                  color: Colors.deepOrange,
-                  size: 36,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  '当前会话将在 ${_formatDuration(session.remainingSeconds)} 后过期，'
-                  '请及时保存工作内容。如需继续使用，请重新登录。',
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('知道了'),
-              ),
-            ],
-          ),
+          remainingTimeLabel: _formatDuration(session.remainingSeconds),
         );
       }
     }

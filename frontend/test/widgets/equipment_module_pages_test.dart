@@ -1305,6 +1305,10 @@ void main() {
 
     await tester.tap(find.byKey(const Key('maintenance-execution-cancel-4')));
     await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('maintenance-execution-cancel-dialog')),
+      findsOneWidget,
+    );
     await tester.tap(find.widgetWithText(FilledButton, '确认'));
     await tester.pumpAndSettle();
 

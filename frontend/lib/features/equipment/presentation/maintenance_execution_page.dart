@@ -6,12 +6,12 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
 import 'package:mes_client/features/equipment/presentation/widgets/maintenance_execution_complete_dialog.dart';
+import 'package:mes_client/features/equipment/presentation/widgets/maintenance_execution_action_dialogs.dart';
 import 'package:mes_client/features/equipment/presentation/maintenance_execution_detail_page.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
-import 'package:mes_client/core/ui/patterns/mes_action_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
@@ -267,15 +267,11 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
 
   Future<void> _cancelExecution(MaintenanceWorkOrderItem item) async {
     if (!mounted) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showMaintenanceExecutionCancelDialog(
       context: context,
-      builder: (dialogContext) => MesActionDialog(
-        title: const Text('取消工单'),
-        content: Text('确认取消工单"${item.equipmentName} / ${item.itemName}"吗？'),
-        onConfirm: () => Navigator.of(dialogContext).pop(true),
-      ),
+      workOrder: item,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
     try {
       await _equipmentService.cancelExecution(workOrderId: item.id);
       if (mounted) {

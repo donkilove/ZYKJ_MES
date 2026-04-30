@@ -984,6 +984,7 @@ void main() {
 
     await tester.tap(find.widgetWithText(OutlinedButton, '删除'));
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('role-delete-dialog')), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, '删除'));
     await tester.pumpAndSettle();
     expect(userService.deleteRoleCalls, 1);

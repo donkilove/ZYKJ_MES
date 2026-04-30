@@ -7,7 +7,6 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 import 'package:mes_client/features/quality/services/quality_supplier_service.dart';
-import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
@@ -16,6 +15,7 @@ import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_complete_order_dialog.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_delete_order_dialog.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_order_status_chip.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_pipeline_action_dialogs.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_pipeline_mode_dialog.dart';
 import 'package:mes_client/features/production/presentation/production_order_detail_page.dart';
 import 'package:mes_client/features/production/presentation/production_order_form_page.dart';
@@ -437,27 +437,11 @@ class _ProductionOrderManagementPageState
     if (!widget.canUpdatePipelineMode) {
       return false;
     }
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showProductionDisablePipelineDialog(
       context: context,
-      builder: (dialogContext) {
-        return MesDialog(
-          title: const Text('关闭并行模式'),
-          width: 420,
-          content: Text('确认关闭订单 ${order.orderCode} 的并行模式吗？'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('确认关闭'),
-            ),
-          ],
-        );
-      },
+      order: order,
     );
-    if (confirmed != true) {
+    if (!confirmed) {
       return false;
     }
     try {

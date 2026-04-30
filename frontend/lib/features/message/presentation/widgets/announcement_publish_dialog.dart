@@ -311,6 +311,7 @@ class _AnnouncementPublishDialogState extends State<AnnouncementPublishDialog> {
       title: const Text('发布公告'),
       width: 860,
       content: SizedBox(
+        key: const ValueKey('announcement-publish-dialog'),
         width: 860,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,

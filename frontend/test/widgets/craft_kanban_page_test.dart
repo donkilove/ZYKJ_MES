@@ -183,8 +183,14 @@ void main() {
 
     await tester.tap(find.text('导出数据'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(craftService.lastExportLimit, 100);
+    expect(
+      find.byKey(const ValueKey('craft-kanban-export-preview-dialog')),
+      findsOneWidget,
+    );
+    expect(find.text('暂无可导出数据'), findsOneWidget);
   });
 
   testWidgets('工艺看板顶部筛选区在窄桌面宽度下不溢出', (tester) async {

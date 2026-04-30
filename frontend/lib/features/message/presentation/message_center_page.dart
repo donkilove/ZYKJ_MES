@@ -12,7 +12,7 @@ import 'package:mes_client/features/message/presentation/widgets/message_center_
 import 'package:mes_client/features/message/presentation/widgets/message_center_list_section.dart';
 import 'package:mes_client/features/message/presentation/widgets/message_center_message_card.dart';
 import 'package:mes_client/features/message/presentation/widgets/message_center_preview_panel.dart';
-import 'package:mes_client/features/message/presentation/widgets/announcement_publish_dialog.dart';
+import 'package:mes_client/features/message/presentation/widgets/message_center_action_dialogs.dart';
 import 'package:mes_client/features/message/services/message_service.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 
@@ -334,15 +334,12 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
   }
 
   Future<void> _publishAnnouncement() async {
-    final published = await showDialog<bool>(
+    final published = await showMessageCenterPublishDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => AnnouncementPublishDialog(
-        userService: _userService,
-        service: _service,
-      ),
+      userService: _userService,
+      service: _service,
     );
-    if (published == true && mounted) {
+    if (published && mounted) {
       await _load(reset: false);
     }
   }

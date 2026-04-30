@@ -2,13 +2,13 @@ import 'dart:convert';
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
+import 'package:mes_client/features/craft/presentation/widgets/craft_kanban_action_dialogs.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
@@ -209,24 +209,9 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
       final text = contentBase64.isEmpty
           ? ''
           : utf8.decode(base64Decode(contentBase64));
-      await showDialog<void>(
+      await showCraftKanbanExportPreviewDialog(
         context: context,
-        builder: (dialogContext) => MesDialog(
-          title: const Text('看板导出预览'),
-          width: 920,
-          content: SizedBox(
-            height: 560,
-            child: text.isEmpty
-                ? const Center(child: Text('暂无可导出数据'))
-                : SingleChildScrollView(child: SelectableText(text)),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
-        ),
+        text: text,
       );
     } catch (error) {
       if (!mounted) return;

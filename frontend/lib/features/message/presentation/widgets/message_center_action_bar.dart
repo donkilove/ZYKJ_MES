@@ -63,6 +63,7 @@ class MessageCenterActionBar extends StatelessWidget {
             icon: Icons.done_all_rounded,
             label: '全部已读',
             isPrimary: true,
+            buttonKey: const ValueKey('message-center-mark-all-read-button'),
           ),
           _buildGlassButton(
             theme: theme,
@@ -70,6 +71,7 @@ class MessageCenterActionBar extends StatelessWidget {
             icon: Icons.checklist_rtl_rounded,
             label: batchReadCount == 0 ? '批量已读' : '批量已读($batchReadCount)',
             isPrimary: false,
+            buttonKey: const ValueKey('message-center-mark-batch-read-button'),
           ),
         ],
       ),
@@ -82,6 +84,7 @@ class MessageCenterActionBar extends StatelessWidget {
     required IconData icon,
     required String label,
     required bool isPrimary,
+    Key? buttonKey,
   }) {
     final enabled = onPressed != null;
     final primaryColor = theme.colorScheme.primary;
@@ -119,6 +122,7 @@ class MessageCenterActionBar extends StatelessWidget {
           child: Material(
             color: Colors.transparent,
             child: InkWell(
+              key: buttonKey,
               onTap: onPressed,
               borderRadius: BorderRadius.circular(12),
               splashColor: fgColor.withAlpha(30),

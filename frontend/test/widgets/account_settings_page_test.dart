@@ -276,6 +276,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.byKey(const ValueKey('account-session-timeout-dialog')), findsOneWidget);
     expect(find.text('会话即将过期'), findsOneWidget);
     expect(find.textContaining('当前会话将在 4 分钟 后过期'), findsOneWidget);
     expect(find.text('即将过期'), findsWidgets);

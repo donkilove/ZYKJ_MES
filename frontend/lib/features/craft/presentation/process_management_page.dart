@@ -9,13 +9,13 @@ import 'package:mes_client/features/craft/presentation/widgets/process_item_pane
 import 'package:mes_client/features/craft/presentation/widgets/process_management_feedback_banner.dart';
 import 'package:mes_client/features/craft/presentation/widgets/process_management_models.dart';
 import 'package:mes_client/features/craft/presentation/widgets/process_management_page_header.dart';
+import 'package:mes_client/features/craft/presentation/widgets/process_reference_dialog.dart';
 import 'package:mes_client/features/craft/presentation/widgets/process_management_state.dart';
 import 'package:mes_client/features/craft/presentation/widgets/process_management_view_switch.dart';
 import 'package:mes_client/features/craft/presentation/widgets/process_stage_dialog.dart';
 import 'package:mes_client/features/craft/presentation/widgets/process_stage_panel.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
-import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 
 class ProcessManagementPage extends StatefulWidget {
@@ -435,43 +435,39 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
   }
 
   void _showStageReferenceDialog(CraftStageItem stage) {
-    showDialog<void>(
+    showProcessReferenceDialog(
       context: context,
-      builder: (ctx) => _ReferenceDialog(
-        title: '工段引用分析：${stage.name}',
-        loader: () => _service.getStageReferences(stageId: stage.id).then(
-          (result) => result.items
-              .map(
-                (entry) => RefEntry(
-                  entry.refType,
-                  entry.refName,
-                  entry.refCode ?? '#${entry.refId}',
-                  entry.detail,
-                ),
-              )
-              .toList(),
-        ),
+      title: '工段引用分析：${stage.name}',
+      loader: () => _service.getStageReferences(stageId: stage.id).then(
+        (result) => result.items
+            .map(
+              (entry) => RefEntry(
+                entry.refType,
+                entry.refName,
+                entry.refCode ?? '#${entry.refId}',
+                entry.detail,
+              ),
+            )
+            .toList(),
       ),
     );
   }
 
   void _showProcessReferenceDialog(CraftProcessItem process) {
-    showDialog<void>(
+    showProcessReferenceDialog(
       context: context,
-      builder: (ctx) => _ReferenceDialog(
-        title: '工序引用分析：${process.name}',
-        loader: () => _service.getProcessReferences(processId: process.id).then(
-          (result) => result.items
-              .map(
-                (entry) => RefEntry(
-                  entry.refType,
-                  entry.refName,
-                  entry.refCode ?? '#${entry.refId}',
-                  entry.detail,
-                ),
-              )
-              .toList(),
-        ),
+      title: '工序引用分析：${process.name}',
+      loader: () => _service.getProcessReferences(processId: process.id).then(
+        (result) => result.items
+            .map(
+              (entry) => RefEntry(
+                entry.refType,
+                entry.refName,
+                entry.refCode ?? '#${entry.refId}',
+                entry.detail,
+              ),
+            )
+            .toList(),
       ),
     );
   }
@@ -526,115 +522,6 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
       content: _viewState.loading
           ? const MesLoadingState(label: '工艺视图加载中...')
           : workspace,
-    );
-  }
-}
-
-class _ReferenceDialog extends StatefulWidget {
-  const _ReferenceDialog({required this.title, required this.loader});
-
-  final String title;
-  final Future<List<RefEntry>> Function() loader;
-
-  @override
-  State<_ReferenceDialog> createState() => _ReferenceDialogState();
-}
-
-class _ReferenceDialogState extends State<_ReferenceDialog> {
-  bool _loading = true;
-  String _error = '';
-  List<RefEntry> _items = const [];
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    try {
-      final items = await widget.loader();
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _items = items;
-        _loading = false;
-      });
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _error = error.toString();
-        _loading = false;
-      });
-    }
-  }
-
-  String _refTypeLabel(String type) => switch (type) {
-    'process' => '工序',
-    'user' => '用户',
-    'template' => '工艺模板',
-    'system_master_template' => '系统母版',
-    'order' => '生产工单',
-    _ => type,
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    return MesDialog(
-      title: Text(widget.title),
-      width: 480,
-      content: SizedBox(
-        height: 360,
-        child: _loading
-            ? const MesLoadingState(label: '引用记录加载中...')
-            : _error.isNotEmpty
-            ? Text(
-                _error,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              )
-            : _items.isEmpty
-            ? const Center(child: Text('无引用记录，可安全删除'))
-            : ListView.separated(
-                itemCount: _items.length,
-                separatorBuilder: (_, _) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final item = _items[index];
-                  return ListTile(
-                    dense: true,
-                    leading: Chip(
-                      label: Text(
-                        _refTypeLabel(item.refType),
-                        style: const TextStyle(fontSize: 11),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    title: Text(item.refName),
-                    subtitle: Text(
-                      [
-                        '编码/编号：${item.refId}',
-                        if (item.detail != null && item.detail!.trim().isNotEmpty)
-                          item.detail!,
-                      ].join('\n'),
-                    ),
-                    trailing: Text(
-                      item.refId,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  );
-                },
-              ),
-      ),
-      actions: [
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('关闭'),
-        ),
-      ],
     );
   }
 }

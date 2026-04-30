@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
-import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
+import 'package:mes_client/features/user/presentation/widgets/role_management_action_dialogs.dart';
 import 'package:mes_client/features/user/presentation/widgets/role_management_page_header.dart';
 import 'package:mes_client/features/user/presentation/widgets/role_form_dialog.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
@@ -194,27 +194,11 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
     if (!widget.canDeleteRole || _isBuiltinSemanticsRole(role)) {
       return;
     }
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showRoleDeleteDialog(
       context: context,
-      builder: (context) {
-        return MesDialog(
-          title: const Text('删除角色'),
-          width: 420,
-          content: Text('确认删除角色“${role.name}”吗？删除后不可恢复。'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('删除'),
-            ),
-          ],
-        );
-      },
+      role: role,
     );
-    if (confirmed != true) {
+    if (!confirmed) {
       return;
     }
 

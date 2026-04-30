@@ -631,6 +631,38 @@ void main() {
     expect(craftService.disabledTemplateIds, isEmpty);
   });
 
+  testWidgets('启用停用模板前会展示独立确认弹窗', (tester) async {
+    await pumpPage(
+      tester,
+      templates: [
+        buildTemplate(
+          id: 18,
+          productId: 1,
+          productName: '产品A',
+          templateName: '切割模板18',
+          enabled: false,
+        ),
+      ],
+    );
+
+    await tester.tap(find.text('产品A').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byWidgetPredicate((widget) => widget is PopupMenuButton).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('启用').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      find.byKey(const ValueKey('process-configuration-enable-dialog')),
+      findsOneWidget,
+    );
+    expect(find.text('确认启用模板 切割模板18 吗？'), findsOneWidget);
+  });
+
   testWidgets('从系统母版套版弹窗展示宽版表单骨架', (tester) async {
     final craftService = _FakeCraftService(
       templates: [

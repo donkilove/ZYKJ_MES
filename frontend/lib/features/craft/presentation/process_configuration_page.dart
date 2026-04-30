@@ -5,6 +5,7 @@ import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/craft/presentation/widgets/system_master_template_form_dialog.dart';
+import 'package:mes_client/features/craft/presentation/widgets/process_configuration_action_dialogs.dart';
 import 'package:mes_client/features/craft/presentation/widgets/template_action_confirm_dialog.dart';
 import 'package:mes_client/features/craft/presentation/widgets/template_version_dialog.dart';
 import 'package:mes_client/features/craft/presentation/widgets/system_master_copy_dialog.dart';
@@ -13,7 +14,6 @@ import 'package:mes_client/features/craft/presentation/widgets/template_detail_d
 import 'package:mes_client/features/craft/presentation/widgets/template_form_dialog.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
-import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
@@ -501,23 +501,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     final actionText = enabled ? '启用' : '停用';
     final bool? confirmed;
     if (enabled) {
-      confirmed = await showDialog<bool>(
+      confirmed = await showProcessConfigurationEnableDialog(
         context: context,
-        builder: (context) => MesDialog(
-          title: Text('$actionText模板'),
-          width: 420,
-          content: Text('确认$actionText模板 ${item.templateName} 吗？'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text(actionText),
-            ),
-          ],
-        ),
+        item: item,
       );
     } else {
       confirmed = await _confirmTemplateActionWithImpact(
