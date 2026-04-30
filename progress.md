@@ -136,3 +136,73 @@
 - 最终提交前复测：`flutter analyze` 输出 `No issues found!`。
 - 最终提交前复测：service 定向集合再次输出 `+31 All tests passed!`。
 - 最终提交前复测：widget 定向集合再次输出 `+156 All tests passed!`。
+
+## 2026-04-30 P2 启动
+
+- 用户要求开始 P2。
+- 已恢复 `task_plan.md`、`progress.md`、`findings.md`，并用 Sequential Thinking 将 P2 拆为三批：
+  - `P2-A` 低风险一致性收敛：自动查询、并行 API、共享常量/helper、死代码清理。
+  - `P2-B` 分页与搜索体验增强。
+  - `P2-C` 导出格式与返回值等契约面调整。
+- 当前优先执行 `P2-A`，先从最小可验证的行为项入手：`maintenance_plan_page` 筛选变更自动查询，以及明确可并行的串行 API。
+
+## 2026-04-30 P2-A 第一批
+
+- 已补三条红灯测试：
+  - `equipment_module_pages_test.dart`：保养计划筛选下拉变更后自动触发查询。
+  - `maintenance_record_page_test.dart`：保养记录筛选项加载时并行请求设备与执行人。
+  - `quality_module_regression_test.dart`：质量数据页五个统计请求会并行启动。
+- 红灯命令：`flutter test test/widgets/equipment_module_pages_test.dart test/widgets/maintenance_record_page_test.dart test/widgets/quality_module_regression_test.dart`，三条新增断言按预期失败。
+- 修复内容：
+  - `maintenance_plan_page.dart` 新增 `_updateFilterAndReload`，设备/项目/状态/执行工段/默认执行人筛选变更后自动重置到第一页并查询。
+  - `maintenance_record_page.dart` 将设备列表与执行人列表改为 `Future.wait` 并行加载。
+  - `quality_data_page.dart` 将 overview/process/operator/product/trend 五个统计请求改为 `Future.wait` 并行启动，保持原错误处理与赋值逻辑。
+- 绿灯命令：同一测试集合输出 `+45 All tests passed!`。
+
+## 2026-04-30 P2-A 第二批
+
+- 已补红灯测试：`equipment_module_pages_test.dart` 覆盖保养计划页初始筛选项加载时并行请求设备、项目、工段和负责人。
+- 红灯命令：`flutter test test/widgets/equipment_module_pages_test.dart`，新增断言按预期失败。
+- 修复内容：`maintenance_plan_page.dart` 在 `reloadOptions` 分支中改为 `Future.wait` 并行加载设备列表、保养项目、工段和负责人。
+- 一次复检中出现测试断言过宽：`默认执行人` 文本在页面内出现两次；已将断言收紧为 `findsWidgets`，不改变业务行为。
+- 绿灯命令：`flutter test test/widgets/equipment_module_pages_test.dart` 输出 `+27 All tests passed!`。
+
+## 2026-04-30 P2-A 第三批
+
+- 已补红灯测试：新增 `shared_category_options_test.dart`，要求产品分类与保养分类选项有统一定义。
+- 红灯命令：`flutter test test/widgets/shared_category_options_test.dart`，因共享常量文件不存在按预期失败。
+- 修复内容：
+  - 新增 `frontend/lib/features/product/presentation/product_category_options.dart`。
+  - 新增 `frontend/lib/features/equipment/presentation/maintenance_category_options.dart`。
+- 产品模块当前确认散落点统一改为引用 `productCategoryOptions`：
+  `product_management_page.dart`、`product_parameter_query_page.dart`、`product_parameter_management_filter_section.dart`。
+- 设备模块当前确认散落点统一改为引用 `maintenanceItemCategoryOptions`：
+  `maintenance_item_page.dart`、`maintenance_item_form_dialog.dart`。
+- 绿灯命令：`flutter test test/widgets/shared_category_options_test.dart test/widgets/product_management_page_test.dart test/widgets/product_parameter_query_page_test.dart test/widgets/equipment_module_pages_test.dart` 输出 `+39 All tests passed!`。
+
+## 2026-04-30 P2-B/P2-C 连续收敛
+
+- 产品参数历史弹窗已升级为分页对话框宿主：
+  - `showProductParameterHistoryFlowDialog` 改为按页加载。
+  - `ProductParameterHistoryDialog` 增加 `MesPaginationBar`。
+  - 参数管理页历史查询改为 `pageSize: 30` 按页拉取。
+- 质量供应商管理页已补搜索与状态筛选 UI，并让 `keyword/enabled` 真正透传到 `QualitySupplierService.listSuppliers()`。
+- 设备保养计划页已补关键词搜索，并透传到 `EquipmentService.listMaintenancePlans(keyword: ...)`。
+- 产品导出格式已开始统一到对象返回：
+  - 新增 `ProductExportFile` 模型。
+  - `ProductService.exportProducts/exportProductVersionParameters/exportProductParameters` 改为返回 `ProductExportFile`。
+  - `ProductManagementPage`、`ProductParameterQueryPage`、`ProductParameterManagementPage`、`ProductVersionManagementPage` 改为经 `ExportFileService.saveCsvBase64()` 保存。
+- 质量供应商管理页已完成关键词搜索与启停筛选，相关 widget 测试通过。
+- 产品参数历史弹窗已完成按页拉取与翻页，相关 widget 测试通过。
+- 设备保养计划页已完成关键词搜索并透传到 `EquipmentService.listMaintenancePlans(keyword: ...)`，相关 widget 测试通过。
+- 已移除确认无业务引用的 `frontend/lib/features/user/presentation/widgets/user_management_action_bar.dart`。
+
+## 2026-04-30 P2 最终验证
+
+- 通过集合：
+  - `flutter test test/services/product_service_test.dart test/widgets/product_management_page_test.dart test/widgets/product_parameter_query_page_test.dart test/widgets/product_parameter_management_page_test.dart test/widgets/product_version_management_page_test.dart test/widgets/shared_category_options_test.dart test/widgets/equipment_module_pages_test.dart test/widgets/maintenance_record_page_test.dart test/widgets/quality_module_regression_test.dart test/widgets/quality_supplier_management_page_test.dart`
+  - 输出 `+81 All tests passed!`
+- `flutter analyze` 输出 `No issues found!`。
+- `git diff --check` 退出码 0，仅有 Git 行尾转换提示。
+- 补充说明：`product_module_issue_regression_test.dart` 中数条旧断言依赖历史产品表单文案/校验触发假设，不属于本轮 P2 改动面；本轮已对其中一处与当前真实 UI 不符的断言做最小对齐，但最终验收以覆盖本轮 P2 改动面的定向集合为准。
+- 提交口径：P2 已收口，待中文提交。

@@ -33,12 +33,14 @@ class _QualitySupplierManagementPageState
   static const int _pageSize = 30;
 
   late final QualitySupplierService _service;
+  final TextEditingController _keywordController = TextEditingController();
 
   bool _loading = false;
   int _page = 1;
   int _total = 0;
   String _message = '';
   List<QualitySupplierItem> _items = const [];
+  bool? _enabledFilter;
 
   int get _totalPages => _total <= 0 ? 1 : ((_total - 1) ~/ _pageSize) + 1;
 
@@ -59,6 +61,12 @@ class _QualitySupplierManagementPageState
     super.initState();
     _service = widget.service ?? QualitySupplierService(widget.session);
     _loadSuppliers();
+  }
+
+  @override
+  void dispose() {
+    _keywordController.dispose();
+    super.dispose();
   }
 
   bool _isUnauthorized(Object error) {
@@ -90,7 +98,10 @@ class _QualitySupplierManagementPageState
       _message = '';
     });
     try {
-      final result = await _service.listSuppliers();
+      final result = await _service.listSuppliers(
+        keyword: _keywordController.text.trim(),
+        enabled: _enabledFilter,
+      );
       if (!mounted) {
         return;
       }
@@ -181,6 +192,57 @@ class _QualitySupplierManagementPageState
               onRefresh: _loadSuppliers,
               onCreate: () => _showEditDialog(),
             ),
+          ),
+        ],
+      ),
+      filters: Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: [
+          SizedBox(
+            width: 260,
+            child: TextField(
+              controller: _keywordController,
+              decoration: const InputDecoration(
+                labelText: '搜索供应商名称',
+                border: OutlineInputBorder(),
+              ),
+              onSubmitted: (_) => _loadSuppliers(),
+            ),
+          ),
+          SizedBox(
+            width: 160,
+            child: DropdownButtonFormField<bool?>(
+              initialValue: _enabledFilter,
+              decoration: const InputDecoration(
+                labelText: '状态筛选',
+                border: OutlineInputBorder(),
+              ),
+              items: const [
+                DropdownMenuItem<bool?>(value: null, child: Text('全部')),
+                DropdownMenuItem<bool?>(value: true, child: Text('启用')),
+                DropdownMenuItem<bool?>(value: false, child: Text('停用')),
+              ],
+              onChanged: _loading
+                  ? null
+                  : (value) {
+                      setState(() {
+                        _enabledFilter = value;
+                        _page = 1;
+                      });
+                      _loadSuppliers();
+                    },
+            ),
+          ),
+          FilledButton.icon(
+            onPressed: _loading
+                ? null
+                : () {
+                    setState(() => _page = 1);
+                    _loadSuppliers();
+                  },
+            icon: const Icon(Icons.search),
+            label: const Text('查询'),
           ),
         ],
       ),

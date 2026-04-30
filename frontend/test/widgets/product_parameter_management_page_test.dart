@@ -53,6 +53,8 @@ class _PageStructureService extends ProductService {
   _PageStructureService()
     : super(AppSession(baseUrl: '', accessToken: 'token'));
 
+  final List<int> historyPages = [];
+
   @override
   Future<ProductParameterVersionListResult> listProductParameterVersions({
     required int page,
@@ -119,12 +121,33 @@ class _PageStructureService extends ProductService {
     required int page,
     required int pageSize,
   }) async {
+    historyPages.add(page);
     return ProductParameterHistoryListResult(
       version: version,
       versionLabel: 'V1.${(version ?? 1) - 1}',
       lifecycleStatus: 'draft',
-      total: 0,
-      items: const [],
+      total: 35,
+      items: List.generate(
+        page == 1 ? 30 : 5,
+        (index) => ProductParameterHistoryItem(
+          id: (page - 1) * 30 + index + 1,
+          productName: '产品$productId',
+          productCategory: '贴片',
+          version: version ?? 1,
+          versionLabel: 'V1.${(version ?? 1) - 1}',
+          remark: '历史$page-$index',
+          changeReason: '参数调整',
+          changeType: 'edit',
+          parameterName: '产品芯片',
+          changedKeys: const ['产品芯片'],
+          operatorUsername: 'admin',
+          beforeSummary: '旧值',
+          afterSummary: '新值',
+          beforeSnapshot: '{}',
+          afterSnapshot: '{}',
+          createdAt: _fixedDate,
+        ),
+      ),
     );
   }
 }
@@ -248,7 +271,10 @@ void main() {
 
     expect(find.byType(MesCrudPageScaffold), findsOneWidget);
     expect(find.byType(ProductParameterManagementPageHeader), findsOneWidget);
-    expect(find.byType(ProductParameterManagementFilterSection), findsOneWidget);
+    expect(
+      find.byType(ProductParameterManagementFilterSection),
+      findsOneWidget,
+    );
     expect(find.byType(ProductParameterVersionTableSection), findsOneWidget);
     expect(find.byType(ProductParameterManagementFeedbackBanner), findsNothing);
   });
@@ -307,10 +333,22 @@ void main() {
       ),
     );
 
-    expect(find.byKey(const ValueKey('product-parameter-editor-header')), findsOneWidget);
-    expect(find.byKey(const ValueKey('product-parameter-editor-toolbar')), findsOneWidget);
-    expect(find.byKey(const ValueKey('product-parameter-editor-table')), findsOneWidget);
-    expect(find.byKey(const ValueKey('product-parameter-editor-footer')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('product-parameter-editor-header')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('product-parameter-editor-toolbar')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('product-parameter-editor-table')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('product-parameter-editor-footer')),
+      findsOneWidget,
+    );
     expect(find.textContaining('编辑版本参数 - 产品41'), findsOneWidget);
     expect(find.text('新增参数'), findsOneWidget);
     expect(find.text('保存参数'), findsOneWidget);
@@ -371,12 +409,17 @@ void main() {
             historyTypeLabel: (value) => value == 'edit' ? '编辑' : value,
             onClose: () {},
             onViewSnapshot: (item) {},
+            page: 1,
+            totalPages: 1,
           ),
         ),
       ),
     );
 
-    expect(find.byKey(const ValueKey('product-parameter-history-dialog')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('product-parameter-history-dialog')),
+      findsOneWidget,
+    );
     expect(find.textContaining('参数变更历史 - 产品41 / 贴片 / V1.0'), findsOneWidget);
     expect(find.textContaining('变更原因：调整芯片参数'), findsOneWidget);
     expect(find.text('查看快照'), findsOneWidget);
@@ -424,7 +467,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('编辑参数').last);
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('product-parameter-editor-header')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('product-parameter-editor-header')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.widgetWithText(TextButton, '返回列表'));
     await tester.pumpAndSettle();
@@ -433,6 +479,16 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('查看历史').last);
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('product-parameter-history-dialog')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('product-parameter-history-dialog')),
+      findsOneWidget,
+    );
+    expect(find.text('第 1 / 2 页'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '下一页'));
+    await tester.pumpAndSettle();
+
+    expect(service.historyPages, [1, 2]);
+    expect(find.text('第 2 / 2 页'), findsOneWidget);
   });
 }

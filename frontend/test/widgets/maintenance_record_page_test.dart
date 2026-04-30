@@ -4,12 +4,20 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
 import 'package:mes_client/features/equipment/presentation/maintenance_record_page.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
+import 'dart:async';
 
 class _FakeEquipmentService extends EquipmentService {
-  _FakeEquipmentService({required this.records})
-    : super(AppSession(baseUrl: '', accessToken: 'token'));
+  _FakeEquipmentService({
+    required this.records,
+    this.equipmentListCompleter,
+    this.ownerListCompleter,
+  }) : super(AppSession(baseUrl: '', accessToken: 'token'));
 
   final List<MaintenanceRecordItem> records;
+  final Completer<EquipmentLedgerListResult>? equipmentListCompleter;
+  final Completer<List<EquipmentOwnerOption>>? ownerListCompleter;
+  int listEquipmentCalls = 0;
+  int listOwnersCalls = 0;
 
   @override
   Future<EquipmentLedgerListResult> listEquipment({
@@ -20,17 +28,23 @@ class _FakeEquipmentService extends EquipmentService {
     String? locationKeyword,
     String? ownerName,
   }) async {
+    listEquipmentCalls += 1;
+    final completer = equipmentListCompleter;
+    if (completer != null) {
+      return completer.future;
+    }
     return EquipmentLedgerListResult(total: 0, items: const []);
   }
 
   @override
   Future<List<EquipmentOwnerOption>> listAllOwners() async {
+    listOwnersCalls += 1;
+    final completer = ownerListCompleter;
+    if (completer != null) {
+      return completer.future;
+    }
     return [
-      EquipmentOwnerOption(
-        userId: 8,
-        username: 'worker',
-        fullName: null,
-      ),
+      EquipmentOwnerOption(userId: 8, username: 'worker', fullName: null),
     ];
   }
 
@@ -135,6 +149,32 @@ void main() {
       tester,
       equipmentService: _FakeEquipmentService(records: [_buildRecord(id: 3)]),
     );
+
+    expect(find.text('执行人'), findsWidgets);
+  });
+
+  testWidgets('保养记录筛选项加载时并行请求设备与执行人', (tester) async {
+    final equipmentCompleter = Completer<EquipmentLedgerListResult>();
+    final ownerCompleter = Completer<List<EquipmentOwnerOption>>();
+    final service = _FakeEquipmentService(
+      records: [_buildRecord(id: 4)],
+      equipmentListCompleter: equipmentCompleter,
+      ownerListCompleter: ownerCompleter,
+    );
+
+    await _pumpPage(tester, equipmentService: service);
+    await tester.pump();
+
+    expect(service.listEquipmentCalls, 1);
+    expect(service.listOwnersCalls, 1);
+
+    equipmentCompleter.complete(
+      EquipmentLedgerListResult(total: 0, items: const []),
+    );
+    ownerCompleter.complete([
+      EquipmentOwnerOption(userId: 8, username: 'worker', fullName: null),
+    ]);
+    await tester.pumpAndSettle();
 
     expect(find.text('执行人'), findsWidgets);
   });

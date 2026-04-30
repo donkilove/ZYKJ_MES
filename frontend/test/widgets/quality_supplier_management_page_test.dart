@@ -204,18 +204,57 @@ void main() {
       wrapBody(
         QualitySupplierFormDialog(
           supplierService: service,
-          item: _buildSupplier(id: 8, name: '编辑供应商', remark: '历史备注', isEnabled: false),
+          item: _buildSupplier(
+            id: 8,
+            name: '编辑供应商',
+            remark: '历史备注',
+            isEnabled: false,
+          ),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('quality-supplier-form-dialog')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('quality-supplier-form-dialog')),
+      findsOneWidget,
+    );
     expect(find.text('基本信息'), findsOneWidget);
     expect(find.text('状态与说明'), findsOneWidget);
     expect(find.text('名称'), findsOneWidget);
     expect(find.text('备注'), findsOneWidget);
     expect(find.text('当前状态'), findsOneWidget);
+  });
+
+  testWidgets('供应商管理页支持关键词与启停筛选', (tester) async {
+    setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = _FakeQualitySupplierService([
+      _buildSupplier(id: 1, name: '供应商A', remark: '启用', isEnabled: true),
+      _buildSupplier(id: 2, name: '供应商B', remark: '停用', isEnabled: false),
+    ]);
+
+    await tester.pumpWidget(
+      wrapBody(
+        QualitySupplierManagementPage(
+          session: session,
+          onLogout: () {},
+          service: service,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, '搜索供应商名称'), '供应商B');
+    await tester.tap(find.byType(DropdownButtonFormField<bool?>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('停用').last);
+    await tester.pumpAndSettle();
+
+    expect(service.lastKeyword, '供应商B');
+    expect(service.lastEnabled, isFalse);
   });
 }
 
@@ -244,6 +283,8 @@ class _FakeQualitySupplierService extends QualitySupplierService {
   int createCalls = 0;
   int updateCalls = 0;
   int deleteCalls = 0;
+  String? lastKeyword;
+  bool? lastEnabled;
   ApiException? deleteError;
 
   @override
@@ -251,6 +292,8 @@ class _FakeQualitySupplierService extends QualitySupplierService {
     String? keyword,
     bool? enabled,
   }) async {
+    lastKeyword = keyword;
+    lastEnabled = enabled;
     return QualitySupplierListResult(total: _items.length, items: [..._items]);
   }
 

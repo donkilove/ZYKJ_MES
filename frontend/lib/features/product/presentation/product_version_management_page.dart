@@ -1,9 +1,7 @@
-import 'dart:typed_data';
-
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/services/export_file_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_list_detail_shell.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_version_action_dialogs.dart';
@@ -51,6 +49,7 @@ class ProductVersionManagementPage extends StatefulWidget {
 class _ProductVersionManagementPageState
     extends State<ProductVersionManagementPage> {
   late final ProductService _service;
+  final ExportFileService _exportFileService = const ExportFileService();
 
   List<ProductItem> _products = [];
   int _productTotal = 0;
@@ -433,24 +432,21 @@ class _ProductVersionManagementPageState
     final product = _selectedProduct;
     if (product == null) return;
     try {
-      final bytes = await _service.exportProductVersionParameters(
+      final exportFile = await _service.exportProductVersionParameters(
         productId: product.id,
         version: rev.version,
       );
-      final fileName = '${product.name}_${rev.versionLabel}_参数.csv';
-      final location = await getSaveLocation(
-        suggestedName: fileName,
-        acceptedTypeGroups: [
-          const XTypeGroup(label: 'CSV', extensions: ['csv']),
-        ],
+      if (exportFile.contentBase64.isEmpty) {
+        throw const FormatException('导出内容为空');
+      }
+      final fallbackName = '${product.name}_${rev.versionLabel}_参数.csv';
+      final savedPath = await _exportFileService.saveCsvBase64(
+        filename: exportFile.filename.isEmpty
+            ? fallbackName
+            : exportFile.filename,
+        contentBase64: exportFile.contentBase64,
       );
-      if (location == null) return;
-      final file = XFile.fromData(
-        Uint8List.fromList(bytes),
-        mimeType: 'text/csv',
-        name: fileName,
-      );
-      await file.saveTo(location.path);
+      if (savedPath == null) return;
       _showSuccess('导出成功');
     } on ApiException catch (e) {
       _showError(e.message);

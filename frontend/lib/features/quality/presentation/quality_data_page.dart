@@ -237,46 +237,56 @@ class _QualityDataPageState extends State<QualityDataPage> {
       }
     });
     try {
-      final overview = await _service.getQualityOverview(
-        startDate: _startDate,
-        endDate: _endDate,
-        productName: _productNameController.text.trim(),
-        processCode: _processCodeController.text.trim(),
-        operatorUsername: _operatorUsernameController.text.trim(),
-        result: _resultFilter,
-      );
-      final processItems = await _service.getQualityProcessStats(
-        startDate: _startDate,
-        endDate: _endDate,
-        productName: _productNameController.text.trim(),
-        processCode: _processCodeController.text.trim(),
-        operatorUsername: _operatorUsernameController.text.trim(),
-        result: _resultFilter,
-      );
-      final operatorItems = await _service.getQualityOperatorStats(
-        startDate: _startDate,
-        endDate: _endDate,
-        productName: _productNameController.text.trim(),
-        processCode: _processCodeController.text.trim(),
-        operatorUsername: _operatorUsernameController.text.trim(),
-        result: _resultFilter,
-      );
-      final productItems = await _service.getQualityProductStats(
-        startDate: _startDate,
-        endDate: _endDate,
-        productName: _productNameController.text.trim(),
-        processCode: _processCodeController.text.trim(),
-        operatorUsername: _operatorUsernameController.text.trim(),
-        result: _resultFilter,
-      );
-      final trendItems = await _service.getQualityTrend(
-        startDate: _startDate,
-        endDate: _endDate,
-        productName: _productNameController.text.trim(),
-        processCode: _processCodeController.text.trim(),
-        operatorUsername: _operatorUsernameController.text.trim(),
-        result: _resultFilter,
-      );
+      final productName = _productNameController.text.trim();
+      final processCode = _processCodeController.text.trim();
+      final operatorUsername = _operatorUsernameController.text.trim();
+      final results = await Future.wait<Object>([
+        _service.getQualityOverview(
+          startDate: _startDate,
+          endDate: _endDate,
+          productName: productName,
+          processCode: processCode,
+          operatorUsername: operatorUsername,
+          result: _resultFilter,
+        ),
+        _service.getQualityProcessStats(
+          startDate: _startDate,
+          endDate: _endDate,
+          productName: productName,
+          processCode: processCode,
+          operatorUsername: operatorUsername,
+          result: _resultFilter,
+        ),
+        _service.getQualityOperatorStats(
+          startDate: _startDate,
+          endDate: _endDate,
+          productName: productName,
+          processCode: processCode,
+          operatorUsername: operatorUsername,
+          result: _resultFilter,
+        ),
+        _service.getQualityProductStats(
+          startDate: _startDate,
+          endDate: _endDate,
+          productName: productName,
+          processCode: processCode,
+          operatorUsername: operatorUsername,
+          result: _resultFilter,
+        ),
+        _service.getQualityTrend(
+          startDate: _startDate,
+          endDate: _endDate,
+          productName: productName,
+          processCode: processCode,
+          operatorUsername: operatorUsername,
+          result: _resultFilter,
+        ),
+      ]);
+      final overview = results[0] as QualityStatsOverview;
+      final processItems = results[1] as List<QualityProcessStatItem>;
+      final operatorItems = results[2] as List<QualityOperatorStatItem>;
+      final productItems = results[3] as List<QualityProductStatItem>;
+      final trendItems = results[4] as List<QualityTrendItem>;
       if (!mounted) {
         return;
       }

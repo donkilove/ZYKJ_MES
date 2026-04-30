@@ -684,7 +684,7 @@ class ProductService {
     return '请求失败，状态码 $statusCode';
   }
 
-  Future<List<int>> exportProducts({
+  Future<ProductExportFile> exportProducts({
     String? keyword,
     String? category,
     String? lifecycleStatus,
@@ -715,17 +715,18 @@ class ProductService {
       '${session.baseUrl}/products/export/list',
     ).replace(queryParameters: query.isEmpty ? null : query);
     final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      final json = _decodeBody(response);
       throw ApiException(
         _extractErrorMessage(json, response.statusCode),
         response.statusCode,
       );
     }
-    return response.bodyBytes;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
+    return ProductExportFile.fromJson(data, fallbackFilename: 'products.csv');
   }
 
-  Future<List<int>> exportProductVersionParameters({
+  Future<ProductExportFile> exportProductVersionParameters({
     required int productId,
     required int version,
   }) async {
@@ -733,17 +734,21 @@ class ProductService {
       '${session.baseUrl}/products/$productId/versions/$version/export',
     );
     final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      final json = _decodeBody(response);
       throw ApiException(
         _extractErrorMessage(json, response.statusCode),
         response.statusCode,
       );
     }
-    return response.bodyBytes;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
+    return ProductExportFile.fromJson(
+      data,
+      fallbackFilename: 'product_version_parameters.csv',
+    );
   }
 
-  Future<List<int>> exportProductParameters({
+  Future<ProductExportFile> exportProductParameters({
     String? keyword,
     String? category,
     String? lifecycleStatus,
@@ -787,13 +792,17 @@ class ProductService {
       '${session.baseUrl}/products/parameters/export',
     ).replace(queryParameters: query.isEmpty ? null : query);
     final response = await http.get(uri, headers: _authHeaders);
+    final json = _decodeBody(response);
     if (response.statusCode != 200) {
-      final json = _decodeBody(response);
       throw ApiException(
         _extractErrorMessage(json, response.statusCode),
         response.statusCode,
       );
     }
-    return response.bodyBytes;
+    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
+    return ProductExportFile.fromJson(
+      data,
+      fallbackFilename: 'product_parameters.csv',
+    );
   }
 }

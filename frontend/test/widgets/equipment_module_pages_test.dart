@@ -16,6 +16,7 @@ import 'package:mes_client/features/equipment/presentation/widgets/maintenance_p
 import 'package:mes_client/features/equipment/presentation/maintenance_record_page.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
+import 'dart:async';
 
 class _FakeEquipmentService extends EquipmentService {
   _FakeEquipmentService({
@@ -23,6 +24,9 @@ class _FakeEquipmentService extends EquipmentService {
     List<EquipmentLedgerItem>? equipmentItems,
     List<MaintenanceItemEntry>? maintenanceItems,
     List<MaintenanceWorkOrderItem>? workOrders,
+    this.equipmentListCompleter,
+    this.maintenanceItemListCompleter,
+    this.ownerListCompleter,
   }) : _owners =
            owners ??
            [EquipmentOwnerOption(userId: 7, username: 'm1', fullName: null)],
@@ -95,6 +99,13 @@ class _FakeEquipmentService extends EquipmentService {
   int updatePlanCalls = 0;
   int togglePlanCalls = 0;
   int deletePlanCalls = 0;
+  int listMaintenancePlansCalls = 0;
+  String? lastPlanKeyword;
+  int? lastPlanEquipmentFilterId;
+  int? lastPlanItemFilterId;
+  bool? lastPlanEnabledFilter;
+  String? lastPlanExecutionStageCodeFilter;
+  int? lastPlanDefaultExecutorFilterId;
   int createMaintenanceItemCalls = 0;
   int updateMaintenanceItemCalls = 0;
   int toggleMaintenanceItemCalls = 0;
@@ -104,6 +115,11 @@ class _FakeEquipmentService extends EquipmentService {
   int cancelExecutionCalls = 0;
   int getWorkOrderDetailCalls = 0;
   String? lastExecutionStatusFilter;
+  final Completer<EquipmentLedgerListResult>? equipmentListCompleter;
+  final Completer<MaintenanceItemListResult>? maintenanceItemListCompleter;
+  final Completer<List<EquipmentOwnerOption>>? ownerListCompleter;
+  int equipmentListCalls = 0;
+  int maintenanceItemListCalls = 0;
   final List<EquipmentOwnerOption> _owners;
   final List<EquipmentLedgerItem> _equipmentItems;
   final List<MaintenanceItemEntry> _maintenanceItems;
@@ -112,6 +128,10 @@ class _FakeEquipmentService extends EquipmentService {
   @override
   Future<List<EquipmentOwnerOption>> listAllOwners() async {
     ownersRequestCount += 1;
+    final completer = ownerListCompleter;
+    if (completer != null) {
+      return completer.future;
+    }
     return _owners;
   }
 
@@ -124,6 +144,11 @@ class _FakeEquipmentService extends EquipmentService {
     String? locationKeyword,
     String? ownerName,
   }) async {
+    equipmentListCalls += 1;
+    final completer = equipmentListCompleter;
+    if (completer != null) {
+      return completer.future;
+    }
     return EquipmentLedgerListResult(
       total: _equipmentItems.length,
       items: _equipmentItems,
@@ -221,6 +246,11 @@ class _FakeEquipmentService extends EquipmentService {
     bool? enabled,
     String? category,
   }) async {
+    maintenanceItemListCalls += 1;
+    final completer = maintenanceItemListCompleter;
+    if (completer != null) {
+      return completer.future;
+    }
     return MaintenanceItemListResult(
       total: _maintenanceItems.length,
       items: _maintenanceItems,
@@ -309,12 +339,20 @@ class _FakeEquipmentService extends EquipmentService {
   Future<MaintenancePlanListResult> listMaintenancePlans({
     required int page,
     required int pageSize,
+    String? keyword,
     int? equipmentId,
     int? itemId,
     bool? enabled,
     String? executionProcessCode,
     int? defaultExecutorUserId,
   }) async {
+    listMaintenancePlansCalls += 1;
+    lastPlanKeyword = keyword;
+    lastPlanEquipmentFilterId = equipmentId;
+    lastPlanItemFilterId = itemId;
+    lastPlanEnabledFilter = enabled;
+    lastPlanExecutionStageCodeFilter = executionProcessCode;
+    lastPlanDefaultExecutorFilterId = defaultExecutorUserId;
     return MaintenancePlanListResult(
       total: 1,
       items: [
@@ -1139,6 +1177,101 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, '删除').last);
     await tester.pumpAndSettle();
     expect(equipmentService.deletePlanCalls, 1);
+  });
+
+  testWidgets('保养计划筛选下拉变更后自动触发查询', (tester) async {
+    final equipmentService = _FakeEquipmentService();
+    await _pumpPage(
+      tester,
+      MaintenancePlanPage(
+        session: session,
+        onLogout: () {},
+        canWrite: true,
+        equipmentService: equipmentService,
+        craftService: craftService,
+      ),
+      size: const Size(1600, 1200),
+    );
+
+    expect(equipmentService.listMaintenancePlansCalls, 1);
+
+    await tester.tap(find.byType(DropdownButtonFormField<int?>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('EQ-001 - 冲压机-A').last);
+    await tester.pumpAndSettle();
+
+    expect(equipmentService.listMaintenancePlansCalls, 2);
+    expect(equipmentService.lastPlanEquipmentFilterId, 1);
+  });
+
+  testWidgets('保养计划筛选项初始加载时并行请求设备 项目 工段与负责人', (tester) async {
+    final equipmentCompleter = Completer<EquipmentLedgerListResult>();
+    final itemCompleter = Completer<MaintenanceItemListResult>();
+    final ownerCompleter = Completer<List<EquipmentOwnerOption>>();
+    final equipmentService = _FakeEquipmentService(
+      equipmentListCompleter: equipmentCompleter,
+      maintenanceItemListCompleter: itemCompleter,
+      ownerListCompleter: ownerCompleter,
+    );
+
+    await _pumpPage(
+      tester,
+      MaintenancePlanPage(
+        session: session,
+        onLogout: () {},
+        canWrite: true,
+        equipmentService: equipmentService,
+        craftService: craftService,
+      ),
+      size: const Size(1600, 1200),
+    );
+    await tester.pump();
+
+    expect(equipmentService.equipmentListCalls, 1);
+    expect(equipmentService.maintenanceItemListCalls, 1);
+    expect(equipmentService.ownersRequestCount, 1);
+
+    equipmentCompleter.complete(
+      EquipmentLedgerListResult(
+        total: 1,
+        items: [
+          _buildEquipmentLedgerItem(id: 1, code: 'EQ-001', name: '冲压机-A'),
+        ],
+      ),
+    );
+    itemCompleter.complete(
+      MaintenanceItemListResult(
+        total: 1,
+        items: [_buildMaintenanceItemEntry(id: 2, name: '月度润滑')],
+      ),
+    );
+    ownerCompleter.complete([
+      EquipmentOwnerOption(userId: 7, username: 'm1', fullName: null),
+    ]);
+    await tester.pumpAndSettle();
+
+    expect(find.text('默认执行人'), findsWidgets);
+  });
+
+  testWidgets('保养计划页支持关键词查询', (tester) async {
+    final equipmentService = _FakeEquipmentService();
+    await _pumpPage(
+      tester,
+      MaintenancePlanPage(
+        session: session,
+        onLogout: () {},
+        canWrite: true,
+        equipmentService: equipmentService,
+        craftService: craftService,
+      ),
+      size: const Size(1600, 1200),
+    );
+
+    await tester.enterText(find.widgetWithText(TextField, '搜索设备/项目'), '冲压机-A');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+
+    expect(equipmentService.lastPlanKeyword, '冲压机-A');
   });
 
   testWidgets('保养计划表单弹窗展示宽版双栏骨架', (tester) async {

@@ -1,6 +1,5 @@
-import 'package:file_selector/file_selector.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/services/export_file_service.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
@@ -15,13 +14,12 @@ import 'package:mes_client/features/product/presentation/widgets/product_managem
 import 'package:mes_client/features/product/presentation/widgets/product_management_page_header.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_table_section.dart'
     show ProductManagementTableAction, ProductManagementTableSection;
+import 'package:mes_client/features/product/presentation/product_category_options.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_detail_drawer.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_version_dialog.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_action_dialogs.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_form_dialog.dart';
 import 'package:mes_client/features/product/services/product_service.dart';
-
-const List<String> _productCategoryOptions = ['贴片', 'DTU', '套件'];
 
 class ProductManagementPage extends StatefulWidget {
   const ProductManagementPage({
@@ -73,6 +71,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
   static const int _pageSize = 50;
 
   late final ProductService _productService;
+  final ExportFileService _exportFileService = const ExportFileService();
   final TextEditingController _keywordController = TextEditingController();
 
   bool _loading = false;
@@ -167,8 +166,6 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
         return value;
     }
   }
-
-
 
   String _parameterHistoryTypeLabel(String value) {
     switch (value) {
@@ -488,9 +485,9 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                     if (!mounted) {
                       return;
                     }
-                    ScaffoldMessenger.of(this.context).showSnackBar(
-                      const SnackBar(content: Text('新建版本成功')),
-                    );
+                    ScaffoldMessenger.of(
+                      this.context,
+                    ).showSnackBar(const SnackBar(content: Text('新建版本成功')));
                     await reloadVersions(setLocalState);
                   },
                 );
@@ -532,9 +529,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                     return;
                   }
                   ScaffoldMessenger.of(this.context).showSnackBar(
-                    SnackBar(
-                      content: Text('版本对比失败：${_errorMessage(error)}'),
-                    ),
+                    SnackBar(content: Text('版本对比失败：${_errorMessage(error)}')),
                   );
                 } finally {
                   if (!dialogClosed &&
@@ -576,32 +571,35 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                               );
                               final newNote =
                                   await showMesLockedFormDialog<String?>(
-                                context: context,
-                                builder: (ctx) => MesDialog(
-                                  title: Text('编辑 ${item.displayVersion} 备注'),
-                                  width: 360,
-                                  content: TextField(
-                                    controller: noteController,
-                                    maxLength: 256,
-                                    decoration: const InputDecoration(
-                                      labelText: '版本备注',
-                                      border: OutlineInputBorder(),
+                                    context: context,
+                                    builder: (ctx) => MesDialog(
+                                      title: Text(
+                                        '编辑 ${item.displayVersion} 备注',
+                                      ),
+                                      width: 360,
+                                      content: TextField(
+                                        controller: noteController,
+                                        maxLength: 256,
+                                        decoration: const InputDecoration(
+                                          labelText: '版本备注',
+                                          border: OutlineInputBorder(),
+                                        ),
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.of(ctx).pop(null),
+                                          child: const Text('取消'),
+                                        ),
+                                        FilledButton(
+                                          onPressed: () => Navigator.of(
+                                            ctx,
+                                          ).pop(noteController.text),
+                                          child: const Text('保存'),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.of(ctx).pop(null),
-                                      child: const Text('取消'),
-                                    ),
-                                    FilledButton(
-                                      onPressed: () => Navigator.of(ctx)
-                                          .pop(noteController.text),
-                                      child: const Text('保存'),
-                                    ),
-                                  ],
-                                ),
-                              );
+                                  );
                               noteController.dispose();
                               if (newNote == null) return;
                               await runVersionOperation(
@@ -609,11 +607,12 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                 loadingText: '正在保存备注...',
                                 errorPrefix: '保存备注失败',
                                 action: () async {
-                                  await _productService.updateProductVersionNote(
-                                    productId: product.id,
-                                    version: item.version,
-                                    note: newNote,
-                                  );
+                                  await _productService
+                                      .updateProductVersionNote(
+                                        productId: product.id,
+                                        version: item.version,
+                                        note: newNote,
+                                      );
                                   await reloadVersions(setLocalState);
                                 },
                               );
@@ -640,7 +639,9 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                   if (!mounted) {
                                     return;
                                   }
-                                  ScaffoldMessenger.of(this.context).showSnackBar(
+                                  ScaffoldMessenger.of(
+                                    this.context,
+                                  ).showSnackBar(
                                     SnackBar(
                                       content: Text(
                                         '复制版本成功（来源：${item.displayVersion}）',
@@ -676,10 +677,11 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                 errorPrefix: '版本激活失败',
                                 action: () async {
                                   try {
-                                    await _productService.activateProductVersion(
-                                      productId: product.id,
-                                      version: item.version,
-                                    );
+                                    await _productService
+                                        .activateProductVersion(
+                                          productId: product.id,
+                                          version: item.version,
+                                        );
                                   } catch (error) {
                                     if (_isUnauthorized(error) ||
                                         !_errorMessage(error).contains(
@@ -687,30 +689,34 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                         )) {
                                       rethrow;
                                     }
-                                    final impact =
-                                        await _productService.getProductImpactAnalysis(
-                                      productId: product.id,
-                                      operation: 'lifecycle',
-                                      targetStatus: 'active',
-                                      targetVersion: item.version,
-                                    );
-                                    final impactConfirmed = await _confirmImpact(
-                                      impact,
-                                      title: '生效影响确认',
-                                    );
+                                    final impact = await _productService
+                                        .getProductImpactAnalysis(
+                                          productId: product.id,
+                                          operation: 'lifecycle',
+                                          targetStatus: 'active',
+                                          targetVersion: item.version,
+                                        );
+                                    final impactConfirmed =
+                                        await _confirmImpact(
+                                          impact,
+                                          title: '生效影响确认',
+                                        );
                                     if (!impactConfirmed) {
                                       return;
                                     }
-                                    await _productService.activateProductVersion(
-                                      productId: product.id,
-                                      version: item.version,
-                                      confirmed: true,
-                                    );
+                                    await _productService
+                                        .activateProductVersion(
+                                          productId: product.id,
+                                          version: item.version,
+                                          confirmed: true,
+                                        );
                                   }
                                   if (!mounted) {
                                     return;
                                   }
-                                  ScaffoldMessenger.of(this.context).showSnackBar(
+                                  ScaffoldMessenger.of(
+                                    this.context,
+                                  ).showSnackBar(
                                     SnackBar(
                                       content: Text(
                                         '版本 ${item.displayVersion} 已生效',
@@ -754,14 +760,14 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                   if (!mounted) {
                                     return;
                                   }
-                                  final refreshedProduct =
-                                      await _productService.getProduct(
-                                    productId: product.id,
-                                  );
+                                  final refreshedProduct = await _productService
+                                      .getProduct(productId: product.id);
                                   if (!mounted) {
                                     return;
                                   }
-                                  ScaffoldMessenger.of(this.context).showSnackBar(
+                                  ScaffoldMessenger.of(
+                                    this.context,
+                                  ).showSnackBar(
                                     SnackBar(
                                       content: Text(
                                         refreshedProduct.lifecycleStatus ==
@@ -789,7 +795,8 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                           : () async {
                               final confirmed = await confirmVersionAction(
                                 title: '确认删除',
-                                content: '确认删除草稿版本 ${item.displayVersion}？此操作不可撤销。',
+                                content:
+                                    '确认删除草稿版本 ${item.displayVersion}？此操作不可撤销。',
                                 confirmText: '确认删除',
                                 confirmColor: Colors.red,
                               );
@@ -808,7 +815,9 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                   if (!mounted) {
                                     return;
                                   }
-                                  ScaffoldMessenger.of(this.context).showSnackBar(
+                                  ScaffoldMessenger.of(
+                                    this.context,
+                                  ).showSnackBar(
                                     SnackBar(
                                       content: Text(
                                         '版本 ${item.displayVersion} 已删除',
@@ -837,15 +846,17 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                   final nav = dialogContext != null
                                       ? Navigator.of(dialogContext!)
                                       : null;
-                                  final messenger = ScaffoldMessenger.of(context);
+                                  final messenger = ScaffoldMessenger.of(
+                                    context,
+                                  );
                                   var confirmed = false;
                                   if (widget.canViewImpactAnalysis) {
-                                    final impact =
-                                        await _productService.getProductImpactAnalysis(
-                                      productId: product.id,
-                                      operation: 'rollback',
-                                      targetVersion: item.version,
-                                    );
+                                    final impact = await _productService
+                                        .getProductImpactAnalysis(
+                                          productId: product.id,
+                                          operation: 'rollback',
+                                          targetVersion: item.version,
+                                        );
                                     if (impact.requiresConfirmation) {
                                       confirmed = await _confirmImpact(
                                         impact,
@@ -958,7 +969,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
 
   Future<void> _exportProducts() async {
     try {
-      final bytes = await _productService.exportProducts(
+      final exportFile = await _productService.exportProducts(
         keyword: _keywordController.text.trim(),
         category: _selectedCategoryFilter,
         lifecycleStatus: _selectedStatusFilter,
@@ -968,22 +979,18 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
             ? false
             : null,
       );
-      final location = await getSaveLocation(
-        suggestedName: 'products.csv',
-        acceptedTypeGroups: const [
-          XTypeGroup(label: 'CSV', extensions: ['csv']),
-        ],
+      if (exportFile.contentBase64.isEmpty) {
+        throw const FormatException('导出内容为空');
+      }
+      final savedPath = await _exportFileService.saveCsvBase64(
+        filename: exportFile.filename,
+        contentBase64: exportFile.contentBase64,
       );
-      if (location == null || !mounted) return;
-      await XFile.fromData(
-        Uint8List.fromList(bytes),
-        mimeType: 'text/csv',
-        name: 'products.csv',
-      ).saveTo(location.path);
+      if (savedPath == null || !mounted) return;
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('导出成功：${location.path}')));
+        ).showSnackBar(SnackBar(content: Text('导出成功：$savedPath')));
       }
     } catch (error) {
       if (!mounted) return;
@@ -1006,7 +1013,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     await showProductFormDialog(
       context: context,
       productService: _productService,
-      categoryOptions: _productCategoryOptions,
+      categoryOptions: productCategoryOptions,
       product: product,
       onLogout: widget.onLogout,
       onSuccess: _loadProducts,
@@ -1022,7 +1029,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     await showProductFormDialog(
       context: context,
       productService: _productService,
-      categoryOptions: _productCategoryOptions,
+      categoryOptions: productCategoryOptions,
       onLogout: widget.onLogout,
       onSuccess: _loadProducts,
     );
@@ -1043,9 +1050,8 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     );
   }
 
-  List<PopupMenuEntry<ProductManagementTableAction>> _buildProductActionMenuItems(
-    ProductItem product,
-  ) {
+  List<PopupMenuEntry<ProductManagementTableAction>>
+  _buildProductActionMenuItems(ProductItem product) {
     final items = <PopupMenuEntry<ProductManagementTableAction>>[
       const PopupMenuItem(
         value: ProductManagementTableAction.viewDetail,
@@ -1241,7 +1247,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
       ),
       filters: ProductManagementFilterSection(
         keywordController: _keywordController,
-        categoryOptions: _productCategoryOptions,
+        categoryOptions: productCategoryOptions,
         selectedCategory: _selectedCategoryFilter,
         selectedStatus: _selectedStatusFilter,
         selectedEffectiveVersion: _selectedEffectiveVersionFilter,

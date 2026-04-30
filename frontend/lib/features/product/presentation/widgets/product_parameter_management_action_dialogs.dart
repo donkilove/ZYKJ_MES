@@ -8,33 +8,109 @@ import 'package:mes_client/features/product/presentation/widgets/product_paramet
 Future<void> showProductParameterHistoryFlowDialog({
   required BuildContext context,
   required ProductParameterVersionListItem row,
-  required ProductParameterHistoryListResult history,
+  required Future<ProductParameterHistoryListResult> Function(int page)
+  loadHistoryPage,
   required String Function(DateTime value) formatTime,
   required String Function(String value) historyTypeLabel,
 }) {
   return showDialog<void>(
     context: context,
     builder: (context) {
-      return ProductParameterHistoryDialog(
+      return _ProductParameterHistoryDialogHost(
         row: row,
-        history: history,
+        loadHistoryPage: loadHistoryPage,
         formatTime: formatTime,
         historyTypeLabel: historyTypeLabel,
-        onClose: () => Navigator.of(context).pop(),
-        onViewSnapshot: (item) {
-          showDialog<void>(
-            context: context,
-            builder: (snapshotContext) {
-              return ProductParameterHistorySnapshotDialog(
-                item: item,
-                onClose: () => Navigator.of(snapshotContext).pop(),
-              );
-            },
-          );
-        },
       );
     },
   );
+}
+
+class _ProductParameterHistoryDialogHost extends StatefulWidget {
+  const _ProductParameterHistoryDialogHost({
+    required this.row,
+    required this.loadHistoryPage,
+    required this.formatTime,
+    required this.historyTypeLabel,
+  });
+
+  final ProductParameterVersionListItem row;
+  final Future<ProductParameterHistoryListResult> Function(int page)
+  loadHistoryPage;
+  final String Function(DateTime value) formatTime;
+  final String Function(String value) historyTypeLabel;
+
+  @override
+  State<_ProductParameterHistoryDialogHost> createState() =>
+      _ProductParameterHistoryDialogHostState();
+}
+
+class _ProductParameterHistoryDialogHostState
+    extends State<_ProductParameterHistoryDialogHost> {
+  static const int _pageSize = 30;
+
+  ProductParameterHistoryListResult? _history;
+  int _page = 1;
+  bool _loading = true;
+
+  int get _totalPages {
+    final total = _history?.total ?? 0;
+    if (total <= 0) {
+      return 1;
+    }
+    return ((total - 1) ~/ _pageSize) + 1;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPage(1);
+  }
+
+  Future<void> _loadPage(int page) async {
+    setState(() {
+      _loading = true;
+    });
+    final result = await widget.loadHistoryPage(page);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _history = result;
+      _page = page;
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final history = _history;
+    if (_loading || history == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return ProductParameterHistoryDialog(
+      row: widget.row,
+      history: history,
+      formatTime: widget.formatTime,
+      historyTypeLabel: widget.historyTypeLabel,
+      onClose: () => Navigator.of(context).pop(),
+      onViewSnapshot: (item) {
+        showDialog<void>(
+          context: context,
+          builder: (snapshotContext) {
+            return ProductParameterHistorySnapshotDialog(
+              item: item,
+              onClose: () => Navigator.of(snapshotContext).pop(),
+            );
+          },
+        );
+      },
+      page: _page,
+      totalPages: _totalPages,
+      onPreviousPage: _page > 1 ? () => _loadPage(_page - 1) : null,
+      onNextPage: _page < _totalPages ? () => _loadPage(_page + 1) : null,
+    );
+  }
 }
 
 Future<bool> showProductParameterDiscardDialog({

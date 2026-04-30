@@ -658,6 +658,32 @@ class ProductRollbackResult {
   }
 }
 
+class ProductExportFile {
+  const ProductExportFile({
+    required this.filename,
+    required this.contentBase64,
+  });
+
+  final String filename;
+  final String contentBase64;
+
+  factory ProductExportFile.fromJson(
+    Map<String, dynamic> json, {
+    required String fallbackFilename,
+  }) {
+    return ProductExportFile(
+      filename:
+          (json['filename'] as String?) ??
+          (json['file_name'] as String?) ??
+          fallbackFilename,
+      contentBase64:
+          (json['content_base64'] as String?) ??
+          (json['data'] as String?) ??
+          '',
+    );
+  }
+}
+
 class ProductJumpCommand {
   const ProductJumpCommand({
     required this.seq,

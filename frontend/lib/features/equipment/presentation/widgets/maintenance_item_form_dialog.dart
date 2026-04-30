@@ -4,6 +4,7 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
+import 'package:mes_client/features/equipment/presentation/maintenance_category_options.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 
 Future<bool?> showMaintenanceItemFormDialog({
@@ -43,7 +44,6 @@ class _MaintenanceItemFormDialogState extends State<MaintenanceItemFormDialog> {
   late final TextEditingController _durationController;
   late final TextEditingController _cycleDaysController;
   late final TextEditingController _standardDescController;
-  static const List<String> _categoryOptions = ['', '点检', '润滑', '校准', '清洁'];
   late String _selectedCategory;
   bool _submitting = false;
 
@@ -54,7 +54,8 @@ class _MaintenanceItemFormDialogState extends State<MaintenanceItemFormDialog> {
     super.initState();
     _nameController = TextEditingController(text: widget.item?.name ?? '');
     _durationController = TextEditingController(
-      text: widget.item?.defaultDurationMinutes != null &&
+      text:
+          widget.item?.defaultDurationMinutes != null &&
               widget.item!.defaultDurationMinutes > 0
           ? '${widget.item!.defaultDurationMinutes}'
           : '',
@@ -66,7 +67,7 @@ class _MaintenanceItemFormDialogState extends State<MaintenanceItemFormDialog> {
       text: widget.item?.standardDescription ?? '',
     );
     _selectedCategory = widget.item?.category ?? '';
-    if (!_categoryOptions.contains(_selectedCategory)) {
+    if (!maintenanceItemCategoryOptions.contains(_selectedCategory)) {
       _selectedCategory = '';
     }
   }
@@ -88,30 +89,33 @@ class _MaintenanceItemFormDialogState extends State<MaintenanceItemFormDialog> {
   Future<void> _submit() async {
     final normalizedCycle = _cycleDaysController.text.trim();
     if (_nameController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请输入项目名称')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请输入项目名称')));
       return;
     }
     if (normalizedCycle.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请输入默认周期天数')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请输入默认周期天数')));
       return;
     }
     final cycleDays = int.tryParse(normalizedCycle);
     if (cycleDays == null || cycleDays < 1 || cycleDays > 3650) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请输入1-3650之间的整数')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请输入1-3650之间的整数')));
       return;
     }
     final durationText = _durationController.text.trim();
-    final duration = durationText.isNotEmpty ? int.tryParse(durationText) : null;
-    if (durationText.isNotEmpty && (duration == null || duration < 1 || duration > 1440)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请输入1-1440之间的整数')),
-      );
+    final duration = durationText.isNotEmpty
+        ? int.tryParse(durationText)
+        : null;
+    if (durationText.isNotEmpty &&
+        (duration == null || duration < 1 || duration > 1440)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请输入1-1440之间的整数')));
       return;
     }
     setState(() => _submitting = true);
@@ -162,9 +166,17 @@ class _MaintenanceItemFormDialogState extends State<MaintenanceItemFormDialog> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('项目配置', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                  Text(
+                    '项目配置',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                   const SizedBox(height: 12),
-                  TextField(controller: _nameController, decoration: const InputDecoration(labelText: '项目名称')),
+                  TextField(
+                    controller: _nameController,
+                    decoration: const InputDecoration(labelText: '项目名称'),
+                  ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _cycleDaysController,
@@ -177,10 +189,22 @@ class _MaintenanceItemFormDialogState extends State<MaintenanceItemFormDialog> {
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     initialValue: _selectedCategory,
-                    items: _categoryOptions
-                        .map((c) => DropdownMenuItem<String>(value: c, child: Text(c.isEmpty ? '(不限)' : c)))
-                        .toList(),
-                    onChanged: _submitting ? null : (value) => setState(() => _selectedCategory = value ?? ''),
+                    items: [
+                      const DropdownMenuItem<String>(
+                        value: '',
+                        child: Text('(不限)'),
+                      ),
+                      ...maintenanceItemCategoryOptions.map(
+                        (category) => DropdownMenuItem<String>(
+                          value: category,
+                          child: Text(category),
+                        ),
+                      ),
+                    ].toList(),
+                    onChanged: _submitting
+                        ? null
+                        : (value) =>
+                              setState(() => _selectedCategory = value ?? ''),
                     decoration: const InputDecoration(labelText: '类别'),
                   ),
                 ],
@@ -192,7 +216,9 @@ class _MaintenanceItemFormDialogState extends State<MaintenanceItemFormDialog> {
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest.withAlpha(50),
+                  color: theme.colorScheme.surfaceContainerHighest.withAlpha(
+                    50,
+                  ),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: theme.colorScheme.outlineVariant),
                 ),
@@ -200,7 +226,12 @@ class _MaintenanceItemFormDialogState extends State<MaintenanceItemFormDialog> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('周期与说明', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                    Text(
+                      '周期与说明',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _durationController,
@@ -221,8 +252,16 @@ class _MaintenanceItemFormDialogState extends State<MaintenanceItemFormDialog> {
         ),
       ),
       actions: [
-        TextButton(onPressed: _submitting ? null : () => Navigator.of(context).pop(false), child: const Text('取消')),
-        FilledButton(onPressed: _submitting ? null : _submit, child: const Text('保存')),
+        TextButton(
+          onPressed: _submitting
+              ? null
+              : () => Navigator.of(context).pop(false),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: _submitting ? null : _submit,
+          child: const Text('保存'),
+        ),
       ],
     );
   }

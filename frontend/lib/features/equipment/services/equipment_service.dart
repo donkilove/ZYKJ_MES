@@ -405,6 +405,7 @@ class EquipmentService {
   Future<MaintenancePlanListResult> listMaintenancePlans({
     required int page,
     required int pageSize,
+    String? keyword,
     int? equipmentId,
     int? itemId,
     bool? enabled,
@@ -412,6 +413,9 @@ class EquipmentService {
     int? defaultExecutorUserId,
   }) async {
     final query = <String, String>{'page': '$page', 'page_size': '$pageSize'};
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
     if (equipmentId != null) {
       query['equipment_id'] = '$equipmentId';
     }

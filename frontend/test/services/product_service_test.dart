@@ -528,7 +528,15 @@ void main() {
           expect(request.uri.queryParameters['lifecycle_status'], 'active');
           expect(request.uri.queryParameters['version_keyword'], 'V1.0');
           expect(request.uri.queryParameters['effective_only'], 'true');
-          return const TestResponse(statusCode: 200, body: 'ABCD');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'filename': 'product_parameters.csv',
+                'content_base64': 'QUJDRA==',
+              },
+            },
+          );
         },
       });
       addTearDown(server.close);
@@ -537,7 +545,7 @@ void main() {
         AppSession(baseUrl: server.baseUrl, accessToken: 'token-product'),
       );
 
-      final bytes = await service.exportProductParameters(
+      final exportFile = await service.exportProductParameters(
         keyword: '产品A',
         category: '贴片',
         lifecycleStatus: 'active',
@@ -545,7 +553,8 @@ void main() {
         effectiveOnly: true,
       );
 
-      expect(bytes, 'ABCD'.codeUnits);
+      expect(exportFile.filename, 'product_parameters.csv');
+      expect(exportFile.contentBase64, 'QUJDRA==');
     });
   });
 }

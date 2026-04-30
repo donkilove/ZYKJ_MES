@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mes_client/core/ui/patterns/mes_filter_bar.dart';
+import 'package:mes_client/features/product/presentation/product_category_options.dart';
 
 class ProductParameterManagementFilterSection extends StatelessWidget {
   const ProductParameterManagementFilterSection({
@@ -46,13 +47,18 @@ class ProductParameterManagementFilterSection extends StatelessWidget {
                   labelText: '分类筛选',
                   border: OutlineInputBorder(),
                 ),
-                items: const [
-                  DropdownMenuItem<String>(value: '', child: Text('全部')),
-                  DropdownMenuItem<String>(value: '贴片', child: Text('贴片')),
-                  DropdownMenuItem<String>(value: 'DTU', child: Text('DTU')),
-                  DropdownMenuItem<String>(value: '套件', child: Text('套件')),
+                items: [
+                  const DropdownMenuItem<String>(value: '', child: Text('全部')),
+                  ...productCategoryOptions.map(
+                    (category) => DropdownMenuItem<String>(
+                      value: category,
+                      child: Text(category),
+                    ),
+                  ),
                 ],
-                onChanged: loading ? null : (value) => onCategoryChanged(value ?? ''),
+                onChanged: loading
+                    ? null
+                    : (value) => onCategoryChanged(value ?? ''),
               ),
             ),
             FilledButton.icon(

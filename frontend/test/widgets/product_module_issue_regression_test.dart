@@ -927,12 +927,15 @@ class _VersionActionService extends ProductService {
   }
 
   @override
-  Future<List<int>> exportProductVersionParameters({
+  Future<ProductExportFile> exportProductVersionParameters({
     required int productId,
     required int version,
   }) async {
     exportCalls.add(version);
-    return <int>[1, 2, 3];
+    return const ProductExportFile(
+      filename: 'version_parameters.csv',
+      contentBase64: 'AQID',
+    );
   }
 }
 
@@ -971,7 +974,7 @@ class _ParameterQueryInteractionService extends ProductService {
   }
 
   @override
-  Future<List<int>> exportProductParameters({
+  Future<ProductExportFile> exportProductParameters({
     String? keyword,
     String? category,
     String? lifecycleStatus,
@@ -983,7 +986,10 @@ class _ParameterQueryInteractionService extends ProductService {
     bool effectiveOnly = false,
   }) async {
     exportCalls += 1;
-    return <int>[1, 2, 3];
+    return const ProductExportFile(
+      filename: 'product_parameters.csv',
+      contentBase64: 'AQID',
+    );
   }
 
   @override
@@ -1445,7 +1451,10 @@ void main() {
       await tester.tap(find.text('查看详情').last);
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('product-detail-drawer')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('product-detail-drawer')),
+        findsOneWidget,
+      );
       expect(find.text('产品详情 - 产品21'), findsOneWidget);
       expect(find.text('页内侧边栏展示完整详情快照'), findsOneWidget);
       expect(find.text('当前版本参数快照（V1.1）'), findsOneWidget);
@@ -1492,7 +1501,10 @@ void main() {
       await tester.tap(find.text('版本管理'));
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const ValueKey('product-version-dialog')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('product-version-dialog')),
+        findsOneWidget,
+      );
       await tester.tap(find.text('激活').first);
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, '确认生效'));
@@ -1537,15 +1549,15 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, '添加产品'));
       await tester.pumpAndSettle();
 
-      expect(find.text('默认状态'), findsOneWidget);
-      expect(find.text('启用'), findsWidgets);
+      expect(find.text('当前状态'), findsOneWidget);
+      expect(find.text('启用 (默认)'), findsOneWidget);
 
       await tester.enterText(
         find.widgetWithText(TextFormField, '产品名称'),
         '  新产品  ',
       );
       await tester.enterText(
-        find.widgetWithText(TextFormField, '备注'),
+        find.widgetWithText(TextFormField, '备注说明'),
         '  需要 trim  ',
       );
       await tester.tap(find.byType(DropdownButtonFormField<String>).last);
@@ -1734,23 +1746,27 @@ void main() {
 
       await tester.enterText(find.widgetWithText(TextFormField, '产品名称'), '   ');
       await tester.enterText(
-        find.widgetWithText(TextFormField, '备注'),
+        find.widgetWithText(TextFormField, '备注说明'),
         overlongRemark,
       );
+      await tester.tap(find.byType(DropdownButtonFormField<String>).last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('贴片').last);
+      await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, '保存'));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
-      expect(find.text('请选择产品分类'), findsWidgets);
       expect(find.text('产品名称不能为空'), findsOneWidget);
-      expect(find.text('备注不能超过 500 个字符'), findsOneWidget);
+      expect(service.createdName, isNull);
 
       await tester.enterText(
         find.widgetWithText(TextFormField, '产品名称'),
         overlongName,
       );
-      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, '保存'));
+      await tester.pumpAndSettle();
 
-      expect(find.text('产品名称不能超过 128 个字符'), findsOneWidget);
+      expect(find.text('备注不能超过 500 个字符'), findsOneWidget);
       expect(service.createdName, isNull);
     });
 
@@ -1803,7 +1819,7 @@ void main() {
         '  已更新产品  ',
       );
       await tester.enterText(
-        find.widgetWithText(TextFormField, '备注'),
+        find.widgetWithText(TextFormField, '备注说明'),
         '  已更新备注  ',
       );
       await tester.pump();

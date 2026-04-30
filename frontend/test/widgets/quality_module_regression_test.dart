@@ -256,6 +256,11 @@ class _FakeQualityService extends QualityService {
     this.defectResult,
     this.exportQualityStatsResult,
     this.exportDefectAnalysisResult,
+    this.overviewCompleter,
+    this.processCompleter,
+    this.operatorCompleter,
+    this.productCompleter,
+    this.trendCompleter,
   }) : super(AppSession(baseUrl: 'http://localhost', accessToken: 'token'));
 
   final QualityStatsOverview? overviewResult;
@@ -266,6 +271,11 @@ class _FakeQualityService extends QualityService {
   final DefectAnalysisResult? defectResult;
   final QualityExportFile? exportQualityStatsResult;
   final QualityExportFile? exportDefectAnalysisResult;
+  final Completer<QualityStatsOverview>? overviewCompleter;
+  final Completer<List<QualityProcessStatItem>>? processCompleter;
+  final Completer<List<QualityOperatorStatItem>>? operatorCompleter;
+  final Completer<List<QualityProductStatItem>>? productCompleter;
+  final Completer<List<QualityTrendItem>>? trendCompleter;
 
   Object? qualityStatsError;
   Object? defectError;
@@ -275,6 +285,11 @@ class _FakeQualityService extends QualityService {
   _RecordedDefectQuery? lastDefectQuery;
   int exportQualityStatsCalls = 0;
   int exportDefectAnalysisCalls = 0;
+  int overviewCalls = 0;
+  int processCalls = 0;
+  int operatorCalls = 0;
+  int productCalls = 0;
+  int trendCalls = 0;
 
   @override
   Future<FirstArticleListResult> listFirstArticles({
@@ -305,6 +320,7 @@ class _FakeQualityService extends QualityService {
     String? operatorUsername,
     String? result,
   }) async {
+    overviewCalls += 1;
     lastQualityStatsQuery = _RecordedQualityStatsQuery(
       startDate: startDate,
       endDate: endDate,
@@ -316,6 +332,10 @@ class _FakeQualityService extends QualityService {
     final error = qualityStatsError;
     if (error != null) {
       throw error;
+    }
+    final completer = overviewCompleter;
+    if (completer != null) {
+      return completer.future;
     }
     return overviewResult ??
         QualityStatsOverview(
@@ -342,9 +362,14 @@ class _FakeQualityService extends QualityService {
     String? operatorUsername,
     String? result,
   }) async {
+    processCalls += 1;
     final error = qualityStatsError;
     if (error != null) {
       throw error;
+    }
+    final completer = processCompleter;
+    if (completer != null) {
+      return completer.future;
     }
     return processItems ?? const [];
   }
@@ -358,9 +383,14 @@ class _FakeQualityService extends QualityService {
     String? operatorUsername,
     String? result,
   }) async {
+    operatorCalls += 1;
     final error = qualityStatsError;
     if (error != null) {
       throw error;
+    }
+    final completer = operatorCompleter;
+    if (completer != null) {
+      return completer.future;
     }
     return operatorItems ?? const [];
   }
@@ -374,9 +404,14 @@ class _FakeQualityService extends QualityService {
     String? operatorUsername,
     String? result,
   }) async {
+    productCalls += 1;
     final error = qualityStatsError;
     if (error != null) {
       throw error;
+    }
+    final completer = productCompleter;
+    if (completer != null) {
+      return completer.future;
     }
     return productItems ?? const [];
   }
@@ -390,9 +425,14 @@ class _FakeQualityService extends QualityService {
     String? operatorUsername,
     String? result,
   }) async {
+    trendCalls += 1;
     final error = qualityStatsError;
     if (error != null) {
       throw error;
+    }
+    final completer = trendCompleter;
+    if (completer != null) {
+      return completer.future;
     }
     return trendItems ?? const [];
   }
@@ -1048,6 +1088,62 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(service.exportQualityStatsCalls, 1);
+  });
+
+  testWidgets('质量数据页统计请求会并行启动', (tester) async {
+    _setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final overviewCompleter = Completer<QualityStatsOverview>();
+    final processCompleter = Completer<List<QualityProcessStatItem>>();
+    final operatorCompleter = Completer<List<QualityOperatorStatItem>>();
+    final productCompleter = Completer<List<QualityProductStatItem>>();
+    final trendCompleter = Completer<List<QualityTrendItem>>();
+
+    final service = _FakeQualityService(
+      overviewCompleter: overviewCompleter,
+      processCompleter: processCompleter,
+      operatorCompleter: operatorCompleter,
+      productCompleter: productCompleter,
+      trendCompleter: trendCompleter,
+    );
+
+    await tester.pumpWidget(
+      _wrapBody(
+        QualityDataPage(session: session, onLogout: () {}, service: service),
+      ),
+    );
+    await tester.pump();
+
+    expect(service.overviewCalls, 1);
+    expect(service.processCalls, 1);
+    expect(service.operatorCalls, 1);
+    expect(service.productCalls, 1);
+    expect(service.trendCalls, 1);
+
+    overviewCompleter.complete(
+      QualityStatsOverview(
+        firstArticleTotal: 0,
+        passedTotal: 0,
+        failedTotal: 0,
+        passRatePercent: 0,
+        defectTotal: 0,
+        scrapTotal: 0,
+        repairTotal: 0,
+        coveredOrderCount: 0,
+        coveredProcessCount: 0,
+        coveredOperatorCount: 0,
+        latestFirstArticleAt: null,
+      ),
+    );
+    processCompleter.complete(const []);
+    operatorCompleter.complete(const []);
+    productCompleter.complete(const []);
+    trendCompleter.complete(const []);
+    await tester.pumpAndSettle();
+
+    expect(find.text('暂无趋势数据'), findsOneWidget);
   });
 
   testWidgets('质量数据页处理空态 错误态 401 与导出日期校验', (tester) async {

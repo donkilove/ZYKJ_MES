@@ -1,13 +1,12 @@
 import 'dart:async';
-import 'dart:typed_data';
 
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/services/export_file_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_action_dialogs.dart';
@@ -15,9 +14,8 @@ import 'package:mes_client/features/product/presentation/widgets/product_paramet
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_filter_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_page_header.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_table_section.dart';
+import 'package:mes_client/features/product/presentation/product_category_options.dart';
 import 'package:mes_client/features/product/services/product_service.dart';
-
-const List<String> _productCategoryOptions = ['贴片', 'DTU', '套件'];
 
 class ProductParameterQueryPage extends StatefulWidget {
   const ProductParameterQueryPage({
@@ -47,6 +45,7 @@ class ProductParameterQueryPage extends StatefulWidget {
 class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
   static const int _listPageSize = 200;
   late final ProductService _productService;
+  final ExportFileService _exportFileService = const ExportFileService();
   final TextEditingController _keywordController = TextEditingController();
 
   bool _loading = false;
@@ -232,30 +231,28 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
 
   Future<void> _exportParameters() async {
     try {
-      final bytes = await _productService.exportProductParameters(
+      final exportFile = await _productService.exportProductParameters(
         keyword: _keywordController.text.trim(),
         category: _selectedCategoryFilter,
         lifecycleStatus: 'active',
         effectiveOnly: true,
       );
-      final fileName = '产品参数查询_${DateTime.now().millisecondsSinceEpoch}.csv';
-      final location = await getSaveLocation(
-        suggestedName: fileName,
-        acceptedTypeGroups: [
-          const XTypeGroup(label: 'CSV', extensions: ['csv']),
-        ],
+      if (exportFile.contentBase64.isEmpty) {
+        throw const FormatException('导出内容为空');
+      }
+      final fallbackName =
+          '产品参数查询_${DateTime.now().millisecondsSinceEpoch}.csv';
+      final savedPath = await _exportFileService.saveCsvBase64(
+        filename: exportFile.filename.isEmpty
+            ? fallbackName
+            : exportFile.filename,
+        contentBase64: exportFile.contentBase64,
       );
-      if (location == null) return;
-      final file = XFile.fromData(
-        Uint8List.fromList(bytes),
-        mimeType: 'text/csv',
-        name: fileName,
-      );
-      await file.saveTo(location.path);
+      if (savedPath == null) return;
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('导出成功')));
+        ).showSnackBar(SnackBar(content: Text('导出成功：$savedPath')));
       }
     } catch (error) {
       if (_isUnauthorized(error)) {
@@ -317,7 +314,7 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
       ),
       filters: ProductParameterQueryFilterSection(
         keywordController: _keywordController,
-        categoryOptions: _productCategoryOptions,
+        categoryOptions: productCategoryOptions,
         selectedCategory: _selectedCategoryFilter,
         loading: _loading,
         canExportParameters: widget.canExportParameters,

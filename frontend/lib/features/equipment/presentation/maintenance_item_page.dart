@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
+import 'package:mes_client/features/equipment/presentation/maintenance_category_options.dart';
 import 'package:mes_client/features/equipment/presentation/widgets/maintenance_item_action_dialogs.dart';
 import 'package:mes_client/features/equipment/presentation/widgets/maintenance_item_form_dialog.dart';
 import 'package:mes_client/core/network/api_exception.dart';
@@ -256,12 +257,14 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
           width: 160,
           child: DropdownButtonFormField<String?>(
             initialValue: _categoryFilter,
-            items: const [
-              DropdownMenuItem<String?>(value: null, child: Text('全部类别')),
-              DropdownMenuItem<String?>(value: '点检', child: Text('点检')),
-              DropdownMenuItem<String?>(value: '润滑', child: Text('润滑')),
-              DropdownMenuItem<String?>(value: '校准', child: Text('校准')),
-              DropdownMenuItem<String?>(value: '清洁', child: Text('清洁')),
+            items: [
+              const DropdownMenuItem<String?>(value: null, child: Text('全部类别')),
+              ...maintenanceItemCategoryOptions.map(
+                (category) => DropdownMenuItem<String?>(
+                  value: category,
+                  child: Text(category),
+                ),
+              ),
             ],
             onChanged: (value) {
               setState(() => _categoryFilter = value);
@@ -324,9 +327,7 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
             return DataRow(
               cells: [
                 DataCell(Text(item.name)),
-                DataCell(
-                  Text(item.category.isEmpty ? '-' : item.category),
-                ),
+                DataCell(Text(item.category.isEmpty ? '-' : item.category)),
                 DataCell(Text('${item.defaultCycleDays}')),
                 DataCell(
                   Text(

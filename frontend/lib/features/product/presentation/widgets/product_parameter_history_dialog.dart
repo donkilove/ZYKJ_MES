@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 
@@ -11,6 +12,10 @@ class ProductParameterHistoryDialog extends StatelessWidget {
     required this.historyTypeLabel,
     required this.onClose,
     required this.onViewSnapshot,
+    required this.page,
+    required this.totalPages,
+    this.onPreviousPage,
+    this.onNextPage,
   });
 
   final ProductParameterVersionListItem row;
@@ -19,6 +24,10 @@ class ProductParameterHistoryDialog extends StatelessWidget {
   final String Function(String value) historyTypeLabel;
   final VoidCallback onClose;
   final ValueChanged<ProductParameterHistoryItem> onViewSnapshot;
+  final VoidCallback? onPreviousPage;
+  final VoidCallback? onNextPage;
+  final int page;
+  final int totalPages;
 
   @override
   Widget build(BuildContext context) {
@@ -31,45 +40,60 @@ class ProductParameterHistoryDialog extends StatelessWidget {
         width: 760,
         content: SizedBox(
           height: 480,
-          child: history.items.isEmpty
-              ? const Center(child: Text('暂无历史记录'))
-              : ListView.separated(
-                  itemCount: history.items.length,
-                  separatorBuilder: (context, index) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final item = history.items[index];
-                    final keySummary = item.changedKeys.isEmpty
-                        ? '无参数字段变化'
-                        : item.changedKeys.join(', ');
-                    final typeLabel = historyTypeLabel(item.changeType);
-                    return ListTile(
-                      title: Text(
-                        '$typeLabel / ${item.parameterName ?? '未指定参数'}',
+          child: Column(
+            children: [
+              Expanded(
+                child: history.items.isEmpty
+                    ? const Center(child: Text('暂无历史记录'))
+                    : ListView.separated(
+                        itemCount: history.items.length,
+                        separatorBuilder: (context, index) =>
+                            const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final item = history.items[index];
+                          final keySummary = item.changedKeys.isEmpty
+                              ? '无参数字段变化'
+                              : item.changedKeys.join(', ');
+                          final typeLabel = historyTypeLabel(item.changeType);
+                          return ListTile(
+                            title: Text(
+                              '$typeLabel / ${item.parameterName ?? '未指定参数'}',
+                            ),
+                            subtitle: Text(
+                              '产品：${item.productName}   分类：${item.productCategory.isEmpty ? '-' : item.productCategory}\n'
+                              '时间：${formatTime(item.createdAt)}\n'
+                              '版本：${item.versionLabel ?? '-'}   操作人：${item.operatorUsername}   类型：$typeLabel\n'
+                              '参数：$keySummary\n'
+                              '变更原因：${item.changeReason}\n'
+                              '变更前：${item.beforeSummary ?? '-'}\n'
+                              '变更后：${item.afterSummary ?? '-'}',
+                            ),
+                            isThreeLine: false,
+                            trailing:
+                                item.beforeSnapshot != '{}' ||
+                                    item.afterSnapshot != '{}'
+                                ? TextButton(
+                                    onPressed: () => onViewSnapshot(item),
+                                    child: const Text('查看快照'),
+                                  )
+                                : null,
+                          );
+                        },
                       ),
-                      subtitle: Text(
-                        '产品：${item.productName}   分类：${item.productCategory.isEmpty ? '-' : item.productCategory}\n'
-                        '时间：${formatTime(item.createdAt)}\n'
-                        '版本：${item.versionLabel ?? '-'}   操作人：${item.operatorUsername}   类型：$typeLabel\n'
-                        '参数：$keySummary\n'
-                        '变更原因：${item.changeReason}\n'
-                        '变更前：${item.beforeSummary ?? '-'}\n'
-                        '变更后：${item.afterSummary ?? '-'}',
-                      ),
-                      isThreeLine: false,
-                      trailing:
-                          item.beforeSnapshot != '{}' || item.afterSnapshot != '{}'
-                          ? TextButton(
-                              onPressed: () => onViewSnapshot(item),
-                              child: const Text('查看快照'),
-                            )
-                          : null,
-                    );
-                  },
-                ),
+              ),
+              const SizedBox(height: 12),
+              MesPaginationBar(
+                page: page,
+                totalPages: totalPages,
+                total: history.total,
+                loading: false,
+                onPrevious: onPreviousPage,
+                onNext: onNextPage,
+              ),
+            ],
+          ),
         ),
-        actions: [
-          FilledButton(onPressed: onClose, child: const Text('关闭')),
-        ],
+        actions: [FilledButton(onPressed: onClose, child: const Text('关闭'))],
       ),
     );
   }

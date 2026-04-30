@@ -64,11 +64,12 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
 
   Future<void> _loadEquipmentList() async {
     try {
-      final result = await _equipmentService.listEquipment(
-        page: 1,
-        pageSize: 500,
-      );
-      final owners = await _equipmentService.listAllOwners();
+      final results = await Future.wait<Object>([
+        _equipmentService.listEquipment(page: 1, pageSize: 500),
+        _equipmentService.listAllOwners(),
+      ]);
+      final result = results[0] as EquipmentLedgerListResult;
+      final owners = results[1] as List<EquipmentOwnerOption>;
       if (mounted) {
         setState(() {
           _equipmentList = result.items;

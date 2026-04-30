@@ -1,11 +1,11 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/services/export_file_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
@@ -77,6 +77,7 @@ class _ProductParameterManagementPageState
   );
 
   late final ProductService _productService;
+  final ExportFileService _exportFileService = const ExportFileService();
   final TextEditingController _keywordController = TextEditingController();
 
   final TextEditingController _remarkController = TextEditingController();
@@ -377,33 +378,26 @@ class _ProductParameterManagementPageState
   }
 
   Future<void> _showHistoryDialog(ProductParameterVersionListItem row) async {
-    ProductParameterHistoryListResult? historyResult;
-    try {
-      historyResult = await _productService.listProductParameterHistory(
-        productId: row.productId,
-        version: row.version,
-        page: 1,
-        pageSize: 100,
-      );
-    } catch (error) {
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      _showSnackBar('加载历史失败：${_errorMessage(error)}');
-      return;
-    }
-
-    if (!mounted) {
-      return;
-    }
-
-    final dialogHistory = historyResult;
-
     await showProductParameterHistoryFlowDialog(
       context: context,
       row: row,
-      history: dialogHistory,
+      loadHistoryPage: (page) async {
+        try {
+          return await _productService.listProductParameterHistory(
+            productId: row.productId,
+            version: row.version,
+            page: page,
+            pageSize: 30,
+          );
+        } catch (error) {
+          if (_isUnauthorized(error)) {
+            widget.onLogout();
+            rethrow;
+          }
+          _showSnackBar('加载历史失败：${_errorMessage(error)}');
+          rethrow;
+        }
+      },
       formatTime: _formatTime,
       historyTypeLabel: _historyTypeLabel,
     );
@@ -413,25 +407,24 @@ class _ProductParameterManagementPageState
     ProductParameterVersionListItem row,
   ) async {
     try {
-      final bytes = await _productService.exportProductVersionParameters(
+      final exportFile = await _productService.exportProductVersionParameters(
         productId: row.productId,
         version: row.version,
       );
-      final location = await getSaveLocation(
-        suggestedName: '${row.productName}_${row.versionLabel}_参数.csv',
-        acceptedTypeGroups: const [
-          XTypeGroup(label: 'CSV', extensions: ['csv']),
-        ],
+      if (exportFile.contentBase64.isEmpty) {
+        throw const FormatException('导出内容为空');
+      }
+      final fallbackName = '${row.productName}_${row.versionLabel}_参数.csv';
+      final savedPath = await _exportFileService.saveCsvBase64(
+        filename: exportFile.filename.isEmpty
+            ? fallbackName
+            : exportFile.filename,
+        contentBase64: exportFile.contentBase64,
       );
-      if (location == null || !mounted) {
+      if (savedPath == null || !mounted) {
         return;
       }
-      await XFile.fromData(
-        Uint8List.fromList(bytes),
-        mimeType: 'text/csv',
-        name: '${row.productName}_${row.versionLabel}_参数.csv',
-      ).saveTo(location.path);
-      _showSnackBar('导出成功：${location.path}');
+      _showSnackBar('导出成功：$savedPath');
     } catch (error) {
       if (!mounted) {
         return;
@@ -457,10 +450,7 @@ class _ProductParameterManagementPageState
     if (!impact.requiresConfirmation) {
       return true;
     }
-    return showProductParameterImpactDialog(
-      context: context,
-      impact: impact,
-    );
+    return showProductParameterImpactDialog(context: context, impact: impact);
   }
 
   Future<bool> _exitEditor({bool force = false}) async {

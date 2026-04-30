@@ -38,6 +38,7 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
 
   late final EquipmentService _equipmentService;
   late final CraftService _craftService;
+  final TextEditingController _keywordController = TextEditingController();
 
   bool _loading = false;
   String _message = '';
@@ -61,6 +62,12 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
         widget.equipmentService ?? EquipmentService(widget.session);
     _craftService = widget.craftService ?? CraftService(widget.session);
     _loadAll(reloadOptions: true);
+  }
+
+  @override
+  void dispose() {
+    _keywordController.dispose();
+    super.dispose();
   }
 
   bool _isUnauthorized(Object error) {
@@ -94,6 +101,14 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
     return pages > 0 ? pages : 1;
   }
 
+  Future<void> _updateFilterAndReload(VoidCallback update) async {
+    setState(() {
+      update();
+      _page = 1;
+    });
+    await _loadAll(page: 1);
+  }
+
   Future<void> _loadAll({int? page, bool reloadOptions = false}) async {
     final targetPage = page ?? _page;
     if (!mounted) {
@@ -105,32 +120,27 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
     });
     try {
       if (reloadOptions) {
-        final equipmentResult = await _equipmentService.listEquipment(
-          page: 1,
-          pageSize: 200,
-          enabled: true,
-        );
-        final itemResult = await _equipmentService.listMaintenanceItems(
-          page: 1,
-          pageSize: 200,
-          enabled: true,
-        );
-        final stageResult = await _craftService.listStages(
-          page: 1,
-          pageSize: 500,
-          enabled: true,
-        );
+        final results = await Future.wait<Object>([
+          _equipmentService.listEquipment(
+            page: 1,
+            pageSize: 200,
+            enabled: true,
+          ),
+          _equipmentService.listMaintenanceItems(
+            page: 1,
+            pageSize: 200,
+            enabled: true,
+          ),
+          _craftService.listStages(page: 1, pageSize: 500, enabled: true),
+          _equipmentService.listAllOwners(),
+        ]);
+        final equipmentResult = results[0] as EquipmentLedgerListResult;
+        final itemResult = results[1] as MaintenanceItemListResult;
+        final stageResult = results[2] as CraftStageListResult;
+        final ownerOptions = results[3] as List<EquipmentOwnerOption>;
         _equipmentOptions = equipmentResult.items;
         _itemOptions = itemResult.items;
-        try {
-          _ownerOptions = await _equipmentService.listAllOwners();
-        } catch (error) {
-          if (_isUnauthorized(error)) {
-            widget.onLogout();
-            return;
-          }
-          _message = '加载负责人列表失败: ${_errorMessage(error)}';
-        }
+        _ownerOptions = ownerOptions;
         _stageOptions = [...stageResult.items]
           ..sort((a, b) {
             final orderCompare = a.sortOrder.compareTo(b.sortOrder);
@@ -153,6 +163,7 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
       final result = await _equipmentService.listMaintenancePlans(
         page: targetPage,
         pageSize: _pageSize,
+        keyword: _keywordController.text.trim(),
         equipmentId: _equipmentFilterId,
         itemId: _itemFilterId,
         enabled: _enabledFilter,
@@ -320,6 +331,17 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
     final filtersToolbar = Row(
       children: [
         Expanded(
+          child: TextField(
+            controller: _keywordController,
+            decoration: const InputDecoration(
+              labelText: '搜索设备/项目',
+              border: OutlineInputBorder(),
+            ),
+            onSubmitted: (_) => _loadAll(page: 1),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
           child: DropdownButtonFormField<int?>(
             initialValue: _equipmentFilterId,
             isExpanded: true,
@@ -355,11 +377,8 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                 ),
               ];
             },
-            onChanged: (value) {
-              setState(() {
-                _equipmentFilterId = value;
-              });
-            },
+            onChanged: (value) =>
+                _updateFilterAndReload(() => _equipmentFilterId = value),
             decoration: const InputDecoration(
               labelText: '设备筛选',
               border: OutlineInputBorder(),
@@ -401,11 +420,8 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                 ),
               ];
             },
-            onChanged: (value) {
-              setState(() {
-                _itemFilterId = value;
-              });
-            },
+            onChanged: (value) =>
+                _updateFilterAndReload(() => _itemFilterId = value),
             decoration: const InputDecoration(
               labelText: '项目筛选',
               border: OutlineInputBorder(),
@@ -422,9 +438,8 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
               DropdownMenuItem<bool?>(value: true, child: Text('启用')),
               DropdownMenuItem<bool?>(value: false, child: Text('停用')),
             ],
-            onChanged: (value) {
-              setState(() => _enabledFilter = value);
-            },
+            onChanged: (value) =>
+                _updateFilterAndReload(() => _enabledFilter = value),
             decoration: const InputDecoration(
               labelText: '状态',
               border: OutlineInputBorder(),
@@ -467,9 +482,8 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                 ),
               ];
             },
-            onChanged: (value) {
-              setState(() => _executionStageCodeFilter = value);
-            },
+            onChanged: (value) =>
+                _updateFilterAndReload(() => _executionStageCodeFilter = value),
             decoration: const InputDecoration(
               labelText: '执行工段',
               border: OutlineInputBorder(),
@@ -511,9 +525,8 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                 ),
               ];
             },
-            onChanged: (value) {
-              setState(() => _defaultExecutorFilterId = value);
-            },
+            onChanged: (value) =>
+                _updateFilterAndReload(() => _defaultExecutorFilterId = value),
             decoration: const InputDecoration(
               labelText: '默认执行人',
               border: OutlineInputBorder(),
