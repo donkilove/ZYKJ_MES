@@ -3,13 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
-import 'package:mes_client/core/ui/patterns/mes_action_dialog.dart';
-import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/features/quality/presentation/widgets/quality_supplier_management_page_header.dart';
+import 'package:mes_client/features/quality/presentation/widgets/quality_supplier_action_dialogs.dart';
+import 'package:mes_client/features/quality/presentation/widgets/quality_supplier_form_dialog.dart';
 import 'package:mes_client/features/quality/services/quality_supplier_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
-import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 
 class QualitySupplierManagementPage extends StatefulWidget {
@@ -125,106 +124,10 @@ class _QualitySupplierManagementPageState
 
   Future<void> _showEditDialog({QualitySupplierItem? item}) async {
     final isCreate = item == null;
-    final nameController = TextEditingController(text: item?.name ?? '');
-    final remarkController = TextEditingController(text: item?.remark ?? '');
-    final formKey = GlobalKey<FormState>();
-    var isEnabled = item?.isEnabled ?? true;
-
-    final saved = await showMesLockedFormDialog<bool>(
+    final saved = await showQualitySupplierFormDialog(
       context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (innerContext, setInnerState) {
-            return MesDialog(
-              title: Text(isCreate ? '新增供应商' : '编辑供应商'),
-              width: 520,
-              content: Form(
-                key: formKey,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextFormField(
-                        controller: nameController,
-                        decoration: const InputDecoration(
-                          labelText: '名称',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return '请输入供应商名称';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: remarkController,
-                        decoration: const InputDecoration(
-                          labelText: '备注',
-                          border: OutlineInputBorder(),
-                        ),
-                        maxLines: 3,
-                      ),
-                      const SizedBox(height: 12),
-                      SwitchListTile.adaptive(
-                        value: isEnabled,
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('启用状态'),
-                        subtitle: Text(isEnabled ? '当前为启用' : '当前为停用'),
-                        onChanged: (value) {
-                          setInnerState(() {
-                            isEnabled = value;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    if (!formKey.currentState!.validate()) {
-                      return;
-                    }
-                    final payload = QualitySupplierUpsertPayload(
-                      name: nameController.text.trim(),
-                      remark: remarkController.text.trim().isEmpty
-                          ? null
-                          : remarkController.text.trim(),
-                      isEnabled: isEnabled,
-                    );
-                    try {
-                      if (isCreate) {
-                        await _service.createSupplier(payload);
-                      } else {
-                        await _service.updateSupplier(item.id, payload);
-                      }
-                      if (!dialogContext.mounted) {
-                        return;
-                      }
-                      Navigator.of(dialogContext).pop(true);
-                    } catch (error) {
-                      if (!dialogContext.mounted) {
-                        return;
-                      }
-                      ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        SnackBar(content: Text(_errorMessage(error))),
-                      );
-                    }
-                  },
-                  child: const Text('保存'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      supplierService: _service,
+      item: item,
     );
     if (saved != true || !mounted) {
       return;
@@ -236,19 +139,11 @@ class _QualitySupplierManagementPageState
   }
 
   Future<void> _deleteSupplier(QualitySupplierItem item) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showQualitySupplierDeleteDialog(
       context: context,
-      builder: (dialogContext) {
-        return MesActionDialog(
-          title: const Text('确认删除'),
-          content: Text('确认删除供应商 ${item.name} 吗？'),
-          confirmLabel: '确认删除',
-          isDestructive: true,
-          onConfirm: () => Navigator.of(dialogContext).pop(true),
-        );
-      },
+      item: item,
     );
-    if (confirmed != true || !mounted) {
+    if (!confirmed || !mounted) {
       return;
     }
     try {

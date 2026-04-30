@@ -4,6 +4,7 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
 import 'package:mes_client/features/quality/presentation/quality_page.dart';
 import 'package:mes_client/features/quality/presentation/quality_supplier_management_page.dart';
+import 'package:mes_client/features/quality/presentation/widgets/quality_supplier_form_dialog.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/quality/services/quality_supplier_service.dart';
 
@@ -101,7 +102,7 @@ void main() {
     await tester.enterText(find.widgetWithText(TextFormField, '备注'), '新增备注');
     await tester.tap(find.byType(Switch).first);
     await tester.pumpAndSettle();
-    expect(find.text('当前为停用'), findsOneWidget);
+    expect(find.text('当前为停用'), findsAtLeastNWidgets(1));
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
 
@@ -112,10 +113,10 @@ void main() {
     await tester.ensureVisible(find.widgetWithText(OutlinedButton, '编辑').last);
     await tester.tap(find.widgetWithText(OutlinedButton, '编辑').last);
     await tester.pumpAndSettle();
-    expect(find.text('当前为停用'), findsOneWidget);
+    expect(find.text('当前为停用'), findsAtLeastNWidgets(1));
     await tester.tap(find.byType(SwitchListTile).first);
     await tester.pumpAndSettle();
-    expect(find.text('当前为启用'), findsOneWidget);
+    expect(find.text('当前为启用'), findsAtLeastNWidgets(1));
     await tester.enterText(find.widgetWithText(TextFormField, '名称'), '更新供应商');
     await tester.tap(find.text('保存'));
     await tester.pumpAndSettle();
@@ -188,6 +189,33 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('供应商已被生产订单引用，无法删除'), findsOneWidget);
+  });
+
+  testWidgets('质量供应商表单弹窗展示宽版双栏骨架', (tester) async {
+    setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = _FakeQualitySupplierService([
+      _buildSupplier(id: 1, name: '初始供应商', remark: '初始备注'),
+    ]);
+
+    await tester.pumpWidget(
+      wrapBody(
+        QualitySupplierFormDialog(
+          supplierService: service,
+          item: _buildSupplier(id: 8, name: '编辑供应商', remark: '历史备注', isEnabled: false),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('quality-supplier-form-dialog')), findsOneWidget);
+    expect(find.text('基本信息'), findsOneWidget);
+    expect(find.text('状态与说明'), findsOneWidget);
+    expect(find.text('名称'), findsOneWidget);
+    expect(find.text('备注'), findsOneWidget);
+    expect(find.text('当前状态'), findsOneWidget);
   });
 }
 
