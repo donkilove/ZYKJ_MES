@@ -7,6 +7,7 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
+import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_inline_banner.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
@@ -623,61 +624,51 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
       return const SizedBox.shrink();
     }
     final currentSession = _session;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildSectionHeader(
-              icon: Icons.monitor_outlined,
-              title: '当前会话',
-              subtitle: '自动刷新当前登录状态，支持直接退出本次登录。',
+    return MesSectionCard(
+      title: '当前会话',
+      subtitle: '自动刷新当前登录状态，支持直接退出本次登录。',
+      child: currentSession == null
+          ? const MesEmptyState(
+              title: '未查询到当前在线会话记录',
+              description: '系统暂未返回当前会话信息，可下拉页面后重试。',
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(child: _buildSessionStatusRow(currentSession)),
+                    const SizedBox(width: 12),
+                    OutlinedButton.icon(
+                      onPressed: _loggingOut ? null : _logout,
+                      icon: const Icon(Icons.logout),
+                      label: Text(_loggingOut ? '退出中...' : '退出当前登录'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _buildFieldGroup(
+                  children: [
+                    _buildInfoItem(
+                      '登录时间',
+                      _formatDateTime(currentSession.loginTime),
+                    ),
+                    _buildInfoItem(
+                      '最后活跃时间',
+                      _formatDateTime(currentSession.lastActiveAt),
+                    ),
+                    _buildInfoItem(
+                      '过期时间',
+                      _formatDateTime(currentSession.expiresAt),
+                    ),
+                    _buildInfoItem(
+                      '剩余时间',
+                      _formatDuration(currentSession.remainingSeconds),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            if (currentSession == null)
-              _buildEmptyStateCard(
-                icon: Icons.portable_wifi_off_outlined,
-                title: '未查询到当前在线会话记录',
-                subtitle: '系统暂未返回当前会话信息，可下拉页面后重试。',
-              )
-            else ...[
-              Row(
-                children: [
-                  Expanded(child: _buildSessionStatusRow(currentSession)),
-                  const SizedBox(width: 12),
-                  OutlinedButton.icon(
-                    onPressed: _loggingOut ? null : _logout,
-                    icon: const Icon(Icons.logout),
-                    label: Text(_loggingOut ? '退出中...' : '退出当前登录'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              _buildFieldGroup(
-                children: [
-                  _buildInfoItem(
-                    '登录时间',
-                    _formatDateTime(currentSession.loginTime),
-                  ),
-                  _buildInfoItem(
-                    '最后活跃时间',
-                    _formatDateTime(currentSession.lastActiveAt),
-                  ),
-                  _buildInfoItem(
-                    '过期时间',
-                    _formatDateTime(currentSession.expiresAt),
-                  ),
-                  _buildInfoItem(
-                    '剩余时间',
-                    _formatDuration(currentSession.remainingSeconds),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
     );
   }
 
@@ -732,35 +723,26 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
 
   Widget _buildPasswordCard() {
     final highlightColor = Theme.of(context).colorScheme.primary;
-    return Card(
+    return Container(
       key: _passwordSectionKey,
-      elevation: 0,
-      color: _passwordSectionHighlighted
-          ? highlightColor.withValues(alpha: 0.08)
-          : null,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
           color: _passwordSectionHighlighted
               ? highlightColor
               : Colors.transparent,
           width: 1.5,
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
+      child: MesSectionCard(
+        title: '修改密码',
+        subtitle: '更新当前账号密码，提交成功后将自动退出并要求重新登录。',
         child: Form(
           key: _passwordFormKey,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildSectionHeader(
-                icon: Icons.lock_outline,
-                title: '修改密码',
-                subtitle: '更新当前账号密码，提交成功后将自动退出并要求重新登录。',
-              ),
               if (_passwordSectionHighlighted) ...[
-                const SizedBox(height: 8),
                 Text(
                   '已定位到修改密码区域',
                   key: const ValueKey(
@@ -771,8 +753,8 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+                const SizedBox(height: 16),
               ],
-              const SizedBox(height: 16),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
@@ -880,48 +862,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     );
   }
 
-  Widget _buildSectionHeader({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-  }) {
-    final theme = Theme.of(context);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: theme.colorScheme.primary.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(icon, color: theme.colorScheme.primary),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+
 
   Widget _buildPill({
     required String label,
@@ -986,43 +927,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     );
   }
 
-  Widget _buildEmptyStateCard({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-  }) {
-    final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: theme.colorScheme.onSurfaceVariant),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(subtitle, style: theme.textTheme.bodySmall),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -1049,19 +954,9 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                   _buildOverviewCard(),
                   const SizedBox(height: 16),
                   if (_message.isNotEmpty)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.errorContainer,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        _message,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onErrorContainer,
-                        ),
-                      ),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: MesInlineBanner.error(message: _message),
                     ),
                   if (isWide)
                     Row(

@@ -31,6 +31,7 @@ Future<void> showUserResetPasswordDialog({
 
   final confirmed = await showMesLockedFormDialog<bool>(
     context: context,
+    wrapMesDialog: false,
     builder: (dialogContext) {
       return StatefulBuilder(
         builder: (context, setDialogState) {

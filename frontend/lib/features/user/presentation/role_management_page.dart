@@ -6,6 +6,7 @@ import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/features/user/presentation/widgets/role_management_page_header.dart';
+import 'package:mes_client/features/user/presentation/widgets/role_form_dialog.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
@@ -38,7 +39,6 @@ class RoleManagementPage extends StatefulWidget {
 class _RoleManagementPageState extends State<RoleManagementPage> {
   static const int _pageSize = 10;
   static const String _roleTypeBuiltin = 'builtin';
-  static const String _roleTypeCustom = 'custom';
   static const String _maintenanceRoleCode = 'maintenance_staff';
 
   late final UserService _userService;
@@ -88,28 +88,6 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
 
   Color _statusColor(BuildContext context, bool enabled) {
     return enabled ? Colors.green : Theme.of(context).colorScheme.error;
-  }
-
-  String _generateImplicitRoleCode(String roleName) {
-    final normalizedName = roleName.trim().toLowerCase();
-    final buffer = StringBuffer('custom_');
-    for (final rune in normalizedName.runes) {
-      final char = String.fromCharCode(rune);
-      final isLowerAlpha = rune >= 97 && rune <= 122;
-      final isDigit = rune >= 48 && rune <= 57;
-      if (isLowerAlpha || isDigit) {
-        buffer.write(char);
-        continue;
-      }
-      buffer.write(rune.toRadixString(16));
-    }
-    buffer.write('_');
-    buffer.write(DateTime.now().millisecondsSinceEpoch.toRadixString(36));
-    final generated = buffer.toString();
-    if (generated.length <= 48) {
-      return generated;
-    }
-    return generated.substring(generated.length - 48);
   }
 
   bool _isBuiltinSemanticsRole(RoleItem role) {
@@ -172,152 +150,13 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
     if (role != null && !widget.canEditRole) {
       return;
     }
-    final formKey = GlobalKey<FormState>();
-    final nameController = TextEditingController(text: role?.name ?? '');
-    var selectedRoleType = role?.roleType == _roleTypeBuiltin
-        ? _roleTypeBuiltin
-        : _roleTypeCustom;
-    var selectedEnabled = role?.isEnabled ?? true;
-    final canEditRoleType = role == null;
-    final editingExistingRole = role != null;
-    final hasBuiltinSemantics = role != null && _isBuiltinSemanticsRole(role);
-
     final saved = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return MesDialog(
-              title: Text(role == null ? '新增角色' : '编辑角色'),
-              width: 420,
-              content: SingleChildScrollView(
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextFormField(
-                        controller: nameController,
-                        readOnly: hasBuiltinSemantics,
-                        decoration: const InputDecoration(labelText: '角色名称'),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return '角色名称不能为空';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedRoleType,
-                        decoration: const InputDecoration(labelText: '角色类型'),
-                        items: [
-                          const DropdownMenuItem(
-                            value: _roleTypeCustom,
-                            child: Text('自定义'),
-                          ),
-                          if (selectedRoleType == _roleTypeBuiltin)
-                            const DropdownMenuItem(
-                              value: _roleTypeBuiltin,
-                              child: Text('系统内置'),
-                            ),
-                        ],
-                        onChanged: canEditRoleType
-                            ? (value) {
-                                if (value == null) {
-                                  return;
-                                }
-                                setDialogState(() {
-                                  selectedRoleType = value;
-                                });
-                              }
-                            : null,
-                      ),
-                      if (role == null)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 6),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              '新增角色仅支持自定义角色，系统内置角色由系统预置。',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                          ),
-                        ),
-                      const SizedBox(height: 12),
-                      if (!editingExistingRole)
-                        DropdownButtonFormField<bool>(
-                          initialValue: selectedEnabled,
-                          decoration: const InputDecoration(labelText: '状态'),
-                          items: const [
-                            DropdownMenuItem(value: true, child: Text('启用')),
-                            DropdownMenuItem(value: false, child: Text('停用')),
-                          ],
-                          onChanged: (value) {
-                            if (value == null) {
-                              return;
-                            }
-                            setDialogState(() {
-                              selectedEnabled = value;
-                            });
-                          },
-                        )
-                      else
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            hasBuiltinSemantics
-                                ? '系统内置角色仅禁止改名、删除；如需变更启停，请使用列表中的启停按钮。'
-                                : '当前状态：${_statusLabel(selectedEnabled)}，如需变更请使用列表中的启停按钮。',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    if (!formKey.currentState!.validate()) {
-                      return;
-                    }
-                    try {
-                      if (role == null) {
-                        await _userService.createRole(
-                          code: _generateImplicitRoleCode(nameController.text),
-                          name: nameController.text.trim(),
-                          roleType: selectedRoleType,
-                          isEnabled: selectedEnabled,
-                        );
-                      } else {
-                        await _userService.updateRole(
-                          roleId: role.id,
-                          name: nameController.text.trim(),
-                          isEnabled: selectedEnabled,
-                        );
-                      }
-                      if (context.mounted) {
-                        Navigator.of(context).pop(true);
-                      }
-                    } catch (error) {
-                      if (!context.mounted) {
-                        return;
-                      }
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(_errorMessage(error))),
-                      );
-                    }
-                  },
-                  child: const Text('保存'),
-                ),
-              ],
-            );
-          },
+        return RoleFormDialog(
+          userService: _userService,
+          role: role,
         );
       },
     );

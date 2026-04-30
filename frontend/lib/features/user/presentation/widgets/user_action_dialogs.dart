@@ -47,6 +47,7 @@ Future<void> showConfirmDeleteUserDialog({
   var submitting = false;
   final confirmed = await showMesLockedFormDialog<bool>(
     context: context,
+    wrapMesDialog: false,
     builder: (context) {
       return StatefulBuilder(
         builder: (context, setDialogState) {
@@ -166,6 +167,7 @@ Future<void> showConfirmRestoreUserDialog({
 
   final confirmed = await showMesLockedFormDialog<bool>(
     context: context,
+    wrapMesDialog: false,
     builder: (context) {
       return StatefulBuilder(
         builder: (context, setDialogState) {
@@ -268,6 +270,7 @@ Future<void> showToggleUserActiveDialog({
 
   final confirmed = await showMesLockedFormDialog<bool>(
     context: context,
+    wrapMesDialog: false,
     builder: (context) {
       return StatefulBuilder(
         builder: (context, setDialogState) {

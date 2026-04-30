@@ -12,6 +12,7 @@ Future<T?> showMesLockedFormDialog<T>({
   Offset? anchorPoint,
   TraversalEdgeBehavior? traversalEdgeBehavior,
   bool? requestFocus,
+  bool wrapMesDialog = true,
 }) {
   return showDialog<T>(
     context: context,
@@ -25,7 +26,9 @@ Future<T?> showMesLockedFormDialog<T>({
     builder: (dialogContext) {
       return PopScope(
         canPop: false,
-        child: _MesLockedDialogScope(child: builder(dialogContext)),
+        child: wrapMesDialog
+            ? _MesLockedDialogScope(child: builder(dialogContext))
+            : builder(dialogContext),
       );
     },
   );
@@ -38,7 +41,7 @@ class _MesLockedDialogScope extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (child is AlertDialog) {
+    if (child is AlertDialog || child is MesDialog) {
       return child;
     }
     return MesDialog(content: child);

@@ -7,11 +7,11 @@ import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
-import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
-import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
+import 'package:mes_client/features/user/presentation/widgets/registration_approve_dialog.dart';
+import 'package:mes_client/features/user/presentation/widgets/registration_reject_dialog.dart';
 import 'package:mes_client/features/user/presentation/widgets/registration_approval_feedback_banner.dart';
 import 'package:mes_client/features/user/presentation/widgets/registration_approval_filter_section.dart';
 import 'package:mes_client/features/user/presentation/widgets/registration_approval_page_header.dart';
@@ -45,7 +45,6 @@ class RegistrationApprovalPage extends StatefulWidget {
 class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
   static const String _operatorRoleCode = 'operator';
   static const int _requestPageSize = 10;
-  static const int _accountMaxLength = 10;
 
   late final UserService _userService;
   late final CraftService _craftService;
@@ -401,203 +400,35 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
       return;
     }
 
-    final formKey = GlobalKey<FormState>();
-    final accountController = TextEditingController(text: item.account);
-    final passwordController = TextEditingController();
-    String? selectedRoleCode = _defaultRoleCode();
-    int? selectedStageId;
-
-    final approved = await showMesLockedFormDialog<bool>(
+    final approved = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final isOperatorSelected = _isOperator(selectedRoleCode);
-            return MesDialog(
-              title: const Text('通过注册申请并分配信息'),
-              width: 560,
-              content: SingleChildScrollView(
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('申请账号：${item.account}'),
-                      const SizedBox(height: 10),
-                      TextFormField(
-                        controller: accountController,
-                        maxLength: _accountMaxLength,
-                        decoration: const InputDecoration(
-                          labelText: '入库账号',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return '请输入入库账号';
-                          }
-                          if (value.trim().length < 2) {
-                            return '账号至少 2 个字符';
-                          }
-                          if (value.trim().length > _accountMaxLength) {
-                            return '账号最多 $_accountMaxLength 个字符';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: passwordController,
-                        obscureText: true,
-                        decoration: const InputDecoration(
-                          labelText: '初始密码',
-                          helperText: '密码规则：至少6位；不能包含连续4位相同字符。',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return '请输入初始密码';
-                          }
-                          if (value.trim().length < 6) {
-                            return '密码至少 6 个字符';
-                          }
-                          if (RegExp(r'(.)\1\1\1').hasMatch(value.trim())) {
-                            return '初始密码不能包含连续4位相同字符';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        '角色分配（单选）',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      RadioGroup<String>(
-                        groupValue: selectedRoleCode,
-                        onChanged: (value) {
-                          setDialogState(() {
-                            selectedRoleCode = value;
-                            if (!_isOperator(selectedRoleCode)) {
-                              selectedStageId = null;
-                            }
-                          });
-                        },
-                        child: Column(
-                          children: assignableRoles.map((role) {
-                            return RadioListTile<String>(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(role.name),
-                              subtitle: Text(
-                                '${role.code} · ${role.roleType == 'builtin' ? '系统内置' : '自定义'}',
-                              ),
-                              value: role.code,
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                      if (selectedRoleCode == null)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 4),
-                          child: Text(
-                            '请选择一个角色',
-                            style: TextStyle(color: Colors.red),
-                          ),
-                        ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        '工段分配（单选，仅操作员角色可选）',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 8),
-                      Opacity(
-                        opacity: isOperatorSelected ? 1 : 0.5,
-                        child: IgnorePointer(
-                          ignoring: !isOperatorSelected,
-                          child: currentStages.isEmpty
-                              ? const Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 8),
-                                  child: Text('暂无可分配工段'),
-                                )
-                              : RadioGroup<int>(
-                                  groupValue: selectedStageId,
-                                  onChanged: (value) {
-                                    if (value == null) {
-                                      return;
-                                    }
-                                    setDialogState(() {
-                                      selectedStageId = value;
-                                    });
-                                  },
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: currentStages.map((stage) {
-                                      return RadioListTile<int>(
-                                        dense: true,
-                                        contentPadding: EdgeInsets.zero,
-                                        title: Text(stage.name),
-                                        subtitle: Text(stage.code),
-                                        value: stage.id,
-                                      );
-                                    }).toList(),
-                                  ),
-                                ),
-                        ),
-                      ),
-                      if (isOperatorSelected && selectedStageId == null)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 4),
-                          child: Text(
-                            '操作员角色必须选择一个工段',
-                            style: TextStyle(color: Colors.red),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    if (!formKey.currentState!.validate()) {
-                      return;
-                    }
-                    if (selectedRoleCode == null) {
-                      return;
-                    }
-                    if (_isOperator(selectedRoleCode) &&
-                        selectedStageId == null) {
-                      return;
-                    }
-                    final success = await _approveRequest(
-                      item: item,
-                      account: accountController.text.trim(),
-                      roleCode: selectedRoleCode!,
-                      password: passwordController.text.trim(),
-                      stageId: selectedStageId,
-                    );
-                    if (success && context.mounted) {
-                      Navigator.of(context).pop(true);
-                    }
-                  },
-                  child: const Text('确认通过'),
-                ),
-              ],
+        return RegistrationApproveDialog(
+          item: item,
+          assignableRoles: assignableRoles,
+          currentStages: currentStages,
+          defaultRoleCode: _defaultRoleCode(),
+          isOperator: _isOperator,
+          onApprove: ({
+            required account,
+            required roleCode,
+            password,
+            stageId,
+          }) async {
+            return await _approveRequest(
+              item: item,
+              account: account,
+              roleCode: roleCode,
+              password: password,
+              stageId: stageId,
             );
           },
         );
       },
     );
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      accountController.dispose();
-      passwordController.dispose();
-    });
+
 
     if (approved == true && mounted) {
       setState(() {
@@ -645,52 +476,18 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
       _showNoPermission();
       return;
     }
-    final reasonController = TextEditingController();
-    try {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) {
-          return MesDialog(
-            title: const Text('驳回注册申请'),
-            width: 420,
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('确认驳回账号”${item.account}”的注册申请吗？'),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: reasonController,
-                  decoration: const InputDecoration(
-                    labelText: '驳回原因（可选）',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  maxLines: 2,
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('驳回'),
-              ),
-            ],
-          );
-        },
-      );
-
-      if (confirmed == true) {
-        final reason = reasonController.text.trim();
-        await _rejectRequest(item, reason: reason.isEmpty ? null : reason);
-      }
-    } finally {
-      reasonController.dispose();
-    }
+    await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return RegistrationRejectDialog(
+          item: item,
+          onReject: ({reason}) async {
+            await _rejectRequest(item, reason: reason);
+          },
+        );
+      },
+    );
   }
 
   @override

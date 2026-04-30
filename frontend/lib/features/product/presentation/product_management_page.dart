@@ -17,6 +17,8 @@ import 'package:mes_client/features/product/presentation/widgets/product_managem
     show ProductManagementTableAction, ProductManagementTableSection;
 import 'package:mes_client/features/product/presentation/widgets/product_detail_drawer.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_version_dialog.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_action_dialogs.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_form_dialog.dart';
 import 'package:mes_client/features/product/services/product_service.dart';
 
 const List<String> _productCategoryOptions = ['贴片', 'DTU', '套件'];
@@ -166,48 +168,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     }
   }
 
-  String? _validateProductName(String? value) {
-    final trimmed = value?.trim() ?? '';
-    if (trimmed.isEmpty) {
-      return '产品名称不能为空';
-    }
-    if (trimmed.length > 128) {
-      return '产品名称不能超过 128 个字符';
-    }
-    return null;
-  }
 
-  String? _validateProductRemark(String? value) {
-    final trimmed = value?.trim() ?? '';
-    if (trimmed.length > 500) {
-      return '备注不能超过 500 个字符';
-    }
-    return null;
-  }
-
-  String? _validateProductCategory(String? value) {
-    final trimmed = value?.trim() ?? '';
-    if (trimmed.isEmpty) {
-      return '请选择产品分类';
-    }
-    if (!_productCategoryOptions.contains(trimmed)) {
-      return '产品分类仅允许使用固定枚举';
-    }
-    return null;
-  }
-
-  Widget _buildReadonlyStatusField({
-    required String label,
-    required String value,
-  }) {
-    return InputDecorator(
-      decoration: InputDecoration(
-        labelText: label,
-        border: const OutlineInputBorder(),
-      ),
-      child: Text(value),
-    );
-  }
 
   String _parameterHistoryTypeLabel(String value) {
     switch (value) {
@@ -245,102 +206,15 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
     ProductImpactAnalysisResult impact, {
     required String title,
   }) async {
-    if (!impact.requiresConfirmation) {
-      return false;
-    }
-    final confirmed = await showMesLockedFormDialog<bool>(
+    return showConfirmImpactDialog(
       context: context,
-      builder: (context) {
-        return MesDialog(
-          title: Text(title),
-          width: 520,
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '存在 ${impact.totalOrders} 条未完工订单（待开工 ${impact.pendingOrders}，生产中 ${impact.inProgressOrders}）。',
-              ),
-              const SizedBox(height: 8),
-              const Text('继续操作将按你的确认强制执行。'),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 180,
-                child: ListView(
-                  children: impact.items
-                      .take(20)
-                      .map(
-                        (item) => Text(
-                          '${item.orderCode} / ${item.orderStatus} ${item.reason ?? ''}',
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('确认继续'),
-            ),
-          ],
-        );
-      },
+      impact: impact,
+      title: title,
     );
-    return confirmed == true;
   }
 
   Future<String?> _promptInactiveReason() async {
-    final reasonController = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-    final result = await showMesLockedFormDialog<String>(
-      context: context,
-      builder: (context) {
-        return MesDialog(
-          title: const Text('停用产品'),
-          width: 420,
-          content: Form(
-            key: formKey,
-            child: TextFormField(
-              controller: reasonController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: '停用原因',
-                border: OutlineInputBorder(),
-              ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return '请输入停用原因';
-                }
-                return null;
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () {
-                if (!formKey.currentState!.validate()) {
-                  return;
-                }
-                Navigator.of(context).pop(reasonController.text.trim());
-              },
-              child: const Text('确认'),
-            ),
-          ],
-        );
-      },
-    );
-    reasonController.dispose();
-    return result;
+    return showInactiveReasonDialog(context: context);
   }
 
   Future<void> _changeLifecycle(
@@ -576,6 +450,7 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
 
     await showMesLockedFormDialog<void>(
       context: context,
+      wrapMesDialog: false,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setLocalState) {
@@ -1128,129 +1003,14 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
       return;
     }
 
-    final nameController = TextEditingController(text: product.name);
-    final remarkController = TextEditingController(text: product.remark);
-    final formKey = GlobalKey<FormState>();
-    String? selectedCategory =
-        _productCategoryOptions.contains(product.category)
-        ? product.category
-        : null;
-
-    final updated = await showMesLockedFormDialog<bool>(
+    await showProductFormDialog(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setLocalState) {
-            return MesDialog(
-              title: const Text('编辑产品'),
-              width: 420,
-              content: Form(
-                key: formKey,
-                autovalidateMode: AutovalidateMode.onUserInteraction,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildReadonlyStatusField(
-                        label: '当前状态',
-                        value: _lifecycleLabel(product.lifecycleStatus),
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: nameController,
-                        maxLength: 128,
-                        maxLengthEnforcement: MaxLengthEnforcement.none,
-                        decoration: const InputDecoration(
-                          labelText: '产品名称',
-                          hintText: '请输入 1-128 个字符，提交时自动去除首尾空格',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: _validateProductName,
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedCategory,
-                        decoration: const InputDecoration(
-                          labelText: '产品分类',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: _validateProductCategory,
-                        items: _productCategoryOptions
-                            .map(
-                              (category) => DropdownMenuItem<String>(
-                                value: category,
-                                child: Text(category),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value == null) return;
-                          setLocalState(() {
-                            selectedCategory = value;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: remarkController,
-                        maxLines: 3,
-                        maxLength: 500,
-                        maxLengthEnforcement: MaxLengthEnforcement.none,
-                        decoration: const InputDecoration(
-                          labelText: '备注',
-                          hintText: '最多 500 个字符，提交时自动去除首尾空格',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: _validateProductRemark,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    if (!formKey.currentState!.validate()) return;
-                    try {
-                      await _productService.updateProduct(
-                        productId: product.id,
-                        name: nameController.text.trim(),
-                        category: selectedCategory!,
-                        remark: remarkController.text.trim(),
-                      );
-                      if (context.mounted) {
-                        Navigator.of(context).pop(true);
-                      }
-                    } catch (error) {
-                      if (_isUnauthorized(error)) {
-                        widget.onLogout();
-                        return;
-                      }
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('编辑产品失败：${_errorMessage(error)}'),
-                          ),
-                        );
-                      }
-                    }
-                  },
-                  child: const Text('保存'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      productService: _productService,
+      categoryOptions: _productCategoryOptions,
+      product: product,
+      onLogout: widget.onLogout,
+      onSuccess: _loadProducts,
     );
-
-    if (updated == true) {
-      await _loadProducts();
-    }
   }
 
   Future<void> _showCreateProductDialog() async {
@@ -1259,127 +1019,13 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
       return;
     }
 
-    final nameController = TextEditingController();
-    final remarkController = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-    String? selectedCategory;
-
-    final created = await showMesLockedFormDialog<bool>(
+    await showProductFormDialog(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setLocalState) {
-            return MesDialog(
-              title: const Text('添加产品'),
-              width: 420,
-              content: Form(
-                key: formKey,
-                autovalidateMode: AutovalidateMode.onUserInteraction,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildReadonlyStatusField(label: '默认状态', value: '启用'),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: nameController,
-                        maxLength: 128,
-                        maxLengthEnforcement: MaxLengthEnforcement.none,
-                        decoration: const InputDecoration(
-                          labelText: '产品名称',
-                          hintText: '请输入 1-128 个字符，提交时自动去除首尾空格',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: _validateProductName,
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedCategory,
-                        decoration: const InputDecoration(
-                          labelText: '产品分类',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: _validateProductCategory,
-                        hint: const Text('请选择产品分类'),
-                        items: _productCategoryOptions
-                            .map(
-                              (category) => DropdownMenuItem<String>(
-                                value: category,
-                                child: Text(category),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value == null) {
-                            return;
-                          }
-                          setLocalState(() {
-                            selectedCategory = value;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: remarkController,
-                        maxLines: 3,
-                        maxLength: 500,
-                        maxLengthEnforcement: MaxLengthEnforcement.none,
-                        decoration: const InputDecoration(
-                          labelText: '备注',
-                          hintText: '最多 500 个字符，提交时自动去除首尾空格',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: _validateProductRemark,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    if (!formKey.currentState!.validate()) {
-                      return;
-                    }
-                    try {
-                      await _productService.createProduct(
-                        name: nameController.text.trim(),
-                        category: selectedCategory!,
-                        remark: remarkController.text.trim(),
-                      );
-                      if (context.mounted) {
-                        Navigator.of(context).pop(true);
-                      }
-                    } catch (error) {
-                      if (_isUnauthorized(error)) {
-                        widget.onLogout();
-                        return;
-                      }
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('添加产品失败：${_errorMessage(error)}'),
-                          ),
-                        );
-                      }
-                    }
-                  },
-                  child: const Text('保存'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      productService: _productService,
+      categoryOptions: _productCategoryOptions,
+      onLogout: widget.onLogout,
+      onSuccess: _loadProducts,
     );
-
-    if (created == true) {
-      await _loadProducts();
-    }
   }
 
   Future<void> _deleteProduct(ProductItem product) async {
@@ -1388,82 +1034,13 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
       return;
     }
 
-    final passwordController = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-
-    final confirmed = await showMesLockedFormDialog<bool>(
+    await showConfirmDeleteProductDialog(
       context: context,
-      builder: (context) {
-        return MesDialog(
-          title: const Text('删除产品'),
-          width: 420,
-          content: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('确认删除产品“${product.name}”吗？'),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: passwordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: '请输入当前账号密码',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return '请输入密码';
-                    }
-                    return null;
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                if (!formKey.currentState!.validate()) {
-                  return;
-                }
-                try {
-                  await _productService.deleteProduct(
-                    productId: product.id,
-                    password: passwordController.text,
-                  );
-                  if (context.mounted) {
-                    Navigator.of(context).pop(true);
-                  }
-                } catch (error) {
-                  if (_isUnauthorized(error)) {
-                    widget.onLogout();
-                    return;
-                  }
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('删除产品失败：${_errorMessage(error)}')),
-                    );
-                  }
-                }
-              },
-              child: const Text('确认删除'),
-            ),
-          ],
-        );
-      },
+      productService: _productService,
+      product: product,
+      onLogout: widget.onLogout,
+      onSuccess: _loadProducts,
     );
-
-    passwordController.dispose();
-
-    if (confirmed == true) {
-      await _loadProducts();
-    }
   }
 
   List<PopupMenuEntry<ProductManagementTableAction>> _buildProductActionMenuItems(
