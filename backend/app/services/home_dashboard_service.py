@@ -146,6 +146,24 @@ def _set_cached_home_dashboard(
         )
 
 
+def invalidate_home_dashboard_cache(*, user_ids: set[int] | None = None) -> int:
+    with _HOME_DASHBOARD_LOCAL_CACHE_LOCK:
+        if not user_ids:
+            removed = len(_HOME_DASHBOARD_LOCAL_CACHE)
+            _HOME_DASHBOARD_LOCAL_CACHE.clear()
+            return removed
+
+        prefixes = tuple(f"home_dashboard:{int(user_id)}:" for user_id in user_ids)
+        cache_keys = [
+            cache_key
+            for cache_key in _HOME_DASHBOARD_LOCAL_CACHE
+            if cache_key.startswith(prefixes)
+        ]
+        for cache_key in cache_keys:
+            _HOME_DASHBOARD_LOCAL_CACHE.pop(cache_key, None)
+        return len(cache_keys)
+
+
 def _get_or_build_home_dashboard(
     cache_key: str,
     builder,

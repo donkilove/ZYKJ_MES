@@ -11,11 +11,13 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from app.core.security import get_password_hash  # noqa: E402
+from app.core.config import settings  # noqa: E402
 from app.db.session import SessionLocal  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models.associations import user_roles  # noqa: E402
 from app.models.message import Message  # noqa: E402
 from app.models.message_recipient import MessageRecipient  # noqa: E402
+from app.models.registration_request import RegistrationRequest  # noqa: E402
 from app.models.role import Role  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.services.message_service import create_message_for_users  # noqa: E402
@@ -29,10 +31,14 @@ class BaseAPITestCase(unittest.TestCase):
     def setUp(self) -> None:
         self._case_token = f"home-dashboard-{time.time_ns()}"
         self._created_message_ids: list[int] = []
+        self._created_registration_request_ids: list[int] = []
         self._created_user_ids: list[int] = []
         self._created_role_ids: list[int] = []
         self._restricted_token: str | None = None
-        self._token = self._login("admin", "Admin@123456")
+        self._token = self._login(
+            settings.bootstrap_admin_username,
+            settings.bootstrap_admin_password,
+        )
 
     def tearDown(self) -> None:
         db = SessionLocal()
@@ -42,6 +48,10 @@ class BaseAPITestCase(unittest.TestCase):
                     MessageRecipient.message_id == message_id
                 ).delete()
                 db.query(Message).filter(Message.id == message_id).delete()
+            for request_id in reversed(self._created_registration_request_ids):
+                db.query(RegistrationRequest).filter(
+                    RegistrationRequest.id == request_id
+                ).delete()
             for user_id in reversed(self._created_user_ids):
                 db.execute(delete(user_roles).where(user_roles.c.user_id == user_id))
                 db.query(User).filter(User.id == user_id).delete()
@@ -122,6 +132,23 @@ class BaseAPITestCase(unittest.TestCase):
         finally:
             db.close()
 
+    def _track_registration_messages(self, request_id: int) -> None:
+        db = SessionLocal()
+        try:
+            rows = (
+                db.query(Message)
+                .filter(
+                    Message.source_type == "registration_request",
+                    Message.source_id == str(request_id),
+                )
+                .all()
+            )
+            for row in rows:
+                if row.id not in self._created_message_ids:
+                    self._created_message_ids.append(row.id)
+        finally:
+            db.close()
+
 
 class TestUiHomeDashboardIntegration(BaseAPITestCase):
     def test_home_dashboard_returns_todo_risk_and_kpi_blocks(self) -> None:
@@ -177,6 +204,75 @@ class TestUiHomeDashboardIntegration(BaseAPITestCase):
         self.assertTrue(all(not code.startswith("quality_") for code in risk_codes))
         self.assertTrue(all(not code.startswith("production_") for code in kpi_codes))
         self.assertTrue(all(not code.startswith("quality_") for code in kpi_codes))
+
+    def test_home_dashboard_removes_registration_todo_after_approval_immediately(
+        self,
+    ) -> None:
+        account = f"h{time.time_ns() % 1000000000:09d}"
+        password = f"Pwd!{account}!Z9"
+
+        register_response = self.client.post(
+            "/api/v1/auth/register",
+            json={"account": account, "password": password},
+        )
+        self.assertEqual(register_response.status_code, 202, register_response.text)
+
+        db = SessionLocal()
+        try:
+            request_row = (
+                db.query(RegistrationRequest)
+                .filter(RegistrationRequest.account == account)
+                .first()
+            )
+            self.assertIsNotNone(request_row)
+            request_id = int(request_row.id)
+            self._created_registration_request_ids.append(request_id)
+        finally:
+            db.close()
+        self._track_registration_messages(request_id)
+
+        before_response = self.client.get(
+            "/api/v1/ui/home-dashboard",
+            headers=self._headers(),
+        )
+        self.assertEqual(before_response.status_code, 200, before_response.text)
+        before_payload = before_response.json()["data"]
+        self.assertIn(
+            f"注册审批待处理：{account}",
+            [item["title"] for item in before_payload["todo_items"]],
+        )
+
+        approve_response = self.client.post(
+            f"/api/v1/auth/register-requests/{request_id}/approve",
+            headers=self._headers(),
+            json={
+                "account": account,
+                "password": password,
+                "role_code": "quality_admin",
+                "stage_id": None,
+            },
+        )
+        self.assertEqual(approve_response.status_code, 200, approve_response.text)
+
+        db = SessionLocal()
+        try:
+            created_user = db.query(User).filter(User.username == account).first()
+            self.assertIsNotNone(created_user)
+            self._created_user_ids.append(int(created_user.id))
+        finally:
+            db.close()
+        self._track_registration_messages(request_id)
+
+        after_response = self.client.get(
+            "/api/v1/ui/home-dashboard",
+            headers=self._headers(),
+        )
+        self.assertEqual(after_response.status_code, 200, after_response.text)
+        after_payload = after_response.json()["data"]
+        self.assertNotIn(
+            f"注册审批待处理：{account}",
+            [item["title"] for item in after_payload["todo_items"]],
+        )
 
 
 if __name__ == "__main__":

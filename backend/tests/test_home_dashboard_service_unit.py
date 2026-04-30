@@ -1,8 +1,17 @@
+import sys
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
 
 from app.services.home_dashboard_service import (
     DashboardMessageSeed,
+    _HOME_DASHBOARD_LOCAL_CACHE,
+    _HOME_DASHBOARD_LOCAL_CACHE_LOCK,
     build_dashboard_todo_summary,
+    invalidate_home_dashboard_cache,
     select_dashboard_todo_items,
 )
 
@@ -134,3 +143,22 @@ def test_build_dashboard_todo_summary_counts_all_summary_numbers() -> None:
     assert summary.high_priority_count == 3
     assert summary.exception_count == 5
     assert summary.overdue_count == 1
+
+
+def test_invalidate_home_dashboard_cache_removes_only_selected_user_entries() -> None:
+    with _HOME_DASHBOARD_LOCAL_CACHE_LOCK:
+        _HOME_DASHBOARD_LOCAL_CACHE.clear()
+        _HOME_DASHBOARD_LOCAL_CACHE.update(
+            {
+                "home_dashboard:1:home,user": (999999999.0, object()),
+                "home_dashboard:1:home,user,message": (999999999.0, object()),
+                "home_dashboard:2:home,user": (999999999.0, object()),
+            }
+        )
+
+    removed = invalidate_home_dashboard_cache(user_ids={1})
+
+    assert removed == 2
+    with _HOME_DASHBOARD_LOCAL_CACHE_LOCK:
+        assert sorted(_HOME_DASHBOARD_LOCAL_CACHE) == ["home_dashboard:2:home,user"]
+        _HOME_DASHBOARD_LOCAL_CACHE.clear()

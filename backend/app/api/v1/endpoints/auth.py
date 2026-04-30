@@ -33,7 +33,11 @@ from app.schemas.auth import (
 )
 from app.schemas.common import ApiResponse, success_response
 from app.services.audit_service import write_audit_log
-from app.services.message_service import create_message_for_users
+from app.services.home_dashboard_service import invalidate_home_dashboard_cache
+from app.services.message_service import (
+    close_registration_request_pending_messages,
+    create_message_for_users,
+)
 from app.services.online_status_service import clear_user, touch_user
 from app.services.session_service import (
     cleanup_expired_login_logs_if_due,
@@ -470,6 +474,12 @@ def approve_registration(
         ip_address=request.client.host if request and request.client else None,
         terminal_info=request.headers.get("user-agent") if request else None,
     )
+    close_registration_request_pending_messages(
+        db,
+        request_id=request_id,
+        reason="registration_request_approved",
+    )
+    invalidate_home_dashboard_cache(user_ids={current_user.id})
     db.commit()
     # 通知申请人：注册审批通过
     create_message_for_users(
@@ -558,6 +568,12 @@ def reject_registration(
         ip_address=request.client.host if request and request.client else None,
         terminal_info=request.headers.get("user-agent") if request else None,
     )
+    close_registration_request_pending_messages(
+        db,
+        request_id=request_id,
+        reason="registration_request_rejected",
+    )
+    invalidate_home_dashboard_cache(user_ids={current_user.id})
     db.commit()
     return success_response(
         RegistrationActionResult(

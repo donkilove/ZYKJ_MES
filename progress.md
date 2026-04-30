@@ -206,3 +206,15 @@
 - `git diff --check` 退出码 0，仅有 Git 行尾转换提示。
 - 补充说明：`product_module_issue_regression_test.dart` 中数条旧断言依赖历史产品表单文案/校验触发假设，不属于本轮 P2 改动面；本轮已对其中一处与当前真实 UI 不符的断言做最小对齐，但最终验收以覆盖本轮 P2 改动面的定向集合为准。
 - 提交口径：P2 已收口，待中文提交。
+
+## 2026-04-30 首页待办横向风险复核
+
+- 用户追问其他待办是否也会出现已处理但首页仍残留。
+- 已横向盘点生产代码中的 `message_type="todo"` 创建点，确认首页待办来源仅注册审批、首件不通过、保养工单三类。
+- 已确认并修复两处同类风险：首件处置后待办关闭、保养工单完成/取消后待办关闭；同时维护任务增加业务可操作性兜底。
+- 已新增稳定端点单元回归 `backend/tests/test_todo_closure_endpoint_unit.py`，覆盖首件处置与保养完成后关闭待办并清首页缓存。
+- 验证：`python -m pytest backend/tests/test_message_service_unit.py backend/tests/test_home_dashboard_service_unit.py backend/tests/test_todo_closure_endpoint_unit.py -q` 输出 28 passed。
+- 验证：`$env:DB_PORT='5433'; python -m pytest backend/tests/test_auth_endpoint_unit.py backend/tests/test_message_service_unit.py backend/tests/test_home_dashboard_service_unit.py backend/tests/test_todo_closure_endpoint_unit.py -q` 输出 35 passed，6 条 Pydantic deprecation warnings。
+- 限制：数据库型质量/设备集成测试曾因 Docker PostgreSQL 未映射失败；映射到 5433 后又因当前容器 `admin/Admin@123456` 登录 401 未进入业务断言，已用端点单元回归补偿并写入 evidence。
+- 提交前复测：`python -m pytest backend/tests/test_message_service_unit.py backend/tests/test_home_dashboard_service_unit.py backend/tests/test_todo_closure_endpoint_unit.py -q` 输出 28 passed。
+- 提交前复核：`git diff --check` 退出码 0，仅 Git 行尾转换提示。

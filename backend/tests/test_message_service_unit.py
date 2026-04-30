@@ -33,6 +33,9 @@ class _FakeScalarResult:
     def scalars(self):
         return self
 
+    def first(self):
+        return self._all_rows[0] if self._all_rows else self._one
+
     def all(self):
         return self._all_rows
 
@@ -155,6 +158,188 @@ class MessageServiceUnitTest(unittest.TestCase):
         self.assertEqual(stats["source_unavailable_updated"], 1)
         db.flush.assert_called_once()
         self.assertEqual(write_audit_log.call_count, 2)
+
+    def test_run_message_maintenance_closes_registration_todo_when_request_processed(self):
+        now = datetime.now(UTC)
+        processed_registration_todo = SimpleNamespace(
+            id=3,
+            title="注册审批待处理：done_user",
+            status="active",
+            source_module="user",
+            source_type="registration_request",
+            source_id="456",
+            message_type="todo",
+            expires_at=None,
+            updated_at=now,
+            created_at=now,
+        )
+        db = MagicMock()
+        db.execute.side_effect = [
+            _FakeScalarResult(all_rows=[processed_registration_todo]),
+            _FakeScalarResult(one=SimpleNamespace(is_deleted=False, status="approved")),
+        ]
+
+        with (
+            patch.object(message_service, "write_audit_log") as write_audit_log,
+            patch.object(
+                message_service, "_sync_pending_registration_request_messages"
+            ),
+            patch.object(message_service, "_sync_failed_first_article_messages"),
+            patch.object(message_service, "_sync_overdue_production_order_messages"),
+        ):
+            stats = message_service.run_message_maintenance(db, now=now)
+
+        self.assertEqual(processed_registration_todo.status, "src_unavailable")
+        self.assertEqual(stats["source_unavailable_updated"], 1)
+        db.flush.assert_called_once()
+        write_audit_log.assert_called_once()
+
+    def test_run_message_maintenance_closes_first_article_todo_after_disposition(self):
+        now = datetime.now(UTC)
+        processed_first_article_todo = SimpleNamespace(
+            id=4,
+            title="首件不通过待处理：ORDER-1 / 激光打标",
+            status="active",
+            source_module="quality",
+            source_type="first_article_record",
+            source_id="789",
+            message_type="todo",
+            expires_at=None,
+            updated_at=now,
+            created_at=now,
+        )
+        db = MagicMock()
+        db.execute.side_effect = [
+            _FakeScalarResult(all_rows=[processed_first_article_todo]),
+            _FakeScalarResult(
+                one=SimpleNamespace(
+                    is_deleted=False,
+                    id=789,
+                    result="failed",
+                )
+            ),
+            _FakeScalarResult(all_rows=[SimpleNamespace(final_judgment="accept")]),
+        ]
+
+        with (
+            patch.object(message_service, "write_audit_log") as write_audit_log,
+            patch.object(
+                message_service, "_sync_pending_registration_request_messages"
+            ),
+            patch.object(message_service, "_sync_failed_first_article_messages"),
+            patch.object(message_service, "_sync_overdue_production_order_messages"),
+        ):
+            stats = message_service.run_message_maintenance(db, now=now)
+
+        self.assertEqual(processed_first_article_todo.status, "src_unavailable")
+        self.assertEqual(stats["source_unavailable_updated"], 1)
+        db.flush.assert_called_once()
+        write_audit_log.assert_called_once()
+
+    def test_run_message_maintenance_closes_maintenance_todo_when_work_order_done(self):
+        now = datetime.now(UTC)
+        completed_work_order_todo = SimpleNamespace(
+            id=5,
+            title="保养工单已生成：设备 - 点检",
+            status="active",
+            source_module="equipment",
+            source_type="maintenance_work_order",
+            source_id="321",
+            message_type="todo",
+            expires_at=None,
+            updated_at=now,
+            created_at=now,
+        )
+        db = MagicMock()
+        db.execute.side_effect = [
+            _FakeScalarResult(all_rows=[completed_work_order_todo]),
+            _FakeScalarResult(one=SimpleNamespace(is_deleted=False, status="done")),
+        ]
+
+        with (
+            patch.object(message_service, "write_audit_log") as write_audit_log,
+            patch.object(
+                message_service, "_sync_pending_registration_request_messages"
+            ),
+            patch.object(message_service, "_sync_failed_first_article_messages"),
+            patch.object(message_service, "_sync_overdue_production_order_messages"),
+        ):
+            stats = message_service.run_message_maintenance(db, now=now)
+
+        self.assertEqual(completed_work_order_todo.status, "src_unavailable")
+        self.assertEqual(stats["source_unavailable_updated"], 1)
+        db.flush.assert_called_once()
+        write_audit_log.assert_called_once()
+
+    def test_sync_failed_first_article_messages_skips_disposed_records(self):
+        db = MagicMock()
+        db.execute.return_value = _FakeScalarResult(all_rows=[])
+
+        with patch.object(message_service, "create_message_for_users") as create_message:
+            message_service._sync_failed_first_article_messages(db)
+
+        create_message.assert_not_called()
+
+    def test_close_registration_request_pending_messages_closes_only_active_todos(self):
+        active_todo = SimpleNamespace(
+            id=3,
+            title="注册审批待处理：done_user",
+            status="active",
+            source_module="user",
+            source_type="registration_request",
+            source_id="456",
+            message_type="todo",
+        )
+        db = MagicMock()
+        db.execute.side_effect = [
+            _FakeScalarResult(all_rows=[active_todo]),
+            _FakeScalarResult(all_rows=[]),
+        ]
+
+        with patch.object(message_service, "write_audit_log") as write_audit_log:
+            updated = message_service.close_registration_request_pending_messages(
+                db,
+                request_id=456,
+                reason="registration_request_approved",
+            )
+
+        self.assertEqual(updated, 1)
+        self.assertEqual(active_todo.status, "src_unavailable")
+        db.flush.assert_called_once()
+        write_audit_log.assert_called_once()
+
+    def test_close_source_todo_messages_returns_recipient_user_ids(self):
+        active_todo = SimpleNamespace(
+            id=8,
+            title="保养工单已生成：设备 - 点检",
+            status="active",
+            source_module="equipment",
+            source_type="maintenance_work_order",
+            source_id="321",
+            message_type="todo",
+        )
+        db = MagicMock()
+        db.execute.side_effect = [
+            _FakeScalarResult(all_rows=[active_todo]),
+            _FakeScalarResult(all_rows=[3, 4, 3]),
+        ]
+
+        with patch.object(message_service, "write_audit_log") as write_audit_log:
+            updated, user_ids = message_service.close_source_todo_messages(
+                db,
+                source_module="equipment",
+                source_type="maintenance_work_order",
+                source_id="321",
+                reason="maintenance_work_order_done",
+                action_code="message.maintenance_work_order_closed",
+                action_name="保养工单待办关闭",
+            )
+
+        self.assertEqual(updated, 1)
+        self.assertEqual(user_ids, {3, 4})
+        self.assertEqual(active_todo.status, "src_unavailable")
+        db.flush.assert_called_once()
+        write_audit_log.assert_called_once()
 
     def test_get_message_jump_target_returns_missing_target_for_blank_page(self):
         msg = SimpleNamespace(

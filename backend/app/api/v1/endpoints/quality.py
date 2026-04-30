@@ -45,7 +45,11 @@ from app.schemas.production import (
     ScrapStatisticsListResult,
 )
 from app.services.audit_service import write_audit_log
-from app.services.message_service import create_message_for_users
+from app.services.home_dashboard_service import invalidate_home_dashboard_cache
+from app.services.message_service import (
+    close_source_todo_messages,
+    create_message_for_users,
+)
 from app.schemas.quality import (
     SupplierCreate,
     SupplierItem,
@@ -424,7 +428,18 @@ def submit_disposition_api(
             "recheck_result": payload.recheck_result,
         },
     )
+    _, closed_todo_user_ids = close_source_todo_messages(
+        db,
+        source_module="quality",
+        source_type="first_article_record",
+        source_id=str(record_id),
+        reason="first_article_disposition_submitted",
+        action_code="message.first_article_todo_closed",
+        action_name="首件不通过待办关闭",
+    )
     db.commit()
+    if closed_todo_user_ids:
+        invalidate_home_dashboard_cache(user_ids=closed_todo_user_ids)
 
     if payload.final_judgment != "accept":
         operator_user_id = detail.get("operator_user_id")

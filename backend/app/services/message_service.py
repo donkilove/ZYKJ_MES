@@ -13,6 +13,7 @@ from app.core.rbac import ROLE_PRODUCTION_ADMIN, ROLE_QUALITY_ADMIN, ROLE_SYSTEM
 from app.core.authz_catalog import PAGE_PERMISSION_BY_PAGE_CODE
 from app.core.config import settings
 from app.db.session import SessionLocal
+from app.models.first_article_disposition import FirstArticleDisposition
 from app.models.first_article_record import FirstArticleRecord
 from app.models.maintenance_work_order import MaintenanceWorkOrder
 from app.models.message import Message
@@ -104,28 +105,70 @@ def _resolve_source_model(msg: Message) -> _MessageSourceRegistryEntry | None:
     return _MESSAGE_SOURCE_MODEL_REGISTRY.get((source_module, source_type))
 
 
-def _source_record_exists(db: Session, msg: Message) -> bool:
+def _get_message_source_record(db: Session, msg: Message) -> object | None:
     entry = _resolve_source_model(msg)
     if entry is None:
-        return True
+        return msg
     source_id = (msg.source_id or "").strip()
     if not source_id:
-        return False
+        return None
     model = entry.model
     id_attr = getattr(model, entry.id_attr, None)
     if id_attr is None:
-        return False
+        return None
     if entry.id_attr == "id":
         if not source_id.isdigit():
-            return False
+            return None
         stmt = select(model).where(id_attr == int(source_id))
     else:
         stmt = select(model).where(id_attr == source_id)
-    row = db.execute(stmt).scalar_one_or_none()
+    return db.execute(stmt).scalar_one_or_none()
+
+
+def _source_record_exists(db: Session, msg: Message) -> bool:
+    row = _get_message_source_record(db, msg)
     if row is None:
         return False
     is_deleted = getattr(row, "is_deleted", False)
     return not bool(is_deleted)
+
+
+def _message_source_is_actionable(db: Session, msg: Message) -> bool:
+    row = _get_message_source_record(db, msg)
+    if row is None:
+        return False
+    if bool(getattr(row, "is_deleted", False)):
+        return False
+    if (
+        msg.message_type == "todo"
+        and msg.source_module == "user"
+        and msg.source_type == "registration_request"
+    ):
+        return getattr(row, "status", None) == "pending"
+    if (
+        msg.message_type == "todo"
+        and msg.source_module == "quality"
+        and msg.source_type == "first_article_record"
+    ):
+        if getattr(row, "result", None) != "failed":
+            return False
+        disposition = (
+            db.execute(
+                select(FirstArticleDisposition).where(
+                    FirstArticleDisposition.first_article_record_id == row.id
+                )
+            )
+            .scalars()
+            .first()
+        )
+        return disposition is None
+    if (
+        msg.message_type == "todo"
+        and msg.source_module == "equipment"
+        and msg.source_type == "maintenance_work_order"
+    ):
+        return getattr(row, "status", None) in {"pending", "in_progress", "overdue"}
+    return True
 
 
 def _failure_reason_hint(failure_reason: str | None) -> str | None:
@@ -234,7 +277,15 @@ def _sync_failed_first_article_messages(db: Session) -> None:
     rows = (
         db.execute(
             select(FirstArticleRecord)
-            .where(FirstArticleRecord.result == "failed")
+            .where(
+                FirstArticleRecord.result == "failed",
+                ~select(FirstArticleDisposition.id)
+                .where(
+                    FirstArticleDisposition.first_article_record_id
+                    == FirstArticleRecord.id
+                )
+                .exists(),
+            )
             .order_by(FirstArticleRecord.id.asc())
         )
         .scalars()
@@ -927,6 +978,78 @@ def mark_messages_read_batch(
     return count
 
 
+def close_registration_request_pending_messages(
+    db: Session,
+    *,
+    request_id: int,
+    reason: str,
+) -> int:
+    updated_count, _ = close_source_todo_messages(
+        db,
+        source_module="user",
+        source_type="registration_request",
+        source_id=str(request_id),
+        reason=reason,
+        action_code="message.registration_request_closed",
+        action_name="注册审批待办关闭",
+    )
+    return updated_count
+
+
+def close_source_todo_messages(
+    db: Session,
+    *,
+    source_module: str,
+    source_type: str,
+    source_id: str,
+    reason: str,
+    action_code: str,
+    action_name: str,
+) -> tuple[int, set[int]]:
+    stmt = select(Message).where(
+        Message.status == "active",
+        Message.message_type == "todo",
+        Message.source_module == source_module,
+        Message.source_type == source_type,
+        Message.source_id == source_id,
+    )
+    messages = db.execute(stmt).scalars().all()
+    updated_count = 0
+    message_ids: list[int] = []
+    for message in messages:
+        previous_status = message.status
+        message.status = _MESSAGE_STATUS_SOURCE_UNAVAILABLE
+        message_ids.append(int(message.id))
+        updated_count += 1
+        _write_message_state_audit_log(
+            db,
+            message=message,
+            action_code=action_code,
+            action_name=action_name,
+            previous_status=previous_status,
+            current_status=message.status,
+            reason=reason,
+        )
+    recipient_user_ids: set[int] = set()
+    if message_ids:
+        rows = (
+            db.execute(
+                select(MessageRecipient.recipient_user_id)
+                .where(
+                    MessageRecipient.message_id.in_(message_ids),
+                    MessageRecipient.is_deleted.is_(False),
+                )
+                .distinct()
+            )
+            .scalars()
+            .all()
+        )
+        recipient_user_ids = {int(user_id) for user_id in rows}
+    if updated_count:
+        db.flush()
+    return updated_count, recipient_user_ids
+
+
 def get_message_detail(
     db: Session,
     *,
@@ -1121,7 +1244,7 @@ def run_message_maintenance(
     archive_before = current_time - timedelta(days=_MESSAGE_RETENTION_DAYS)
     changed = False
     for msg in messages:
-        if msg.status == "active" and not _source_record_exists(db, msg):
+        if msg.status == "active" and not _message_source_is_actionable(db, msg):
             previous_status = msg.status
             msg.status = _MESSAGE_STATUS_SOURCE_UNAVAILABLE
             stats["source_unavailable_updated"] += 1
@@ -1132,7 +1255,7 @@ def run_message_maintenance(
                 action_name="消息来源失效",
                 previous_status=previous_status,
                 current_status=msg.status,
-                reason="source_record_missing_or_deleted",
+                reason="source_record_missing_deleted_or_processed",
             )
             changed = True
         if msg.status in {

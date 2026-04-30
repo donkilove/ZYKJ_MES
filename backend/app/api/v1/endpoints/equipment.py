@@ -16,6 +16,8 @@ from app.models.maintenance_work_order import MaintenanceWorkOrder
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
 from app.services.audit_service import write_audit_log
+from app.services.home_dashboard_service import invalidate_home_dashboard_cache
+from app.services.message_service import close_source_todo_messages
 from app.schemas.equipment import (
     EquipmentDetailResult,
     EquipmentExportResult,
@@ -915,7 +917,18 @@ def complete_maintenance_execution(
             "result_remark": payload.result_remark,
         },
     )
+    _, closed_todo_user_ids = close_source_todo_messages(
+        db,
+        source_module="equipment",
+        source_type="maintenance_work_order",
+        source_id=str(work_order_id),
+        reason="maintenance_work_order_completed",
+        action_code="message.maintenance_work_order_closed",
+        action_name="保养工单待办关闭",
+    )
     db.commit()
+    if closed_todo_user_ids:
+        invalidate_home_dashboard_cache(user_ids=closed_todo_user_ids)
     return success_response(to_work_order_item(updated), message="completed")
 
 
@@ -1113,7 +1126,18 @@ def cancel_maintenance_execution(
         operator=current_user,
         after_data={"status": "cancelled"},
     )
+    _, closed_todo_user_ids = close_source_todo_messages(
+        db,
+        source_module="equipment",
+        source_type="maintenance_work_order",
+        source_id=str(work_order_id),
+        reason="maintenance_work_order_cancelled",
+        action_code="message.maintenance_work_order_closed",
+        action_name="保养工单待办关闭",
+    )
     db.commit()
+    if closed_todo_user_ids:
+        invalidate_home_dashboard_cache(user_ids=closed_todo_user_ids)
     return success_response(to_work_order_item(updated), message="cancelled")
 
 
