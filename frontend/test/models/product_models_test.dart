@@ -18,6 +18,20 @@ void main() {
     expect(result.items.single.lastParameterSummary, '温度=200');
   });
 
+  test('ProductItem handles missing or invalid timestamps safely', () {
+    final item = ProductItem.fromJson({
+      'id': 8,
+      'name': '缺日期产品',
+      'effective_at': 'not-a-date',
+      'created_at': null,
+      'updated_at': '',
+    });
+
+    expect(item.effectiveAt, isNull);
+    expect(item.createdAt, DateTime(1970, 1, 1));
+    expect(item.updatedAt, DateTime(1970, 1, 1));
+  });
+
   test('ProductParameterItem defaults optional fields', () {
     final item = ProductParameterItem.fromJson({'name': '参数A'});
 

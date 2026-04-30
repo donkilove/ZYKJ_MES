@@ -60,7 +60,6 @@ class _FirstArticleScanReviewMobilePageState
 
   late final AuthService _authService;
   late final ScanReviewMobileLoginStorage _loginStorage;
-  AppSession? _session;
   ProductionService? _productionService;
   FirstArticleReviewSessionDetail? _detail;
   String _reviewResult = 'passed';
@@ -108,7 +107,6 @@ class _FirstArticleScanReviewMobilePageState
       return;
     }
     setState(() {
-      _session = null;
       _productionService = null;
       _detail = null;
       _loggedIn = false;
@@ -136,7 +134,6 @@ class _FirstArticleScanReviewMobilePageState
         return;
       }
       setState(() {
-        _session = session;
         _productionService = service;
         _detail = detail;
         _loggedIn = true;

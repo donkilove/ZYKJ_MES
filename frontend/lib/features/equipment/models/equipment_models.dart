@@ -3,6 +3,16 @@ const int maintenanceCycleMonthly = 30;
 const int maintenanceCycleQuarterly = 90;
 const int maintenanceCycleYearly = 365;
 
+DateTime? _parseDateTimeOrNull(Object? value) {
+  if (value is DateTime) return value;
+  final text = value?.toString().trim();
+  if (text == null || text.isEmpty) return null;
+  return DateTime.tryParse(text);
+}
+
+DateTime _parseDateTimeOrDefault(Object? value) =>
+    _parseDateTimeOrNull(value) ?? DateTime(1970, 1, 1);
+
 class EquipmentLedgerItem {
   EquipmentLedgerItem({
     required this.id,
@@ -38,8 +48,8 @@ class EquipmentLedgerItem {
       ownerName: (json['owner_name'] as String?) ?? '',
       remark: (json['remark'] as String?) ?? '',
       isEnabled: (json['is_enabled'] as bool?) ?? true,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
+      updatedAt: _parseDateTimeOrDefault(json['updated_at']),
     );
   }
 }
@@ -125,8 +135,8 @@ class MaintenanceItemEntry {
       defaultDurationMinutes: (json['default_duration_minutes'] as int?) ?? 60,
       standardDescription: (json['standard_description'] as String?) ?? '',
       isEnabled: (json['is_enabled'] as bool?) ?? true,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
+      updatedAt: _parseDateTimeOrDefault(json['updated_at']),
     );
   }
 }
@@ -188,13 +198,13 @@ class MaintenancePlanItem {
           (json['execution_process_name'] as String?) ??
           ((json['execution_process_code'] as String?) ?? ''),
       estimatedDurationMinutes: json['estimated_duration_minutes'] as int?,
-      startDate: DateTime.parse(json['start_date'] as String),
-      nextDueDate: DateTime.parse(json['next_due_date'] as String),
+      startDate: _parseDateTimeOrDefault(json['start_date']),
+      nextDueDate: _parseDateTimeOrDefault(json['next_due_date']),
       defaultExecutorUserId: json['default_executor_user_id'] as int?,
       defaultExecutorUsername: json['default_executor_username'] as String?,
       isEnabled: (json['is_enabled'] as bool?) ?? true,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
+      updatedAt: _parseDateTimeOrDefault(json['updated_at']),
     );
   }
 }
@@ -223,8 +233,8 @@ class MaintenancePlanGenerateResult {
     return MaintenancePlanGenerateResult(
       created: (json['created'] as bool?) ?? false,
       workOrderId: (json['work_order_id'] as int?) ?? 0,
-      dueDate: DateTime.parse(json['due_date'] as String),
-      nextDueDate: DateTime.parse(json['next_due_date'] as String),
+      dueDate: _parseDateTimeOrDefault(json['due_date']),
+      nextDueDate: _parseDateTimeOrDefault(json['next_due_date']),
     );
   }
 }
@@ -288,22 +298,18 @@ class MaintenanceWorkOrderItem {
       sourceItemName: json['source_item_name'] as String?,
       sourceExecutionProcessCode:
           json['source_execution_process_code'] as String?,
-      dueDate: DateTime.parse(json['due_date'] as String),
+      dueDate: _parseDateTimeOrDefault(json['due_date']),
       status: (json['status'] as String?) ?? 'pending',
       executorUserId: json['executor_user_id'] as int?,
       executorUsername: json['executor_username'] as String?,
-      startedAt: json['started_at'] != null
-          ? DateTime.parse(json['started_at'] as String)
-          : null,
-      completedAt: json['completed_at'] != null
-          ? DateTime.parse(json['completed_at'] as String)
-          : null,
+      startedAt: _parseDateTimeOrNull(json['started_at']),
+      completedAt: _parseDateTimeOrNull(json['completed_at']),
       resultSummary: json['result_summary'] as String?,
       resultRemark: json['result_remark'] as String?,
       attachmentLink: json['attachment_link'] as String?,
       attachmentName: json['attachment_name'] as String?,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
+      updatedAt: _parseDateTimeOrDefault(json['updated_at']),
     );
   }
 }
@@ -354,16 +360,16 @@ class MaintenanceRecordItem {
       workOrderId: (json['work_order_id'] as int?) ?? 0,
       equipmentName: (json['equipment_name'] as String?) ?? '',
       itemName: (json['item_name'] as String?) ?? '',
-      dueDate: DateTime.parse(json['due_date'] as String),
+      dueDate: _parseDateTimeOrDefault(json['due_date']),
       executorUserId: json['executor_user_id'] as int?,
       executorUsername: json['executor_username'] as String?,
-      completedAt: DateTime.parse(json['completed_at'] as String),
+      completedAt: _parseDateTimeOrDefault(json['completed_at']),
       resultSummary: (json['result_summary'] as String?) ?? '',
       resultRemark: json['result_remark'] as String?,
       attachmentLink: json['attachment_link'] as String?,
       attachmentName: json['attachment_name'] as String?,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
+      updatedAt: _parseDateTimeOrDefault(json['updated_at']),
     );
   }
 }
@@ -426,8 +432,8 @@ class EquipmentDetailResult {
       ownerName: (json['owner_name'] as String?) ?? '',
       remark: (json['remark'] as String?) ?? '',
       isEnabled: (json['is_enabled'] as bool?) ?? true,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
+      updatedAt: _parseDateTimeOrDefault(json['updated_at']),
       activePlanCount: (json['active_plan_count'] as int?) ?? 0,
       pendingWorkOrderCount: (json['pending_work_order_count'] as int?) ?? 0,
       activePlansScopeLimited:
@@ -506,27 +512,21 @@ class MaintenanceWorkOrderDetail extends MaintenanceWorkOrderItem {
       sourceItemName: json['source_item_name'] as String?,
       sourceExecutionProcessCode:
           json['source_execution_process_code'] as String?,
-      dueDate: DateTime.parse(json['due_date'] as String),
+      dueDate: _parseDateTimeOrDefault(json['due_date']),
       status: (json['status'] as String?) ?? 'pending',
       executorUserId: json['executor_user_id'] as int?,
       executorUsername: json['executor_username'] as String?,
-      startedAt: json['started_at'] != null
-          ? DateTime.parse(json['started_at'] as String)
-          : null,
-      completedAt: json['completed_at'] != null
-          ? DateTime.parse(json['completed_at'] as String)
-          : null,
+      startedAt: _parseDateTimeOrNull(json['started_at']),
+      completedAt: _parseDateTimeOrNull(json['completed_at']),
       resultSummary: json['result_summary'] as String?,
       resultRemark: json['result_remark'] as String?,
       attachmentLink: json['attachment_link'] as String?,
       attachmentName: json['attachment_name'] as String?,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
+      updatedAt: _parseDateTimeOrDefault(json['updated_at']),
       sourcePlanId: json['source_plan_id'] as int?,
       sourcePlanCycleDays: json['source_plan_cycle_days'] as int?,
-      sourcePlanStartDate: json['source_plan_start_date'] != null
-          ? DateTime.parse(json['source_plan_start_date'] as String)
-          : null,
+      sourcePlanStartDate: _parseDateTimeOrNull(json['source_plan_start_date']),
       sourcePlanSummary: json['source_plan_summary'] as String?,
       sourceEquipmentName: json['source_equipment_name'] as String?,
       sourceItemId: json['source_item_id'] as int?,
@@ -578,21 +578,19 @@ class MaintenanceRecordDetail extends MaintenanceRecordItem {
       workOrderId: (json['work_order_id'] as int?) ?? 0,
       equipmentName: (json['equipment_name'] as String?) ?? '',
       itemName: (json['item_name'] as String?) ?? '',
-      dueDate: DateTime.parse(json['due_date'] as String),
+      dueDate: _parseDateTimeOrDefault(json['due_date']),
       executorUserId: json['executor_user_id'] as int?,
       executorUsername: json['executor_username'] as String?,
-      completedAt: DateTime.parse(json['completed_at'] as String),
+      completedAt: _parseDateTimeOrDefault(json['completed_at']),
       resultSummary: (json['result_summary'] as String?) ?? '',
       resultRemark: json['result_remark'] as String?,
       attachmentLink: json['attachment_link'] as String?,
       attachmentName: json['attachment_name'] as String?,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
+      updatedAt: _parseDateTimeOrDefault(json['updated_at']),
       sourcePlanId: json['source_plan_id'] as int?,
       sourcePlanCycleDays: json['source_plan_cycle_days'] as int?,
-      sourcePlanStartDate: json['source_plan_start_date'] != null
-          ? DateTime.parse(json['source_plan_start_date'] as String)
-          : null,
+      sourcePlanStartDate: _parseDateTimeOrNull(json['source_plan_start_date']),
       sourcePlanSummary: json['source_plan_summary'] as String?,
       sourceEquipmentCode: json['source_equipment_code'] as String?,
       sourceEquipmentName: json['source_equipment_name'] as String?,
@@ -653,8 +651,8 @@ class EquipmentRuleItem {
           ? DateTime.tryParse(json['effective_at'] as String)
           : null,
       remark: (json['remark'] as String?) ?? '',
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
+      updatedAt: _parseDateTimeOrDefault(json['updated_at']),
     );
   }
 }
@@ -720,8 +718,8 @@ class EquipmentRuntimeParameterItem {
           : null,
       isEnabled: (json['is_enabled'] as bool?) ?? true,
       remark: (json['remark'] as String?) ?? '',
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
+      updatedAt: _parseDateTimeOrDefault(json['updated_at']),
     );
   }
 }

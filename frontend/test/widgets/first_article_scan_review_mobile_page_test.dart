@@ -8,10 +8,10 @@ import 'package:mes_client/features/production/presentation/scan_review_mobile_l
 import 'package:mes_client/features/production/services/production_service.dart';
 
 class _FakeAuthService extends AuthService {
-  _FakeAuthService({required this.token, this.expiresIn = 7 * 24 * 60 * 60});
+  _FakeAuthService({required this.token});
 
   final String token;
-  final int expiresIn;
+  static const int _expiresIn = 7 * 24 * 60 * 60;
   String? lastUsername;
   String? lastPassword;
 
@@ -24,7 +24,7 @@ class _FakeAuthService extends AuthService {
   }) async {
     lastUsername = username;
     lastPassword = password;
-    return (token: token, mustChangePassword: false, expiresIn: expiresIn);
+    return (token: token, mustChangePassword: false, expiresIn: _expiresIn);
   }
 }
 

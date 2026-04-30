@@ -22,7 +22,9 @@ class EquipmentService {
 
   Future<List<EquipmentOwnerOption>> listAllOwners() async {
     final uri = Uri.parse('$_basePath/owners');
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http
+        .get(uri, headers: _authHeaders)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -43,7 +45,9 @@ class EquipmentService {
     required int equipmentId,
   }) async {
     final uri = Uri.parse('$_basePath/ledger/$equipmentId/detail');
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http
+        .get(uri, headers: _authHeaders)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -51,14 +55,18 @@ class EquipmentService {
         response.statusCode,
       );
     }
-    return EquipmentDetailResult.fromJson((json['data'] as Map<String, dynamic>?) ?? const {});
+    return EquipmentDetailResult.fromJson(
+      (json['data'] as Map<String, dynamic>?) ?? const {},
+    );
   }
 
   Future<MaintenanceWorkOrderDetail> getWorkOrderDetail({
     required int workOrderId,
   }) async {
     final uri = Uri.parse('$_basePath/executions/$workOrderId/detail');
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http
+        .get(uri, headers: _authHeaders)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -73,7 +81,9 @@ class EquipmentService {
 
   Future<void> cancelExecution({required int workOrderId}) async {
     final uri = Uri.parse('$_basePath/executions/$workOrderId/cancel');
-    final response = await http.post(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http
+        .post(uri, headers: _authHeaders)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -87,7 +97,9 @@ class EquipmentService {
     required int recordId,
   }) async {
     final uri = Uri.parse('$_basePath/records/$recordId/detail');
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http
+        .get(uri, headers: _authHeaders)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -122,7 +134,9 @@ class EquipmentService {
       query['owner_name'] = ownerName.trim();
     }
     final uri = Uri.parse('$_basePath/ledger').replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http
+        .get(uri, headers: _authHeaders)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -152,18 +166,20 @@ class EquipmentService {
     String remark = '',
   }) async {
     final uri = Uri.parse('$_basePath/ledger');
-    final response = await http.post(
-      uri,
-      headers: _authHeaders,
-      body: jsonEncode({
-        'code': code,
-        'name': name,
-        'model': model,
-        'location': location,
-        'owner_name': ownerName,
-        'remark': remark,
-      }),
-    ).timeout(const Duration(seconds: 30));
+    final response = await http
+        .post(
+          uri,
+          headers: _authHeaders,
+          body: jsonEncode({
+            'code': code,
+            'name': name,
+            'model': model,
+            'location': location,
+            'owner_name': ownerName,
+            'remark': remark,
+          }),
+        )
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 201) {
       throw ApiException(
@@ -183,18 +199,20 @@ class EquipmentService {
     String remark = '',
   }) async {
     final uri = Uri.parse('$_basePath/ledger/$equipmentId');
-    final response = await http.put(
-      uri,
-      headers: _authHeaders,
-      body: jsonEncode({
-        'code': code,
-        'name': name,
-        'model': model,
-        'location': location,
-        'owner_name': ownerName,
-        'remark': remark,
-      }),
-    ).timeout(const Duration(seconds: 30));
+    final response = await http
+        .put(
+          uri,
+          headers: _authHeaders,
+          body: jsonEncode({
+            'code': code,
+            'name': name,
+            'model': model,
+            'location': location,
+            'owner_name': ownerName,
+            'remark': remark,
+          }),
+        )
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -209,11 +227,13 @@ class EquipmentService {
     required bool enabled,
   }) async {
     final uri = Uri.parse('$_basePath/ledger/$equipmentId/toggle');
-    final response = await http.post(
-      uri,
-      headers: _authHeaders,
-      body: jsonEncode({'enabled': enabled}),
-    ).timeout(const Duration(seconds: 30));
+    final response = await http
+        .post(
+          uri,
+          headers: _authHeaders,
+          body: jsonEncode({'enabled': enabled}),
+        )
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -229,7 +249,9 @@ class EquipmentService {
 
   Future<void> deleteEquipment({required int equipmentId}) async {
     final uri = Uri.parse('$_basePath/ledger/$equipmentId');
-    final response = await http.delete(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http
+        .delete(uri, headers: _authHeaders)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -257,7 +279,9 @@ class EquipmentService {
       query['category'] = category.trim();
     }
     final uri = Uri.parse('$_basePath/items').replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http
+        .get(uri, headers: _authHeaders)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -286,17 +310,19 @@ class EquipmentService {
     String standardDescription = '',
   }) async {
     final uri = Uri.parse('$_basePath/items');
-    final response = await http.post(
-      uri,
-      headers: _authHeaders,
-      body: jsonEncode({
-        'name': name,
-        'default_cycle_days': defaultCycleDays,
-        'category': category,
-        'default_duration_minutes': defaultDurationMinutes,
-        'standard_description': standardDescription,
-      }),
-    ).timeout(const Duration(seconds: 30));
+    final response = await http
+        .post(
+          uri,
+          headers: _authHeaders,
+          body: jsonEncode({
+            'name': name,
+            'default_cycle_days': defaultCycleDays,
+            'category': category,
+            'default_duration_minutes': defaultDurationMinutes,
+            'standard_description': standardDescription,
+          }),
+        )
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 201) {
       throw ApiException(
@@ -315,17 +341,19 @@ class EquipmentService {
     String standardDescription = '',
   }) async {
     final uri = Uri.parse('$_basePath/items/$itemId');
-    final response = await http.put(
-      uri,
-      headers: _authHeaders,
-      body: jsonEncode({
-        'name': name,
-        'default_cycle_days': defaultCycleDays,
-        'category': category,
-        'default_duration_minutes': defaultDurationMinutes,
-        'standard_description': standardDescription,
-      }),
-    ).timeout(const Duration(seconds: 30));
+    final response = await http
+        .put(
+          uri,
+          headers: _authHeaders,
+          body: jsonEncode({
+            'name': name,
+            'default_cycle_days': defaultCycleDays,
+            'category': category,
+            'default_duration_minutes': defaultDurationMinutes,
+            'standard_description': standardDescription,
+          }),
+        )
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -340,11 +368,13 @@ class EquipmentService {
     required bool enabled,
   }) async {
     final uri = Uri.parse('$_basePath/items/$itemId/toggle');
-    final response = await http.post(
-      uri,
-      headers: _authHeaders,
-      body: jsonEncode({'enabled': enabled}),
-    ).timeout(const Duration(seconds: 30));
+    final response = await http
+        .post(
+          uri,
+          headers: _authHeaders,
+          body: jsonEncode({'enabled': enabled}),
+        )
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -360,7 +390,9 @@ class EquipmentService {
 
   Future<void> deleteMaintenanceItem({required int itemId}) async {
     final uri = Uri.parse('$_basePath/items/$itemId');
-    final response = await http.delete(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http
+        .delete(uri, headers: _authHeaders)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -397,7 +429,9 @@ class EquipmentService {
       query['default_executor_user_id'] = '$defaultExecutorUserId';
     }
     final uri = Uri.parse('$_basePath/plans').replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http
+        .get(uri, headers: _authHeaders)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -429,20 +463,24 @@ class EquipmentService {
     int? cycleDays,
   }) async {
     final uri = Uri.parse('$_basePath/plans');
-    final response = await http.post(
-      uri,
-      headers: _authHeaders,
-      body: jsonEncode({
-        'equipment_id': equipmentId,
-        'item_id': itemId,
-        'execution_process_code': executionProcessCode,
-        'estimated_duration_minutes': estimatedDurationMinutes,
-        'start_date': _formatDate(startDate),
-        'next_due_date': nextDueDate == null ? null : _formatDate(nextDueDate),
-        'default_executor_user_id': defaultExecutorUserId,
-        'cycle_days': cycleDays,
-      }),
-    ).timeout(const Duration(seconds: 30));
+    final response = await http
+        .post(
+          uri,
+          headers: _authHeaders,
+          body: jsonEncode({
+            'equipment_id': equipmentId,
+            'item_id': itemId,
+            'execution_process_code': executionProcessCode,
+            'estimated_duration_minutes': estimatedDurationMinutes,
+            'start_date': _formatDate(startDate),
+            'next_due_date': nextDueDate == null
+                ? null
+                : _formatDate(nextDueDate),
+            'default_executor_user_id': defaultExecutorUserId,
+            'cycle_days': cycleDays,
+          }),
+        )
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 201) {
       throw ApiException(
@@ -464,20 +502,24 @@ class EquipmentService {
     int? cycleDays,
   }) async {
     final uri = Uri.parse('$_basePath/plans/$planId');
-    final response = await http.put(
-      uri,
-      headers: _authHeaders,
-      body: jsonEncode({
-        'equipment_id': equipmentId,
-        'item_id': itemId,
-        'execution_process_code': executionProcessCode,
-        'estimated_duration_minutes': estimatedDurationMinutes,
-        'start_date': _formatDate(startDate),
-        'next_due_date': nextDueDate == null ? null : _formatDate(nextDueDate),
-        'default_executor_user_id': defaultExecutorUserId,
-        'cycle_days': cycleDays,
-      }),
-    ).timeout(const Duration(seconds: 30));
+    final response = await http
+        .put(
+          uri,
+          headers: _authHeaders,
+          body: jsonEncode({
+            'equipment_id': equipmentId,
+            'item_id': itemId,
+            'execution_process_code': executionProcessCode,
+            'estimated_duration_minutes': estimatedDurationMinutes,
+            'start_date': _formatDate(startDate),
+            'next_due_date': nextDueDate == null
+                ? null
+                : _formatDate(nextDueDate),
+            'default_executor_user_id': defaultExecutorUserId,
+            'cycle_days': cycleDays,
+          }),
+        )
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -492,11 +534,13 @@ class EquipmentService {
     required bool enabled,
   }) async {
     final uri = Uri.parse('$_basePath/plans/$planId/toggle');
-    final response = await http.post(
-      uri,
-      headers: _authHeaders,
-      body: jsonEncode({'enabled': enabled}),
-    ).timeout(const Duration(seconds: 30));
+    final response = await http
+        .post(
+          uri,
+          headers: _authHeaders,
+          body: jsonEncode({'enabled': enabled}),
+        )
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -508,7 +552,9 @@ class EquipmentService {
 
   Future<void> deleteMaintenancePlan({required int planId}) async {
     final uri = Uri.parse('$_basePath/plans/$planId');
-    final response = await http.delete(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http
+        .delete(uri, headers: _authHeaders)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -522,7 +568,9 @@ class EquipmentService {
     required int planId,
   }) async {
     final uri = Uri.parse('$_basePath/plans/$planId/generate');
-    final response = await http.post(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http
+        .post(uri, headers: _authHeaders)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -566,7 +614,9 @@ class EquipmentService {
     final uri = Uri.parse(
       '$_basePath/executions',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http
+        .get(uri, headers: _authHeaders)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -589,7 +639,9 @@ class EquipmentService {
 
   Future<void> startExecution({required int workOrderId}) async {
     final uri = Uri.parse('$_basePath/executions/$workOrderId/start');
-    final response = await http.post(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http
+        .post(uri, headers: _authHeaders)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -606,15 +658,17 @@ class EquipmentService {
     String? attachmentLink,
   }) async {
     final uri = Uri.parse('$_basePath/executions/$workOrderId/complete');
-    final response = await http.post(
-      uri,
-      headers: _authHeaders,
-      body: jsonEncode({
-        'result_summary': resultSummary,
-        'result_remark': resultRemark,
-        'attachment_link': attachmentLink,
-      }),
-    ).timeout(const Duration(seconds: 30));
+    final response = await http
+        .post(
+          uri,
+          headers: _authHeaders,
+          body: jsonEncode({
+            'result_summary': resultSummary,
+            'result_remark': resultRemark,
+            'attachment_link': attachmentLink,
+          }),
+        )
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -654,7 +708,9 @@ class EquipmentService {
       query['equipment_id'] = '$equipmentId';
     }
     final uri = Uri.parse('$_basePath/records').replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http
+        .get(uri, headers: _authHeaders)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -719,7 +775,9 @@ class EquipmentService {
     if (keyword != null && keyword.isNotEmpty) query['keyword'] = keyword;
     if (isEnabled != null) query['is_enabled'] = '$isEnabled';
     final uri = Uri.parse('$_basePath/rules').replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http
+        .get(uri, headers: _authHeaders)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -731,7 +789,10 @@ class EquipmentService {
     final items = (data['items'] as List? ?? const [])
         .map((e) => EquipmentRuleItem.fromJson(e as Map<String, dynamic>))
         .toList();
-    return EquipmentRuleListResult(total: (data['total'] as int?) ?? 0, items: items);
+    return EquipmentRuleListResult(
+      total: (data['total'] as int?) ?? 0,
+      items: items,
+    );
   }
 
   Future<void> createEquipmentRule({
@@ -759,9 +820,11 @@ class EquipmentService {
           : _formatDateTimeIso(effectiveAt),
       'remark': remark,
     });
-    final response = await http.post(uri, headers: _authHeaders, body: body).timeout(const Duration(seconds: 30));
+    final response = await http
+        .post(uri, headers: _authHeaders, body: body)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
-    if (response.statusCode != 200) {
+    if (response.statusCode != 200 && response.statusCode != 201) {
       throw ApiException(
         _extractErrorMessage(json, response.statusCode),
         response.statusCode,
@@ -795,7 +858,9 @@ class EquipmentService {
           : _formatDateTimeIso(effectiveAt),
       'remark': remark,
     });
-    final response = await http.put(uri, headers: _authHeaders, body: body).timeout(const Duration(seconds: 30));
+    final response = await http
+        .put(uri, headers: _authHeaders, body: body)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -811,7 +876,9 @@ class EquipmentService {
   }) async {
     final uri = Uri.parse('$_basePath/rules/$ruleId/toggle');
     final body = jsonEncode({'enabled': isEnabled});
-    final response = await http.patch(uri, headers: _authHeaders, body: body).timeout(const Duration(seconds: 30));
+    final response = await http
+        .patch(uri, headers: _authHeaders, body: body)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -823,7 +890,9 @@ class EquipmentService {
 
   Future<void> deleteEquipmentRule(int ruleId) async {
     final uri = Uri.parse('$_basePath/rules/$ruleId');
-    final response = await http.delete(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http
+        .delete(uri, headers: _authHeaders)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -853,7 +922,9 @@ class EquipmentService {
     final uri = Uri.parse(
       '$_basePath/runtime-parameters',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http
+        .get(uri, headers: _authHeaders)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -909,9 +980,11 @@ class EquipmentService {
       'is_enabled': isEnabled,
       'remark': remark,
     });
-    final response = await http.post(uri, headers: _authHeaders, body: body).timeout(const Duration(seconds: 30));
+    final response = await http
+        .post(uri, headers: _authHeaders, body: body)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
-    if (response.statusCode != 200) {
+    if (response.statusCode != 200 && response.statusCode != 201) {
       throw ApiException(
         _extractErrorMessage(json, response.statusCode),
         response.statusCode,
@@ -955,7 +1028,9 @@ class EquipmentService {
       'is_enabled': isEnabled,
       'remark': remark,
     });
-    final response = await http.put(uri, headers: _authHeaders, body: body).timeout(const Duration(seconds: 30));
+    final response = await http
+        .put(uri, headers: _authHeaders, body: body)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -967,7 +1042,9 @@ class EquipmentService {
 
   Future<void> deleteRuntimeParameter(int paramId) async {
     final uri = Uri.parse('$_basePath/runtime-parameters/$paramId');
-    final response = await http.delete(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http
+        .delete(uri, headers: _authHeaders)
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(
@@ -982,11 +1059,13 @@ class EquipmentService {
     required bool enabled,
   }) async {
     final uri = Uri.parse('$_basePath/runtime-parameters/$paramId/toggle');
-    final response = await http.patch(
-      uri,
-      headers: _authHeaders,
-      body: jsonEncode({'enabled': enabled}),
-    ).timeout(const Duration(seconds: 30));
+    final response = await http
+        .patch(
+          uri,
+          headers: _authHeaders,
+          body: jsonEncode({'enabled': enabled}),
+        )
+        .timeout(const Duration(seconds: 30));
     final json = _decodeBody(response);
     if (response.statusCode != 200) {
       throw ApiException(

@@ -1,3 +1,13 @@
+DateTime? _parseDateTimeOrNull(Object? value) {
+  if (value is DateTime) return value;
+  final text = value?.toString().trim();
+  if (text == null || text.isEmpty) return null;
+  return DateTime.tryParse(text);
+}
+
+DateTime _parseDateTimeOrDefault(Object? value) =>
+    _parseDateTimeOrNull(value) ?? DateTime(1970, 1, 1);
+
 class ProductItem {
   ProductItem({
     required this.id,
@@ -46,13 +56,11 @@ class ProductItem {
               : '-'),
       effectiveVersion: (json['effective_version'] as int?) ?? 0,
       effectiveVersionLabel: json['effective_version_label'] as String?,
-      effectiveAt: (json['effective_at'] as String?) == null
-          ? null
-          : DateTime.parse(json['effective_at'] as String),
+      effectiveAt: _parseDateTimeOrNull(json['effective_at']),
       inactiveReason: json['inactive_reason'] as String?,
       lastParameterSummary: json['last_parameter_summary'] as String?,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
+      updatedAt: _parseDateTimeOrDefault(json['updated_at']),
     );
   }
 }
@@ -209,7 +217,7 @@ class ProductParameterVersionListItem {
       lifecycleStatus: (json['lifecycle_status'] as String?) ?? 'draft',
       isCurrentVersion: (json['is_current_version'] as bool?) ?? false,
       isEffectiveVersion: (json['is_effective_version'] as bool?) ?? false,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
       parameterSummary: json['parameter_summary'] as String?,
       parameterCount: (json['parameter_count'] as int?) ?? 0,
       matchedParameterName: json['matched_parameter_name'] as String?,
@@ -217,7 +225,7 @@ class ProductParameterVersionListItem {
       lastModifiedParameter: json['last_modified_parameter'] as String?,
       lastModifiedParameterCategory:
           json['last_modified_parameter_category'] as String?,
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      updatedAt: _parseDateTimeOrDefault(json['updated_at']),
     );
   }
 }
@@ -284,7 +292,7 @@ class ProductParameterHistoryItem {
       afterSummary: json['after_summary'] as String?,
       beforeSnapshot: (json['before_snapshot'] as String?) ?? '{}',
       afterSnapshot: (json['after_snapshot'] as String?) ?? '{}',
-      createdAt: DateTime.parse(json['created_at'] as String),
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
     );
   }
 }
@@ -382,10 +390,9 @@ class ProductDetailResult {
         json['detail_parameters'] as Map<String, dynamic>? ?? const {},
       ),
       detailParameterMessage: json['detail_parameter_message'] as String?,
-      latestVersionChangedAt:
-          (json['latest_version_changed_at'] as String?) == null
-          ? null
-          : DateTime.parse(json['latest_version_changed_at'] as String),
+      latestVersionChangedAt: _parseDateTimeOrNull(
+        json['latest_version_changed_at'],
+      ),
       versionTotal: (json['version_total'] as int?) ?? 0,
       versions: (json['versions'] as List<dynamic>? ?? const [])
           .map(
@@ -561,17 +568,13 @@ class ProductVersionItem {
       lifecycleStatus: (json['lifecycle_status'] as String?) ?? '',
       action: (json['action'] as String?) ?? '',
       note: json['note'] as String?,
-      effectiveAt: json['effective_at'] != null
-          ? DateTime.parse(json['effective_at'] as String)
-          : null,
+      effectiveAt: _parseDateTimeOrNull(json['effective_at']),
       sourceVersion: json['source_version'] as int?,
       sourceVersionLabel: json['source_version_label'] as String?,
       createdByUserId: json['created_by_user_id'] as int?,
       createdByUsername: json['created_by_username'] as String?,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: json['updated_at'] != null
-          ? DateTime.parse(json['updated_at'] as String)
-          : null,
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
+      updatedAt: _parseDateTimeOrNull(json['updated_at']),
     );
   }
 }

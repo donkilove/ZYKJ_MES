@@ -9,6 +9,9 @@ DateTime? _parseDateOrNull(Object? value) {
   return DateTime.tryParse(text);
 }
 
+DateTime _parseDateOrDefault(Object? value) =>
+    _parseDateOrNull(value) ?? DateTime(1970, 1, 1);
+
 String productionOrderStatusLabel(String status) {
   switch (status) {
     case 'pending':
@@ -164,8 +167,8 @@ class ProductionOrderItem {
               .toList(),
       createdByUserId: json['created_by_user_id'] as int?,
       createdByUsername: json['created_by_username'] as String?,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateOrDefault(json['created_at']),
+      updatedAt: _parseDateOrDefault(json['updated_at']),
     );
   }
 }
@@ -218,8 +221,8 @@ class ProductionOrderProcessItem {
       status: (json['status'] as String?) ?? 'pending',
       visibleQuantity: (json['visible_quantity'] as int?) ?? 0,
       completedQuantity: (json['completed_quantity'] as int?) ?? 0,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateOrDefault(json['created_at']),
+      updatedAt: _parseDateOrDefault(json['updated_at']),
     );
   }
 }
@@ -265,8 +268,8 @@ class ProductionSubOrderItem {
       completedQuantity: (json['completed_quantity'] as int?) ?? 0,
       status: (json['status'] as String?) ?? 'pending',
       isVisible: (json['is_visible'] as bool?) ?? false,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateOrDefault(json['created_at']),
+      updatedAt: _parseDateOrDefault(json['updated_at']),
     );
   }
 }
@@ -304,7 +307,7 @@ class ProductionRecordItem {
       operatorUsername: (json['operator_username'] as String?) ?? '',
       productionQuantity: (json['production_quantity'] as int?) ?? 0,
       recordType: (json['record_type'] as String?) ?? 'production',
-      createdAt: DateTime.parse(json['created_at'] as String),
+      createdAt: _parseDateOrDefault(json['created_at']),
     );
   }
 }
@@ -354,7 +357,7 @@ class ProductionEventLogItem {
       operatorUserId: json['operator_user_id'] as int?,
       operatorUsername: json['operator_username'] as String?,
       payloadJson: json['payload_json'] as String?,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      createdAt: _parseDateOrDefault(json['created_at']),
     );
   }
 }
@@ -534,7 +537,7 @@ class MyOrderItem {
           (json['can_create_manual_repair'] as bool?) ?? false,
       dueDate: _parseDateOrNull(json['due_date']),
       remark: json['remark'] as String?,
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      updatedAt: _parseDateOrDefault(json['updated_at']),
     );
   }
 }
@@ -788,7 +791,7 @@ class FirstArticleReviewSessionResult {
     return FirstArticleReviewSessionResult(
       sessionId: (json['session_id'] as int?) ?? 0,
       reviewUrl: json['review_url'] as String?,
-      expiresAt: DateTime.parse(json['expires_at'] as String),
+      expiresAt: _parseDateOrDefault(json['expires_at']),
       status: (json['status'] as String?) ?? '',
       firstArticleRecordId: json['first_article_record_id'] as int?,
       reviewerUserId: json['reviewer_user_id'] as int?,
@@ -837,7 +840,7 @@ class FirstArticleReviewSessionDetail {
     return FirstArticleReviewSessionDetail(
       sessionId: (json['session_id'] as int?) ?? 0,
       status: (json['status'] as String?) ?? '',
-      expiresAt: DateTime.parse(json['expires_at'] as String),
+      expiresAt: _parseDateOrDefault(json['expires_at']),
       orderId: (json['order_id'] as int?) ?? 0,
       orderCode: (json['order_code'] as String?) ?? '',
       productName: (json['product_name'] as String?) ?? '',
@@ -989,8 +992,8 @@ class PipelineInstanceItem {
       invalidatedAt: json['invalidated_at'] != null
           ? DateTime.tryParse(json['invalidated_at'] as String)
           : null,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateOrDefault(json['created_at']),
+      updatedAt: _parseDateOrDefault(json['updated_at']),
     );
   }
 }
@@ -1077,8 +1080,8 @@ class AssistAuthorizationItem {
       firstArticleUsedAt: _parseDateOrNull(json['first_article_used_at']),
       endProductionUsedAt: _parseDateOrNull(json['end_production_used_at']),
       consumedAt: _parseDateOrNull(json['consumed_at']),
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateOrDefault(json['created_at']),
+      updatedAt: _parseDateOrDefault(json['updated_at']),
     );
   }
 }
@@ -1789,13 +1792,13 @@ class RepairOrderItem {
       repairedQuantity: (json['repaired_quantity'] as int?) ?? 0,
       scrapQuantity: (json['scrap_quantity'] as int?) ?? 0,
       scrapReplenished: (json['scrap_replenished'] as bool?) ?? false,
-      repairTime: DateTime.parse(json['repair_time'] as String),
+      repairTime: _parseDateOrDefault(json['repair_time']),
       status: (json['status'] as String?) ?? 'in_repair',
       completedAt: _parseDateOrNull(json['completed_at']),
       repairOperatorUserId: json['repair_operator_user_id'] as int?,
       repairOperatorUsername: json['repair_operator_username'] as String?,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateOrDefault(json['created_at']),
+      updatedAt: _parseDateOrDefault(json['updated_at']),
     );
   }
 }
@@ -1903,8 +1906,8 @@ class ScrapStatisticsItem {
       lastScrapTime: _parseDateOrNull(json['last_scrap_time']),
       progress: (json['progress'] as String?) ?? 'pending_apply',
       appliedAt: _parseDateOrNull(json['applied_at']),
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateOrDefault(json['created_at']),
+      updatedAt: _parseDateOrDefault(json['updated_at']),
       relatedRepairOrders:
           (json['related_repair_orders'] as List<dynamic>? ?? const [])
               .map(
@@ -1960,7 +1963,7 @@ class ScrapEventLogItem {
       eventTitle: (json['event_title'] as String?) ?? '',
       eventDetail: json['event_detail'] as String?,
       payloadJson: json['payload_json'] as String?,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      createdAt: _parseDateOrDefault(json['created_at']),
     );
   }
 }
@@ -1994,7 +1997,7 @@ class ScrapRelatedRepairOrderItem {
       repairQuantity: (json['repair_quantity'] as int?) ?? 0,
       repairedQuantity: (json['repaired_quantity'] as int?) ?? 0,
       scrapQuantity: (json['scrap_quantity'] as int?) ?? 0,
-      repairTime: DateTime.parse(json['repair_time'] as String),
+      repairTime: _parseDateOrDefault(json['repair_time']),
       completedAt: _parseDateOrNull(json['completed_at']),
     );
   }
@@ -2259,7 +2262,7 @@ class RepairOrderDetailItem {
       repairedQuantity: (json['repaired_quantity'] as int?) ?? 0,
       scrapQuantity: (json['scrap_quantity'] as int?) ?? 0,
       scrapReplenished: (json['scrap_replenished'] as bool?) ?? false,
-      repairTime: DateTime.parse(json['repair_time'] as String),
+      repairTime: _parseDateOrDefault(json['repair_time']),
       status: (json['status'] as String?) ?? 'in_repair',
       completedAt: _parseDateOrNull(json['completed_at']),
       repairOperatorUserId: json['repair_operator_user_id'] as int?,
@@ -2325,7 +2328,7 @@ class RepairEventLogDetailItem {
       eventTitle: (json['event_title'] as String?) ?? '',
       eventDetail: json['event_detail'] as String?,
       payloadJson: json['payload_json'] as String?,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      createdAt: _parseDateOrDefault(json['created_at']),
     );
   }
 }

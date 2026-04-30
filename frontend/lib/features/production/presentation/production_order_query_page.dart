@@ -141,8 +141,8 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     }
     try {
       final payload = jsonDecode(rawPayload) as Map<String, dynamic>;
-      final dashboardFilter =
-          (payload['dashboard_filter'] as String? ?? '').trim();
+      final dashboardFilter = (payload['dashboard_filter'] as String? ?? '')
+          .trim();
       if (dashboardFilter != 'exception') {
         return;
       }
@@ -172,8 +172,10 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
 
   String _buildQuantitySummary(MyOrderItem item) {
     final assigned = item.userAssignedQuantity;
-    final completed =
-        item.userCompletedQuantity ?? item.processCompletedQuantity;
+    final userCompleted = item.userCompletedQuantity;
+    final completed = userCompleted != null && userCompleted > 0
+        ? userCompleted
+        : item.processCompletedQuantity;
     if (assigned != null) {
       return '可见${item.visibleQuantity} / 分配$assigned / 完成$completed';
     }
@@ -397,7 +399,8 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
       _stopPolling();
       return;
     }
-    final shouldCatchUp = previousPollingEnabled == false && widget.pollingEnabled;
+    final shouldCatchUp =
+        previousPollingEnabled == false && widget.pollingEnabled;
     if (shouldCatchUp) {
       unawaited(_loadOrders(silent: true));
     }
@@ -838,10 +841,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
               ),
               items: [
                 const DropdownMenuItem(value: 'own', child: Text('我的工单')),
-                const DropdownMenuItem(
-                  value: 'assist',
-                  child: Text('我的代班工单'),
-                ),
+                const DropdownMenuItem(value: 'assist', child: Text('我的代班工单')),
                 if (widget.canProxyView)
                   const DropdownMenuItem(
                     value: 'proxy',
@@ -887,10 +887,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                   ..._proxyStages.map(
                     (entry) => DropdownMenuItem<int?>(
                       value: entry.id,
-                      child: Text(
-                        entry.name,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      child: Text(entry.name, overflow: TextOverflow.ellipsis),
                     ),
                   ),
                 ],
@@ -949,8 +946,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                       ),
                     )
                     .toList(),
-                onChanged:
-                    _proxyStageId == null || _proxyViewOperators.isEmpty
+                onChanged: _proxyStageId == null || _proxyViewOperators.isEmpty
                     ? null
                     : (value) {
                         setState(() {
@@ -975,10 +971,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
               items: const [
                 DropdownMenuItem(value: 'all', child: Text('全部')),
                 DropdownMenuItem(value: 'pending', child: Text('待生产')),
-                DropdownMenuItem(
-                  value: 'in_progress',
-                  child: Text('生产中'),
-                ),
+                DropdownMenuItem(value: 'in_progress', child: Text('生产中')),
                 DropdownMenuItem(value: 'completed', child: Text('生产完成')),
               ],
               onChanged: (value) {
@@ -1005,10 +998,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                 isDense: true,
               ),
               items: [
-                const DropdownMenuItem<int?>(
-                  value: null,
-                  child: Text('全部工序'),
-                ),
+                const DropdownMenuItem<int?>(value: null, child: Text('全部工序')),
                 ...processFilterOptions.map(
                   (entry) => DropdownMenuItem<int?>(
                     value: entry.id,
@@ -1035,11 +1025,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     final filtersToolbar = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
-      children: [
-        keywordRow,
-        const SizedBox(height: 12),
-        filterRow,
-      ],
+      children: [keywordRow, const SizedBox(height: 12), filterRow],
     );
 
     return MesCrudPageScaffold(
@@ -1050,10 +1036,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
       filters: filtersToolbar,
       banner: _message.isEmpty
           ? null
-          : Text(
-              _message,
-              style: TextStyle(color: theme.colorScheme.error),
-            ),
+          : Text(_message, style: TextStyle(color: theme.colorScheme.error)),
       content: CrudListTableSection(
         cardKey: const ValueKey('productionOrderQueryListCard'),
         loading: _loading,
@@ -1088,18 +1071,13 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                 ),
                 DataCell(Text(item.currentProcessName)),
                 DataCell(Text(_buildQuantitySummary(item))),
-                DataCell(
-                  ProductionOrderStatusChip(status: item.orderStatus),
-                ),
+                DataCell(ProductionOrderStatusChip(status: item.orderStatus)),
                 DataCell(Text(_formatDate(item.dueDate))),
-                DataCell(
-                  Text(remark == null || remark.isEmpty ? '-' : remark),
-                ),
+                DataCell(Text(remark == null || remark.isEmpty ? '-' : remark)),
                 DataCell(
                   UnifiedListTableHeaderStyle.actionMenuButton<String>(
                     theme: theme,
-                    onSelected: (action) =>
-                        _handleRowAction(action, item),
+                    onSelected: (action) => _handleRowAction(action, item),
                     itemBuilder: (context) => [
                       const PopupMenuItem<String>(
                         value: 'detail',
@@ -1114,8 +1092,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                           value: 'first_article',
                           child: Text('开始首件'),
                         ),
-                      if (widget.canEndProduction &&
-                          item.canEndProduction)
+                      if (widget.canEndProduction && item.canEndProduction)
                         const PopupMenuItem<String>(
                           value: 'end_production',
                           child: Text('结束生产'),

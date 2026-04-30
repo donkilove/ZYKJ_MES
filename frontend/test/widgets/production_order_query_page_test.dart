@@ -48,6 +48,8 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
   int? lastTargetOperatorUserId;
   int? lastHelperUserId;
   String? lastAssistReason;
+  int processCompletedQuantity = 4;
+  int? userCompletedQuantity = 4;
 
   @override
   Future<MyOrderListResult> listMyOrders({
@@ -82,10 +84,10 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
           currentProcessOrder: 1,
           processStatus: 'in_progress',
           visibleQuantity: 12,
-          processCompletedQuantity: 4,
+          processCompletedQuantity: processCompletedQuantity,
           userSubOrderId: 31,
           userAssignedQuantity: 12,
-          userCompletedQuantity: 4,
+          userCompletedQuantity: userCompletedQuantity,
           operatorUserId: 8,
           operatorUsername: 'zhangsan',
           workView: 'own',
@@ -649,6 +651,37 @@ void main() {
     expect(service.lastOrderStatus, 'in_progress');
   });
 
+  testWidgets('订单查询页个人完成数为0时回退展示工序完成数', (tester) async {
+    final service = _FakeProductionOrderQueryPageService()
+      ..processCompletedQuantity = 4
+      ..userCompletedQuantity = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionOrderQueryPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canFirstArticle: true,
+            canEndProduction: true,
+            canCreateManualRepairOrder: true,
+            canCreateAssistAuthorization: true,
+            canProxyView: false,
+            canExportCsv: false,
+            service: service,
+            pollInterval: Duration.zero,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.text('可见12 / 分配12 / 完成4'), findsOneWidget);
+    expect(find.text('可见12 / 分配12 / 完成0'), findsNothing);
+  });
+
   testWidgets('订单查询页仅在具备权限时显示导出按钮', (tester) async {
     final service = _FakeProductionOrderQueryPageService();
 
@@ -1206,9 +1239,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ProductionEndProductionDialog(
-            order: _buildDialogOrderItem(),
-          ),
+          body: ProductionEndProductionDialog(order: _buildDialogOrderItem()),
         ),
       ),
     );
@@ -1228,9 +1259,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ProductionManualRepairDialog(
-            order: _buildDialogOrderItem(),
-          ),
+          body: ProductionManualRepairDialog(order: _buildDialogOrderItem()),
         ),
       ),
     );

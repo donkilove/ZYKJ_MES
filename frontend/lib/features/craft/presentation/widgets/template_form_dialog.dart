@@ -13,6 +13,19 @@ class TemplateStepDraft {
   int processId;
 }
 
+int? resolveTemplateStepProcessId(
+  TemplateStepDraft step,
+  List<CraftProcessItem> processRows,
+) {
+  if (processRows.isEmpty) {
+    return null;
+  }
+  if (processRows.any((item) => item.id == step.processId)) {
+    return step.processId;
+  }
+  return processRows.first.id;
+}
+
 Future<bool?> showTemplateFormDialog({
   required BuildContext context,
   required CraftService craftService,
@@ -86,9 +99,16 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.existing?.templateName ?? '');
-    _remarkController = TextEditingController(text: widget.existing?.remark ?? '');
-    _selectedProductId = widget.existing?.productId ?? widget.initialProductId ?? widget.products.first.id;
+    _nameController = TextEditingController(
+      text: widget.existing?.templateName ?? '',
+    );
+    _remarkController = TextEditingController(
+      text: widget.existing?.remark ?? '',
+    );
+    _selectedProductId =
+        widget.existing?.productId ??
+        widget.initialProductId ??
+        widget.products.first.id;
     _isDefault = widget.existing?.isDefault ?? false;
     _isEnabled = widget.existing?.isEnabled ?? true;
     _syncOrders = true;
@@ -127,14 +147,18 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
       _error = '';
     });
     try {
-      final detail = await widget.craftService.getTemplateDetail(templateId: widget.existing!.id);
+      final detail = await widget.craftService.getTemplateDetail(
+        templateId: widget.existing!.id,
+      );
       if (!mounted) return;
       setState(() {
         _steps = detail.steps
-            .map((item) => TemplateStepDraft(
-                  stageId: item.stageId,
-                  processId: item.processId,
-                ))
+            .map(
+              (item) => TemplateStepDraft(
+                stageId: item.stageId,
+                processId: item.processId,
+              ),
+            )
             .toList();
         _loading = false;
       });
@@ -159,7 +183,10 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
     for (final stage in widget.stages) {
       final processRows = _processesByStage(stage.id);
       if (processRows.isEmpty) continue;
-      return TemplateStepDraft(stageId: stage.id, processId: processRows.first.id);
+      return TemplateStepDraft(
+        stageId: stage.id,
+        processId: processRows.first.id,
+      );
     }
     return null;
   }
@@ -173,23 +200,26 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
   }
 
   List<CraftTemplateStepPayload> _buildPayloadSteps() {
-    return List.generate(
-      _steps.length,
-      (i) => CraftTemplateStepPayload(
+    return List.generate(_steps.length, (i) {
+      final step = _steps[i];
+      final processRows = _processesByStage(step.stageId);
+      final processId =
+          resolveTemplateStepProcessId(step, processRows) ?? step.processId;
+      return CraftTemplateStepPayload(
         stepOrder: i + 1,
-        stageId: _steps[i].stageId,
-        processId: _steps[i].processId,
-      ),
-    );
+        stageId: step.stageId,
+        processId: processId,
+      );
+    });
   }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     if (_steps.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请至少添加一个工艺步骤')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请至少添加一个工艺步骤')));
       return;
     }
 
@@ -230,9 +260,9 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
         widget.onLogout();
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存失败：${_errorMessage(e)}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('保存失败：${_errorMessage(e)}')));
     }
   }
 
@@ -287,10 +317,12 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
                           border: OutlineInputBorder(),
                         ),
                         items: widget.products
-                            .map((item) => DropdownMenuItem(
-                                  value: item.id,
-                                  child: Text(item.name),
-                                ))
+                            .map(
+                              (item) => DropdownMenuItem(
+                                value: item.id,
+                                child: Text(item.name),
+                              ),
+                            )
                             .toList(),
                         onChanged: _submitting || _isEdit
                             ? null
@@ -365,19 +397,28 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
                 flex: 7,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(77),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest.withAlpha(77),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           border: Border(
                             bottom: BorderSide(
-                              color: Theme.of(context).colorScheme.outlineVariant,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.outlineVariant,
                             ),
                           ),
                         ),
@@ -386,9 +427,8 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
                           children: [
                             Text(
                               '工艺步骤设置',
-                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.bold),
                             ),
                             SizedBox(
                               height: 32,
@@ -397,7 +437,9 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
                                 icon: const Icon(Icons.add, size: 18),
                                 label: const Text('新增'),
                                 style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                  ),
                                 ),
                               ),
                             ),
@@ -406,26 +448,31 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
                       ),
                       Expanded(
                         child: _steps.isEmpty
-                            ? const Center(
-                                child: Text('暂无工艺步骤，请点击右上角添加'),
-                              )
+                            ? const Center(child: Text('暂无工艺步骤，请点击右上角添加'))
                             : ListView.builder(
                                 padding: const EdgeInsets.all(12),
                                 itemCount: _steps.length,
                                 itemBuilder: (context, index) {
                                   final step = _steps[index];
-                                  final processRows = _processesByStage(step.stageId);
-                                  
-                                  if (!processRows.any((item) => item.id == step.processId) && processRows.isNotEmpty) {
-                                    step.processId = processRows.first.id;
-                                  }
+                                  final processRows = _processesByStage(
+                                    step.stageId,
+                                  );
+                                  final selectedProcessId =
+                                      resolveTemplateStepProcessId(
+                                        step,
+                                        processRows,
+                                      );
 
                                   return Card(
                                     elevation: 0,
                                     margin: const EdgeInsets.only(bottom: 8),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(6),
-                                      side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+                                      side: BorderSide(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.outlineVariant,
+                                      ),
                                     ),
                                     child: Padding(
                                       padding: const EdgeInsets.all(12),
@@ -436,13 +483,17 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
                                             height: 32,
                                             alignment: Alignment.center,
                                             decoration: BoxDecoration(
-                                              color: Theme.of(context).colorScheme.primaryContainer,
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.primaryContainer,
                                               shape: BoxShape.circle,
                                             ),
                                             child: Text(
                                               '${index + 1}',
                                               style: TextStyle(
-                                                color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onPrimaryContainer,
                                                 fontWeight: FontWeight.bold,
                                                 fontSize: 12,
                                               ),
@@ -458,10 +509,12 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
                                                 isDense: true,
                                               ),
                                               items: widget.stages
-                                                  .map((item) => DropdownMenuItem(
-                                                        value: item.id,
-                                                        child: Text(item.name),
-                                                      ))
+                                                  .map(
+                                                    (item) => DropdownMenuItem(
+                                                      value: item.id,
+                                                      child: Text(item.name),
+                                                    ),
+                                                  )
                                                   .toList(),
                                               onChanged: _submitting
                                                   ? null
@@ -469,9 +522,16 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
                                                       if (value != null) {
                                                         setState(() {
                                                           step.stageId = value;
-                                                          final nextRows = _processesByStage(value);
-                                                          if (nextRows.isNotEmpty) {
-                                                            step.processId = nextRows.first.id;
+                                                          final nextRows =
+                                                              _processesByStage(
+                                                                value,
+                                                              );
+                                                          if (nextRows
+                                                              .isNotEmpty) {
+                                                            step.processId =
+                                                                nextRows
+                                                                    .first
+                                                                    .id;
                                                           }
                                                         });
                                                       }
@@ -481,28 +541,29 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
                                           const SizedBox(width: 8),
                                           Expanded(
                                             child: DropdownButtonFormField<int>(
-                                              initialValue: processRows.isEmpty
-                                                  ? null
-                                                  : (processRows.any((item) => item.id == step.processId)
-                                                      ? step.processId
-                                                      : processRows.first.id),
+                                              initialValue: selectedProcessId,
                                               decoration: const InputDecoration(
                                                 labelText: '工序',
                                                 border: OutlineInputBorder(),
                                                 isDense: true,
                                               ),
                                               items: processRows
-                                                  .map((item) => DropdownMenuItem(
-                                                        value: item.id,
-                                                        child: Text(item.name),
-                                                      ))
+                                                  .map(
+                                                    (item) => DropdownMenuItem(
+                                                      value: item.id,
+                                                      child: Text(item.name),
+                                                    ),
+                                                  )
                                                   .toList(),
-                                              onChanged: _submitting || processRows.isEmpty
+                                              onChanged:
+                                                  _submitting ||
+                                                      processRows.isEmpty
                                                   ? null
                                                   : (value) {
                                                       if (value != null) {
                                                         setState(() {
-                                                          step.processId = value;
+                                                          step.processId =
+                                                              value;
                                                         });
                                                       }
                                                     },
@@ -511,15 +572,22 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
                                           const SizedBox(width: 4),
                                           IconButton(
                                             tooltip: '删除',
-                                            onPressed: _submitting || _steps.length <= 1
+                                            onPressed:
+                                                _submitting ||
+                                                    _steps.length <= 1
                                                 ? null
                                                 : () {
                                                     setState(() {
                                                       _steps.removeAt(index);
                                                     });
                                                   },
-                                            icon: const Icon(Icons.delete_outline, size: 20),
-                                            color: Theme.of(context).colorScheme.error,
+                                            icon: const Icon(
+                                              Icons.delete_outline,
+                                              size: 20,
+                                            ),
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.error,
                                           ),
                                         ],
                                       ),
@@ -534,7 +602,9 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
                           color: Theme.of(context).colorScheme.surface,
                           border: Border(
                             top: BorderSide(
-                              color: Theme.of(context).colorScheme.outlineVariant,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.outlineVariant,
                             ),
                           ),
                           borderRadius: const BorderRadius.only(
@@ -546,8 +616,11 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
                           _isEdit
                               ? '提示：保存编辑后模板会进入草稿状态，请在列表中执行“发布”使其生效。'
                               : '新建模板统一先保存为草稿，完成评审后再由列表中的“发布”入口生效。',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
                               ),
                         ),
                       ),
@@ -561,7 +634,9 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: _submitting ? null : () => Navigator.of(context).pop(false),
+          onPressed: _submitting
+              ? null
+              : () => Navigator.of(context).pop(false),
           child: const Text('取消'),
         ),
         FilledButton.icon(
@@ -570,7 +645,10 @@ class _TemplateFormDialogState extends State<_TemplateFormDialog> {
               ? const SizedBox(
                   width: 16,
                   height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
                 )
               : const Icon(Icons.save, size: 18),
           label: Text(_submitting ? '保存中...' : '保存'),

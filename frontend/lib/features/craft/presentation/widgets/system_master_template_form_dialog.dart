@@ -3,7 +3,8 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
-import 'package:mes_client/features/craft/presentation/widgets/template_form_dialog.dart' show TemplateStepDraft;
+import 'package:mes_client/features/craft/presentation/widgets/template_form_dialog.dart'
+    show TemplateStepDraft, resolveTemplateStepProcessId;
 
 Future<bool?> showSystemMasterTemplateFormDialog({
   required BuildContext context,
@@ -46,10 +47,12 @@ class _SystemMasterTemplateFormDialog extends StatefulWidget {
   final CraftSystemMasterTemplateItem? existing;
 
   @override
-  State<_SystemMasterTemplateFormDialog> createState() => _SystemMasterTemplateFormDialogState();
+  State<_SystemMasterTemplateFormDialog> createState() =>
+      _SystemMasterTemplateFormDialogState();
 }
 
-class _SystemMasterTemplateFormDialogState extends State<_SystemMasterTemplateFormDialog> {
+class _SystemMasterTemplateFormDialogState
+    extends State<_SystemMasterTemplateFormDialog> {
   final _formKey = GlobalKey<FormState>();
   List<TemplateStepDraft> _steps = [];
 
@@ -62,10 +65,12 @@ class _SystemMasterTemplateFormDialogState extends State<_SystemMasterTemplateFo
     super.initState();
     if (_isEdit) {
       _steps = widget.existing!.steps
-          .map((item) => TemplateStepDraft(
-                stageId: item.stageId,
-                processId: item.processId,
-              ))
+          .map(
+            (item) => TemplateStepDraft(
+              stageId: item.stageId,
+              processId: item.processId,
+            ),
+          )
           .toList();
     }
     if (_steps.isEmpty) {
@@ -95,7 +100,10 @@ class _SystemMasterTemplateFormDialogState extends State<_SystemMasterTemplateFo
     for (final stage in widget.stages) {
       final processRows = _processesByStage(stage.id);
       if (processRows.isEmpty) continue;
-      return TemplateStepDraft(stageId: stage.id, processId: processRows.first.id);
+      return TemplateStepDraft(
+        stageId: stage.id,
+        processId: processRows.first.id,
+      );
     }
     return null;
   }
@@ -109,24 +117,27 @@ class _SystemMasterTemplateFormDialogState extends State<_SystemMasterTemplateFo
   }
 
   List<CraftTemplateStepPayload> _buildPayloadSteps() {
-    return List.generate(
-      _steps.length,
-      (i) => CraftTemplateStepPayload(
+    return List.generate(_steps.length, (i) {
+      final step = _steps[i];
+      final processRows = _processesByStage(step.stageId);
+      final processId =
+          resolveTemplateStepProcessId(step, processRows) ?? step.processId;
+      return CraftTemplateStepPayload(
         stepOrder: i + 1,
-        stageId: _steps[i].stageId,
-        processId: _steps[i].processId,
-      ),
-    );
+        stageId: step.stageId,
+        processId: processId,
+      );
+    });
   }
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    
+
     final payloadSteps = _buildPayloadSteps();
     if (payloadSteps.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请至少配置一个工艺步骤')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请至少配置一个工艺步骤')));
       return;
     }
 
@@ -136,9 +147,13 @@ class _SystemMasterTemplateFormDialogState extends State<_SystemMasterTemplateFo
 
     try {
       if (_isEdit) {
-        await widget.craftService.updateSystemMasterTemplate(steps: payloadSteps);
+        await widget.craftService.updateSystemMasterTemplate(
+          steps: payloadSteps,
+        );
       } else {
-        await widget.craftService.createSystemMasterTemplate(steps: payloadSteps);
+        await widget.craftService.createSystemMasterTemplate(
+          steps: payloadSteps,
+        );
       }
       if (!mounted) return;
       Navigator.of(context).pop(true);
@@ -152,9 +167,9 @@ class _SystemMasterTemplateFormDialogState extends State<_SystemMasterTemplateFo
         widget.onLogout();
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存失败：${_errorMessage(e)}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('保存失败：${_errorMessage(e)}')));
     }
   }
 
@@ -178,10 +193,14 @@ class _SystemMasterTemplateFormDialogState extends State<_SystemMasterTemplateFo
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primaryContainer.withAlpha(50),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.primaryContainer.withAlpha(50),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: Theme.of(context).colorScheme.primary.withAlpha(50),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.primary.withAlpha(50),
                         ),
                       ),
                       child: Column(
@@ -197,9 +216,12 @@ class _SystemMasterTemplateFormDialogState extends State<_SystemMasterTemplateFo
                               const SizedBox(width: 8),
                               Text(
                                 '系统母版说明',
-                                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                style: Theme.of(context).textTheme.titleSmall
+                                    ?.copyWith(
                                       fontWeight: FontWeight.bold,
-                                      color: Theme.of(context).colorScheme.primary,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary,
                                     ),
                               ),
                             ],
@@ -212,8 +234,11 @@ class _SystemMasterTemplateFormDialogState extends State<_SystemMasterTemplateFo
                           const SizedBox(height: 8),
                           Text(
                             '新建常规产品模板时，可以直接“从系统母版套版”，以快速继承基础工艺路线。',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.onSurfaceVariant,
                                 ),
                           ),
                         ],
@@ -227,19 +252,28 @@ class _SystemMasterTemplateFormDialogState extends State<_SystemMasterTemplateFo
                 flex: 8,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest.withAlpha(77),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest.withAlpha(77),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           border: Border(
                             bottom: BorderSide(
-                              color: Theme.of(context).colorScheme.outlineVariant,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.outlineVariant,
                             ),
                           ),
                         ),
@@ -248,9 +282,8 @@ class _SystemMasterTemplateFormDialogState extends State<_SystemMasterTemplateFo
                           children: [
                             Text(
                               '标准步骤设置',
-                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.bold),
                             ),
                             SizedBox(
                               height: 32,
@@ -259,7 +292,9 @@ class _SystemMasterTemplateFormDialogState extends State<_SystemMasterTemplateFo
                                 icon: const Icon(Icons.add, size: 18),
                                 label: const Text('新增'),
                                 style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                  ),
                                 ),
                               ),
                             ),
@@ -268,26 +303,31 @@ class _SystemMasterTemplateFormDialogState extends State<_SystemMasterTemplateFo
                       ),
                       Expanded(
                         child: _steps.isEmpty
-                            ? const Center(
-                                child: Text('暂无标准步骤，请点击右上角添加'),
-                              )
+                            ? const Center(child: Text('暂无标准步骤，请点击右上角添加'))
                             : ListView.builder(
                                 padding: const EdgeInsets.all(12),
                                 itemCount: _steps.length,
                                 itemBuilder: (context, index) {
                                   final step = _steps[index];
-                                  final processRows = _processesByStage(step.stageId);
-                                  
-                                  if (!processRows.any((item) => item.id == step.processId) && processRows.isNotEmpty) {
-                                    step.processId = processRows.first.id;
-                                  }
+                                  final processRows = _processesByStage(
+                                    step.stageId,
+                                  );
+                                  final selectedProcessId =
+                                      resolveTemplateStepProcessId(
+                                        step,
+                                        processRows,
+                                      );
 
                                   return Card(
                                     elevation: 0,
                                     margin: const EdgeInsets.only(bottom: 8),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(6),
-                                      side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
+                                      side: BorderSide(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.outlineVariant,
+                                      ),
                                     ),
                                     child: Padding(
                                       padding: const EdgeInsets.all(12),
@@ -298,13 +338,17 @@ class _SystemMasterTemplateFormDialogState extends State<_SystemMasterTemplateFo
                                             height: 32,
                                             alignment: Alignment.center,
                                             decoration: BoxDecoration(
-                                              color: Theme.of(context).colorScheme.primaryContainer,
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.primaryContainer,
                                               shape: BoxShape.circle,
                                             ),
                                             child: Text(
                                               '${index + 1}',
                                               style: TextStyle(
-                                                color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onPrimaryContainer,
                                                 fontWeight: FontWeight.bold,
                                                 fontSize: 12,
                                               ),
@@ -320,10 +364,12 @@ class _SystemMasterTemplateFormDialogState extends State<_SystemMasterTemplateFo
                                                 isDense: true,
                                               ),
                                               items: widget.stages
-                                                  .map((item) => DropdownMenuItem(
-                                                        value: item.id,
-                                                        child: Text(item.name),
-                                                      ))
+                                                  .map(
+                                                    (item) => DropdownMenuItem(
+                                                      value: item.id,
+                                                      child: Text(item.name),
+                                                    ),
+                                                  )
                                                   .toList(),
                                               onChanged: _submitting
                                                   ? null
@@ -331,9 +377,16 @@ class _SystemMasterTemplateFormDialogState extends State<_SystemMasterTemplateFo
                                                       if (value != null) {
                                                         setState(() {
                                                           step.stageId = value;
-                                                          final nextRows = _processesByStage(value);
-                                                          if (nextRows.isNotEmpty) {
-                                                            step.processId = nextRows.first.id;
+                                                          final nextRows =
+                                                              _processesByStage(
+                                                                value,
+                                                              );
+                                                          if (nextRows
+                                                              .isNotEmpty) {
+                                                            step.processId =
+                                                                nextRows
+                                                                    .first
+                                                                    .id;
                                                           }
                                                         });
                                                       }
@@ -343,28 +396,29 @@ class _SystemMasterTemplateFormDialogState extends State<_SystemMasterTemplateFo
                                           const SizedBox(width: 8),
                                           Expanded(
                                             child: DropdownButtonFormField<int>(
-                                              initialValue: processRows.isEmpty
-                                                  ? null
-                                                  : (processRows.any((item) => item.id == step.processId)
-                                                      ? step.processId
-                                                      : processRows.first.id),
+                                              initialValue: selectedProcessId,
                                               decoration: const InputDecoration(
                                                 labelText: '小工序',
                                                 border: OutlineInputBorder(),
                                                 isDense: true,
                                               ),
                                               items: processRows
-                                                  .map((item) => DropdownMenuItem(
-                                                        value: item.id,
-                                                        child: Text(item.name),
-                                                      ))
+                                                  .map(
+                                                    (item) => DropdownMenuItem(
+                                                      value: item.id,
+                                                      child: Text(item.name),
+                                                    ),
+                                                  )
                                                   .toList(),
-                                              onChanged: _submitting || processRows.isEmpty
+                                              onChanged:
+                                                  _submitting ||
+                                                      processRows.isEmpty
                                                   ? null
                                                   : (value) {
                                                       if (value != null) {
                                                         setState(() {
-                                                          step.processId = value;
+                                                          step.processId =
+                                                              value;
                                                         });
                                                       }
                                                     },
@@ -373,15 +427,22 @@ class _SystemMasterTemplateFormDialogState extends State<_SystemMasterTemplateFo
                                           const SizedBox(width: 4),
                                           IconButton(
                                             tooltip: '删除',
-                                            onPressed: _submitting || _steps.length <= 1
+                                            onPressed:
+                                                _submitting ||
+                                                    _steps.length <= 1
                                                 ? null
                                                 : () {
                                                     setState(() {
                                                       _steps.removeAt(index);
                                                     });
                                                   },
-                                            icon: const Icon(Icons.delete_outline, size: 20),
-                                            color: Theme.of(context).colorScheme.error,
+                                            icon: const Icon(
+                                              Icons.delete_outline,
+                                              size: 20,
+                                            ),
+                                            color: Theme.of(
+                                              context,
+                                            ).colorScheme.error,
                                           ),
                                         ],
                                       ),
@@ -400,7 +461,9 @@ class _SystemMasterTemplateFormDialogState extends State<_SystemMasterTemplateFo
       ),
       actions: [
         TextButton(
-          onPressed: _submitting ? null : () => Navigator.of(context).pop(false),
+          onPressed: _submitting
+              ? null
+              : () => Navigator.of(context).pop(false),
           child: const Text('取消'),
         ),
         FilledButton.icon(
@@ -409,7 +472,10 @@ class _SystemMasterTemplateFormDialogState extends State<_SystemMasterTemplateFo
               ? const SizedBox(
                   width: 16,
                   height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
                 )
               : const Icon(Icons.save, size: 18),
           label: Text(_submitting ? '保存中...' : '保存'),

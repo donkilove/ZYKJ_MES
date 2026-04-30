@@ -1,3 +1,13 @@
+DateTime? _parseDateTimeOrNull(Object? value) {
+  if (value is DateTime) return value;
+  final text = value?.toString().trim();
+  if (text == null || text.isEmpty) return null;
+  return DateTime.tryParse(text);
+}
+
+DateTime _parseDateTimeOrDefault(Object? value) =>
+    _parseDateTimeOrNull(value) ?? DateTime(1970, 1, 1);
+
 class CraftStageItem {
   CraftStageItem({
     required this.id,
@@ -30,8 +40,8 @@ class CraftStageItem {
       isEnabled: (json['is_enabled'] as bool?) ?? true,
       remark: (json['remark'] as String?) ?? '',
       processCount: (json['process_count'] as int?) ?? 0,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
+      updatedAt: _parseDateTimeOrDefault(json['updated_at']),
     );
   }
 }
@@ -111,8 +121,8 @@ class CraftProcessItem {
       stageName: json['stage_name'] as String?,
       isEnabled: (json['is_enabled'] as bool?) ?? true,
       remark: (json['remark'] as String?) ?? '',
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
+      updatedAt: _parseDateTimeOrDefault(json['updated_at']),
     );
   }
 }
@@ -226,8 +236,8 @@ class CraftTemplateStepItem {
       processId: (json['process_id'] as int?) ?? 0,
       processCode: (json['process_code'] as String?) ?? '',
       processName: (json['process_name'] as String?) ?? '',
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
+      updatedAt: _parseDateTimeOrDefault(json['updated_at']),
     );
   }
 }
@@ -306,8 +316,8 @@ class CraftTemplateItem {
       sourceTemplateVersion: json['source_template_version'] as int?,
       sourceProductId: json['source_product_id'] as int?,
       sourceSystemMasterVersion: json['source_system_master_version'] as int?,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
+      updatedAt: _parseDateTimeOrDefault(json['updated_at']),
     );
   }
 }
@@ -356,8 +366,8 @@ class CraftSystemMasterTemplateStepItem {
       processId: (json['process_id'] as int?) ?? 0,
       processCode: (json['process_code'] as String?) ?? '',
       processName: (json['process_name'] as String?) ?? '',
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
+      updatedAt: _parseDateTimeOrDefault(json['updated_at']),
     );
   }
 }
@@ -393,8 +403,8 @@ class CraftSystemMasterTemplateItem {
       createdByUsername: json['created_by_username'] as String?,
       updatedByUserId: json['updated_by_user_id'] as int?,
       updatedByUsername: json['updated_by_username'] as String?,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
+      updatedAt: _parseDateTimeOrDefault(json['updated_at']),
       steps: (json['steps'] as List<dynamic>? ?? const [])
           .map(
             (entry) => CraftSystemMasterTemplateStepItem.fromJson(
@@ -443,8 +453,8 @@ class CraftSystemMasterTemplateVersionStepItem {
       processId: (json['process_id'] as int?) ?? 0,
       processCode: (json['process_code'] as String?) ?? '',
       processName: (json['process_name'] as String?) ?? '',
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: DateTime.parse(json['updated_at'] as String),
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
+      updatedAt: _parseDateTimeOrDefault(json['updated_at']),
     );
   }
 }
@@ -477,7 +487,7 @@ class CraftSystemMasterTemplateVersionItem {
       note: json['note'] as String?,
       createdByUserId: json['created_by_user_id'] as int?,
       createdByUsername: json['created_by_username'] as String?,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
       steps: (json['steps'] as List<dynamic>? ?? const [])
           .map(
             (entry) => CraftSystemMasterTemplateVersionStepItem.fromJson(
@@ -763,7 +773,7 @@ class CraftTemplateVersionItem {
       sourceVersion: json['source_version'] as int?,
       createdByUserId: json['created_by_user_id'] as int?,
       createdByUsername: json['created_by_username'] as String?,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      createdAt: _parseDateTimeOrDefault(json['created_at']),
     );
   }
 }
@@ -867,8 +877,8 @@ class CraftKanbanSampleItem {
       orderProcessId: (json['order_process_id'] as int?) ?? 0,
       orderId: (json['order_id'] as int?) ?? 0,
       orderCode: (json['order_code'] as String?) ?? '',
-      startAt: DateTime.parse(json['start_at'] as String),
-      endAt: DateTime.parse(json['end_at'] as String),
+      startAt: _parseDateTimeOrDefault(json['start_at']),
+      endAt: _parseDateTimeOrDefault(json['end_at']),
       workMinutes: (json['work_minutes'] as int?) ?? 0,
       productionQty: (json['production_qty'] as int?) ?? 0,
       capacityPerHour: ((json['capacity_per_hour'] as num?) ?? 0).toDouble(),
@@ -1021,7 +1031,7 @@ class CraftTemplateBatchExportResult {
   factory CraftTemplateBatchExportResult.fromJson(Map<String, dynamic> json) {
     return CraftTemplateBatchExportResult(
       total: (json['total'] as int?) ?? 0,
-      exportedAt: DateTime.parse(json['exported_at'] as String),
+      exportedAt: _parseDateTimeOrDefault(json['exported_at']),
       items: (json['items'] as List<dynamic>? ?? const [])
           .map(
             (entry) => CraftTemplateBatchExportItem.fromJson(

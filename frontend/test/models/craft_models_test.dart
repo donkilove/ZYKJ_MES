@@ -30,6 +30,28 @@ void main() {
     expect(CraftProcessListResult(total: 1, items: [process]).items.length, 1);
   });
 
+  test('craft models handle missing or invalid timestamps safely', () {
+    final stage = CraftStageItem.fromJson({
+      'id': 1,
+      'code': '01',
+      'name': '切割段',
+      'created_at': null,
+      'updated_at': '',
+    });
+    final process = CraftProcessItem.fromJson({
+      'id': 2,
+      'code': '01-01',
+      'name': '切割',
+      'created_at': 'not-a-date',
+      'updated_at': null,
+    });
+
+    expect(stage.createdAt, DateTime(1970, 1, 1));
+    expect(stage.updatedAt, DateTime(1970, 1, 1));
+    expect(process.createdAt, DateTime(1970, 1, 1));
+    expect(process.updatedAt, DateTime(1970, 1, 1));
+  });
+
   test('craft template payload and item parsing', () {
     const payload = CraftTemplateStepPayload(
       stepOrder: 1,

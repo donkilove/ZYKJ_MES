@@ -544,5 +544,62 @@ void main() {
         ),
       );
     });
+
+    test('createEquipmentRule accepts 201 Created', () async {
+      final server = await TestHttpServer.start({
+        'POST /equipment/rules': (request) {
+          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+          expect(body['equipment_id'], 1);
+          expect(body['rule_code'], 'RULE-01');
+          expect(body['is_enabled'], isTrue);
+          return TestResponse.json(201, body: {'data': {}});
+        },
+      });
+      addTearDown(server.close);
+
+      final service = EquipmentService(
+        AppSession(baseUrl: server.baseUrl, accessToken: 'token-equipment'),
+      );
+
+      await service.createEquipmentRule(
+        equipmentId: 1,
+        ruleCode: 'RULE-01',
+        ruleName: '温度规则',
+        ruleType: 'temperature',
+        conditionDesc: '温度超限',
+        isEnabled: true,
+        remark: '新增规则',
+      );
+    });
+
+    test('createRuntimeParameter accepts 201 Created', () async {
+      final server = await TestHttpServer.start({
+        'POST /equipment/runtime-parameters': (request) {
+          final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+          expect(body['equipment_id'], 1);
+          expect(body['param_code'], 'PRESSURE');
+          expect(body['upper_limit'], 1.5);
+          expect(body['lower_limit'], 1.0);
+          return TestResponse.json(201, body: {'data': {}});
+        },
+      });
+      addTearDown(server.close);
+
+      final service = EquipmentService(
+        AppSession(baseUrl: server.baseUrl, accessToken: 'token-equipment'),
+      );
+
+      await service.createRuntimeParameter(
+        equipmentId: 1,
+        paramCode: 'PRESSURE',
+        paramName: '压力',
+        unit: 'bar',
+        standardValue: '1.2',
+        upperLimit: '1.5',
+        lowerLimit: '1.0',
+        isEnabled: true,
+        remark: '新增参数',
+      );
+    });
   });
 }

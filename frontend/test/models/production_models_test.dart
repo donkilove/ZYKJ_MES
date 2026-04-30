@@ -142,6 +142,24 @@ void main() {
     expect(ProductionOrderListResult(total: 1, items: [order]).items.length, 1);
   });
 
+  test('production models handle missing or invalid timestamps safely', () {
+    final order = ProductionOrderItem.fromJson({
+      'id': 1,
+      'order_code': 'PO-NULL-DATE',
+      'product_id': 10,
+      'product_name': '产品A',
+      'supplier_id': 8,
+      'supplier_name': '供应商甲',
+      'quantity': 100,
+      'status': 'pending',
+      'created_at': null,
+      'updated_at': 'not-a-date',
+    });
+
+    expect(order.createdAt, DateTime(1970, 1, 1));
+    expect(order.updatedAt, DateTime(1970, 1, 1));
+  });
+
   test('my-order/stats/options models parse and payload serializes', () {
     final myOrder = MyOrderItem.fromJson({
       'order_id': 9,

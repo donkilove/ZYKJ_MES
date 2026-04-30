@@ -77,6 +77,20 @@ void main() {
     expect(custom.executionDateLabel, isNot(weekly.executionDateLabel));
   });
 
+  test('equipment models handle missing or invalid timestamps safely', () {
+    final item = MaintenanceItemEntry.fromJson({
+      'id': 9,
+      'name': '缺日期点检',
+      'default_cycle_days': maintenanceCycleWeekly,
+      'is_enabled': true,
+      'created_at': null,
+      'updated_at': 'not-a-date',
+    });
+
+    expect(item.createdAt, DateTime(1970, 1, 1));
+    expect(item.updatedAt, DateTime(1970, 1, 1));
+  });
+
   test('equipment and maintenance models parse json and wrappers', () {
     final equipment = EquipmentLedgerItem.fromJson({
       'id': 1,
@@ -260,12 +274,12 @@ void main() {
           'executor_username': null,
           'started_at': null,
           'completed_at': null,
-           'result_summary': null,
-           'result_remark': null,
-           'attachment_link': null,
-           'attachment_name': null,
-           'created_at': '2026-03-01T10:00:00Z',
-           'updated_at': '2026-03-01T10:00:00Z',
+          'result_summary': null,
+          'result_remark': null,
+          'attachment_link': null,
+          'attachment_name': null,
+          'created_at': '2026-03-01T10:00:00Z',
+          'updated_at': '2026-03-01T10:00:00Z',
         },
       ],
       'recent_records': [
@@ -278,12 +292,12 @@ void main() {
           'executor_user_id': 12,
           'executor_username': 'worker',
           'completed_at': '2026-03-08T11:00:00Z',
-           'result_summary': '完成',
-           'result_remark': '正常',
-           'attachment_link': 'http://example.com/file',
-           'attachment_name': 'file',
-           'created_at': '2026-03-08T11:00:00Z',
-           'updated_at': '2026-03-08T11:00:00Z',
+          'result_summary': '完成',
+          'result_remark': '正常',
+          'attachment_link': 'http://example.com/file',
+          'attachment_name': 'file',
+          'created_at': '2026-03-08T11:00:00Z',
+          'updated_at': '2026-03-08T11:00:00Z',
         },
       ],
     });
