@@ -124,7 +124,13 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
         _itemOptions = itemResult.items;
         try {
           _ownerOptions = await _equipmentService.listAllOwners();
-        } catch (_) {}
+        } catch (error) {
+          if (_isUnauthorized(error)) {
+            widget.onLogout();
+            return;
+          }
+          _message = '加载负责人列表失败: ${_errorMessage(error)}';
+        }
         _stageOptions = [...stageResult.items]
           ..sort((a, b) {
             final orderCompare = a.sortOrder.compareTo(b.sortOrder);
@@ -209,10 +215,19 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
   }
 
   Future<void> _togglePlan(MaintenancePlanItem plan) async {
+    final nextEnabled = !plan.isEnabled;
+    final confirmed = await showMaintenancePlanToggleDialog(
+      context: context,
+      plan: plan,
+      nextEnabled: nextEnabled,
+    );
+    if (!confirmed || !mounted) {
+      return;
+    }
     try {
       await _equipmentService.toggleMaintenancePlan(
         planId: plan.id,
-        enabled: !plan.isEnabled,
+        enabled: nextEnabled,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -320,9 +335,7 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
               ..._equipmentOptions.map(
                 (entry) => DropdownMenuItem<int?>(
                   value: entry.id,
-                  child: _buildFilterDropdownText(
-                    _equipmentFilterLabel(entry),
-                  ),
+                  child: _buildFilterDropdownText(_equipmentFilterLabel(entry)),
                 ),
               ),
             ],

@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:http/http.dart' as http;
+import 'package:mes_client/core/network/http_client.dart' as http;
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
@@ -51,7 +51,7 @@ class UserService {
     final uri = Uri.parse(
       '${session.baseUrl}/users',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
 
@@ -73,7 +73,7 @@ class UserService {
     final uri = Uri.parse(
       '${session.baseUrl}/users/online-status',
     ).replace(query: query);
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
     final data = _dataObject(json);
@@ -94,7 +94,7 @@ class UserService {
 
   Future<UserItem> getUserDetail({required int userId}) async {
     final uri = Uri.parse('${session.baseUrl}/users/$userId');
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
     return UserItem.fromJson(_dataObject(json));
@@ -132,7 +132,7 @@ class UserService {
     final uri = Uri.parse(
       '${session.baseUrl}/users/export',
     ).replace(queryParameters: query.isEmpty ? null : query);
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
     return UserExportResult.fromJson(_dataObject(json));
@@ -156,7 +156,7 @@ class UserService {
         'is_active': isActive,
         'deleted_scope': deletedScope,
       }),
-    ).timeout(const Duration(seconds: 30));
+    );
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
     return UserExportTaskItem.fromJson(_dataObject(json));
@@ -164,7 +164,7 @@ class UserService {
 
   Future<UserExportTaskListResult> listUserExportTasks() async {
     final uri = Uri.parse('${session.baseUrl}/users/export-tasks');
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
     final data = _dataObject(json);
@@ -181,7 +181,7 @@ class UserService {
 
   Future<UserExportTaskItem> getUserExportTask({required int taskId}) async {
     final uri = Uri.parse('${session.baseUrl}/users/export-tasks/$taskId');
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
     return UserExportTaskItem.fromJson(_dataObject(json));
@@ -193,7 +193,7 @@ class UserService {
     final uri = Uri.parse(
       '${session.baseUrl}/users/export-tasks/$taskId/download',
     );
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http.get(uri, headers: _authHeaders);
     if (response.statusCode != 200) {
       final json = _decodeBody(response);
       _throwIfNotSuccess(response, json, expectedCode: 200);
@@ -223,7 +223,7 @@ class UserService {
     final uri = Uri.parse(
       '${session.baseUrl}/roles',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
 
@@ -279,7 +279,7 @@ class UserService {
         'role_type': roleType,
         'is_enabled': isEnabled,
       }),
-    ).timeout(const Duration(seconds: 30));
+    );
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 201);
     return RoleItem.fromJson(_dataObject(json));
@@ -311,7 +311,7 @@ class UserService {
       uri,
       headers: _authHeaders,
       body: jsonEncode(payload),
-    ).timeout(const Duration(seconds: 30));
+    );
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
     return RoleItem.fromJson(_dataObject(json));
@@ -319,7 +319,7 @@ class UserService {
 
   Future<RoleItem> enableRole({required int roleId}) async {
     final uri = Uri.parse('${session.baseUrl}/roles/$roleId/enable');
-    final response = await http.post(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http.post(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
     return RoleItem.fromJson(_dataObject(json));
@@ -327,7 +327,7 @@ class UserService {
 
   Future<RoleItem> disableRole({required int roleId}) async {
     final uri = Uri.parse('${session.baseUrl}/roles/$roleId/disable');
-    final response = await http.post(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http.post(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
     return RoleItem.fromJson(_dataObject(json));
@@ -335,7 +335,7 @@ class UserService {
 
   Future<void> deleteRole({required int roleId}) async {
     final uri = Uri.parse('${session.baseUrl}/roles/$roleId');
-    final response = await http.delete(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http.delete(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
   }
@@ -350,7 +350,7 @@ class UserService {
       final uri = Uri.parse(
         '${session.baseUrl}/processes',
       ).replace(queryParameters: {'page': '$page', 'page_size': '$pageSize'});
-      final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+      final response = await http.get(uri, headers: _authHeaders);
       final json = _decodeBody(response);
       _throwIfNotSuccess(response, json, expectedCode: 200);
 
@@ -390,7 +390,7 @@ class UserService {
     final uri = Uri.parse(
       '${session.baseUrl}/auth/register-requests',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
 
@@ -431,7 +431,7 @@ class UserService {
       uri,
       headers: _authHeaders,
       body: jsonEncode(payload),
-    ).timeout(const Duration(seconds: 30));
+    );
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
   }
@@ -447,7 +447,7 @@ class UserService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({'reason': reason}),
-    ).timeout(const Duration(seconds: 30));
+    );
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
   }
@@ -473,7 +473,7 @@ class UserService {
         'stage_id': stageId,
         'is_active': isActive,
       }),
-    ).timeout(const Duration(seconds: 30));
+    );
 
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 201);
@@ -514,7 +514,7 @@ class UserService {
       uri,
       headers: _authHeaders,
       body: jsonEncode(payload),
-    ).timeout(const Duration(seconds: 30));
+    );
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
   }
@@ -528,7 +528,7 @@ class UserService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({'remark': remark?.trim()}),
-    ).timeout(const Duration(seconds: 30));
+    );
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
     return UserLifecycleResult.fromJson(_dataObject(json));
@@ -543,7 +543,7 @@ class UserService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({'remark': remark.trim()}),
-    ).timeout(const Duration(seconds: 30));
+    );
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
     return UserLifecycleResult.fromJson(_dataObject(json));
@@ -559,7 +559,7 @@ class UserService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({'password': password, 'remark': remark.trim()}),
-    ).timeout(const Duration(seconds: 30));
+    );
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
     return UserPasswordResetResult.fromJson(_dataObject(json));
@@ -574,7 +574,7 @@ class UserService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({'remark': remark.trim()}),
-    ).timeout(const Duration(seconds: 30));
+    );
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
     return UserDeleteResult.fromJson(_dataObject(json));
@@ -589,7 +589,7 @@ class UserService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({'remark': remark.trim()}),
-    ).timeout(const Duration(seconds: 30));
+    );
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
     return UserLifecycleResult.fromJson(_dataObject(json));
@@ -624,7 +624,7 @@ class UserService {
     final uri = Uri.parse(
       '${session.baseUrl}/audits',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
 
@@ -640,7 +640,7 @@ class UserService {
 
   Future<ProfileResult> getMyProfile() async {
     final uri = Uri.parse('${session.baseUrl}/me/profile');
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
     return ProfileResult.fromJson(_dataObject(json));
@@ -648,7 +648,7 @@ class UserService {
 
   Future<CurrentSessionResult> getMySession() async {
     final uri = Uri.parse('${session.baseUrl}/me/session');
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
     return CurrentSessionResult.fromJson(_dataObject(json));
@@ -668,7 +668,7 @@ class UserService {
         'new_password': newPassword,
         'confirm_password': confirmPassword,
       }),
-    ).timeout(const Duration(seconds: 30));
+    );
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
   }
@@ -698,7 +698,7 @@ class UserService {
     final uri = Uri.parse(
       '${session.baseUrl}/sessions/login-logs',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
 
@@ -729,7 +729,7 @@ class UserService {
     final uri = Uri.parse(
       '${session.baseUrl}/sessions/online',
     ).replace(queryParameters: query);
-    final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 30));
+    final response = await http.get(uri, headers: _authHeaders);
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
 
@@ -753,7 +753,7 @@ class UserService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({'session_token_id': sessionTokenId}),
-    ).timeout(const Duration(seconds: 30));
+    );
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
     return ForceOfflineResult.fromJson(_dataObject(json));
@@ -767,7 +767,7 @@ class UserService {
       uri,
       headers: _authHeaders,
       body: jsonEncode({'session_token_ids': sessionTokenIds}),
-    ).timeout(const Duration(seconds: 30));
+    );
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);
     return ForceOfflineResult.fromJson(_dataObject(json));

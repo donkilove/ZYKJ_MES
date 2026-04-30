@@ -36,7 +36,13 @@ class _FakeCraftService extends CraftService {
   ];
 
   int createProcessCalls = 0;
+  int updateStageCalls = 0;
+  int updateProcessCalls = 0;
   int deleteProcessCalls = 0;
+  int? lastUpdatedStageId;
+  bool? lastUpdatedStageEnabled;
+  int? lastUpdatedProcessId;
+  bool? lastUpdatedProcessEnabled;
   CraftProcessItem? lastCreatedProcess;
   int? lastDeletedProcessId;
 
@@ -87,6 +93,65 @@ class _FakeCraftService extends CraftService {
     lastCreatedProcess = created;
     _processes.add(created);
     return created;
+  }
+
+  @override
+  Future<CraftStageItem> updateStage({
+    required int stageId,
+    String? code,
+    String? name,
+    int? sortOrder,
+    bool? isEnabled,
+    String? remark,
+  }) async {
+    updateStageCalls += 1;
+    lastUpdatedStageId = stageId;
+    lastUpdatedStageEnabled = isEnabled;
+    final index = _stages.indexWhere((item) => item.id == stageId);
+    final current = _stages[index];
+    final updated = CraftStageItem(
+      id: current.id,
+      code: code ?? current.code,
+      name: name ?? current.name,
+      sortOrder: sortOrder ?? current.sortOrder,
+      isEnabled: isEnabled ?? current.isEnabled,
+      processCount: current.processCount,
+      remark: remark ?? current.remark,
+      createdAt: current.createdAt,
+      updatedAt: DateTime.parse('2026-03-03T00:00:00Z'),
+    );
+    _stages[index] = updated;
+    return updated;
+  }
+
+  @override
+  Future<CraftProcessItem> updateProcess({
+    required int processId,
+    String? code,
+    String? name,
+    int? stageId,
+    bool? isEnabled,
+    String? remark,
+  }) async {
+    updateProcessCalls += 1;
+    lastUpdatedProcessId = processId;
+    lastUpdatedProcessEnabled = isEnabled;
+    final index = _processes.indexWhere((item) => item.id == processId);
+    final current = _processes[index];
+    final updated = CraftProcessItem(
+      id: current.id,
+      code: code ?? current.code,
+      name: name ?? current.name,
+      stageId: stageId ?? current.stageId,
+      stageCode: current.stageCode,
+      stageName: current.stageName,
+      isEnabled: isEnabled ?? current.isEnabled,
+      remark: remark ?? current.remark,
+      createdAt: current.createdAt,
+      updatedAt: DateTime.parse('2026-03-03T00:00:00Z'),
+    );
+    _processes[index] = updated;
+    return updated;
   }
 
   @override
@@ -151,8 +216,14 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.byType(MesPageHeader), findsOneWidget);
-    expect(find.byKey(const ValueKey('process-management-feedback-banner')), findsOneWidget);
-    expect(find.byKey(const ValueKey('process-management-view-switch')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('process-management-feedback-banner')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('process-management-view-switch')),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey('process-item-panel')), findsOneWidget);
     expect(find.byKey(const ValueKey('process-stage-panel')), findsNothing);
     expect(find.byKey(const ValueKey('process-focus-panel')), findsNothing);
@@ -169,14 +240,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('process-view-switch-stage')));
     await tester.pumpAndSettle();
 
-    expect(
-      find.byKey(const ValueKey('process-stage-panel')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('process-item-panel')),
-      findsNothing,
-    );
+    expect(find.byKey(const ValueKey('process-stage-panel')), findsOneWidget);
+    expect(find.byKey(const ValueKey('process-item-panel')), findsNothing);
   });
 
   testWidgets('工序管理引用弹窗展示编码字段', (tester) async {
@@ -188,7 +253,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.byKey(const ValueKey('process-reference-dialog')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('process-reference-dialog')),
+      findsOneWidget,
+    );
     expect(find.text('工序引用分析：激光切割'), findsOneWidget);
     expect(find.textContaining('编码/编号：TPL-21'), findsOneWidget);
   });
@@ -222,7 +290,10 @@ void main() {
       find.byKey(const ValueKey('process-management-feedback-banner')),
       findsOneWidget,
     );
-    expect(find.byKey(const ValueKey('process-management-view-switch')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('process-management-view-switch')),
+      findsOneWidget,
+    );
     expect(find.byKey(const ValueKey('process-item-panel')), findsOneWidget);
     expect(find.byKey(const ValueKey('process-stage-panel')), findsNothing);
     expect(find.textContaining('已定位工序 #11 激光切割'), findsOneWidget);
@@ -279,5 +350,89 @@ void main() {
     expect(craftService.deleteProcessCalls, 1);
     expect(craftService.lastDeletedProcessId, 20);
     expect(find.text('折弯'), findsNothing);
+  });
+
+  testWidgets('工段启停执行前需要确认', (tester) async {
+    final craftService = _FakeCraftService();
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProcessManagementPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canWrite: true,
+            craftService: craftService,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.byKey(const ValueKey('process-view-switch-stage')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('操作').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('启用/停用').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('停用工段确认'), findsOneWidget);
+    expect(find.textContaining('工段“切割段”'), findsOneWidget);
+    expect(craftService.updateStageCalls, 0);
+
+    await tester.tap(find.widgetWithText(FilledButton, '停用').last);
+    await tester.pumpAndSettle();
+
+    expect(craftService.updateStageCalls, 1);
+    expect(craftService.lastUpdatedStageId, 1);
+    expect(craftService.lastUpdatedStageEnabled, isFalse);
+  });
+
+  testWidgets('工序启停执行前需要确认', (tester) async {
+    final craftService = _FakeCraftService();
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProcessManagementPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canWrite: true,
+            craftService: craftService,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.text('操作').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('启用/停用').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('停用工序确认'), findsOneWidget);
+    expect(find.textContaining('工序“激光切割”'), findsOneWidget);
+    expect(craftService.updateProcessCalls, 0);
+
+    await tester.tap(find.widgetWithText(FilledButton, '停用').last);
+    await tester.pumpAndSettle();
+
+    expect(craftService.updateProcessCalls, 1);
+    expect(craftService.lastUpdatedProcessId, 11);
+    expect(craftService.lastUpdatedProcessEnabled, isFalse);
   });
 }

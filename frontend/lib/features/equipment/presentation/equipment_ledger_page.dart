@@ -106,7 +106,13 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
       if (reloadOwners || _ownerOptions.isEmpty) {
         try {
           _ownerOptions = await _equipmentService.listAllOwners();
-        } catch (_) {}
+        } catch (error) {
+          if (_isUnauthorized(error)) {
+            widget.onLogout();
+            return;
+          }
+          _message = '加载负责人列表失败: ${_errorMessage(error)}';
+        }
       }
       final result = await _equipmentService.listEquipment(
         page: targetPage,
@@ -404,10 +410,7 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
         title: '设备台账',
         onRefresh: _loading
             ? null
-            : () => _loadItems(
-                page: _page,
-                reloadOwners: widget.canWrite,
-              ),
+            : () => _loadItems(page: _page, reloadOwners: widget.canWrite),
       ),
       filters: filtersToolbar,
       banner: _message.isEmpty
@@ -441,12 +444,8 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                 DataCell(Text(item.code)),
                 DataCell(Text(item.name)),
                 DataCell(Text(item.model.isEmpty ? '-' : item.model)),
-                DataCell(
-                  Text(item.location.isEmpty ? '-' : item.location),
-                ),
-                DataCell(
-                  Text(item.ownerName.isEmpty ? '-' : item.ownerName),
-                ),
+                DataCell(Text(item.location.isEmpty ? '-' : item.location)),
+                DataCell(Text(item.ownerName.isEmpty ? '-' : item.ownerName)),
                 DataCell(Text(item.isEnabled ? '启用' : '停用')),
                 DataCell(Text(_formatDateTime(item.createdAt))),
                 DataCell(Text(_formatDateTime(item.updatedAt))),

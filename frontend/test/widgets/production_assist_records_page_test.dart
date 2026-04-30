@@ -130,6 +130,36 @@ void main() {
     expect(find.text('已生效'), findsWidgets);
   });
 
+  testWidgets('assist records invalid route payload shows feedback', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionAssistRecordsPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canViewRecords: true,
+            routePayloadJson: '{"action":',
+            service: _FakeAssistRecordsService(),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.textContaining('路由参数解析失败'), findsOneWidget);
+  });
+
   testWidgets('assist records page only keeps detail action', (tester) async {
     tester.view.physicalSize = const Size(1600, 1200);
     tester.view.devicePixelRatio = 1.0;

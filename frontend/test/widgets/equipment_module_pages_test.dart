@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_action_dialog.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
@@ -579,7 +580,7 @@ class _FakeEquipmentService extends EquipmentService {
 }
 
 class _FakeCraftService extends CraftService {
-  _FakeCraftService({List<CraftStageItem>? stages})
+  _FakeCraftService({List<CraftStageItem>? stages, this.listStagesError})
     : _stages =
           stages ??
           [
@@ -597,6 +598,7 @@ class _FakeCraftService extends CraftService {
       super(AppSession(baseUrl: '', accessToken: 'token'));
 
   final List<CraftStageItem> _stages;
+  final Object? listStagesError;
 
   @override
   Future<CraftStageListResult> listStages({
@@ -605,6 +607,10 @@ class _FakeCraftService extends CraftService {
     String? keyword,
     bool? enabled,
   }) async {
+    final error = listStagesError;
+    if (error != null) {
+      throw error;
+    }
     return CraftStageListResult(total: _stages.length, items: _stages);
   }
 }
@@ -786,17 +792,20 @@ void main() {
     final equipmentService = _FakeEquipmentService();
     await _pumpPage(
       tester,
-        EquipmentLedgerFormDialog(
-          equipmentService: equipmentService,
-          ownerOptions: [
-            EquipmentOwnerOption(userId: 7, username: 'm1', fullName: null),
-          ],
+      EquipmentLedgerFormDialog(
+        equipmentService: equipmentService,
+        ownerOptions: [
+          EquipmentOwnerOption(userId: 7, username: 'm1', fullName: null),
+        ],
         item: _buildEquipmentLedgerItem(id: 1, code: 'EQ-001', name: '冲压机-A'),
       ),
       size: const Size(1400, 1200),
     );
 
-    expect(find.byKey(const ValueKey('equipment-ledger-form-dialog')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('equipment-ledger-form-dialog')),
+      findsOneWidget,
+    );
     expect(find.text('基本信息'), findsOneWidget);
     expect(find.text('状态与说明'), findsOneWidget);
     expect(find.text('设备编号'), findsOneWidget);
@@ -819,7 +828,10 @@ void main() {
 
     await tester.tap(find.text('新增设备'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.widgetWithText(TextFormField, '设备编号'), 'EQ-NEW-001');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '设备编号'),
+      'EQ-NEW-001',
+    );
     await tester.enterText(find.widgetWithText(TextFormField, '设备名称'), '新设备');
     await tester.enterText(find.widgetWithText(TextFormField, '位置'), '二车间-B02');
     await tester.tap(find.text('保存').last);
@@ -830,7 +842,10 @@ void main() {
 
     await tester.tap(find.widgetWithText(TextButton, '编辑').first);
     await tester.pumpAndSettle();
-    await tester.enterText(find.widgetWithText(TextFormField, '设备名称'), '新设备-已编辑');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '设备名称'),
+      '新设备-已编辑',
+    );
     await tester.tap(find.text('保存').last);
     await tester.pumpAndSettle();
 
@@ -866,7 +881,10 @@ void main() {
       size: const Size(1400, 1200),
     );
 
-    expect(find.byKey(const ValueKey('maintenance-item-form-dialog')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('maintenance-item-form-dialog')),
+      findsOneWidget,
+    );
     expect(find.text('项目配置'), findsOneWidget);
     expect(find.text('周期与说明'), findsOneWidget);
     expect(find.text('项目名称'), findsOneWidget);
@@ -1052,15 +1070,24 @@ void main() {
       tester,
       MaintenancePlanFormDialog(
         equipmentService: equipmentService,
-        equipmentOptions: [_buildEquipmentLedgerItem(id: 1, code: 'EQ-001', name: '冲压机-A')],
+        equipmentOptions: [
+          _buildEquipmentLedgerItem(id: 1, code: 'EQ-001', name: '冲压机-A'),
+        ],
         itemOptions: [_buildMaintenanceItemEntry(id: 2, name: '月度润滑')],
-        stageOptions: [_buildCraftStageItem(id: 9, code: 'STAMPING', name: '冲压工段')],
-        ownerOptions: [EquipmentOwnerOption(userId: 7, username: 'm1', fullName: null)],
+        stageOptions: [
+          _buildCraftStageItem(id: 9, code: 'STAMPING', name: '冲压工段'),
+        ],
+        ownerOptions: [
+          EquipmentOwnerOption(userId: 7, username: 'm1', fullName: null),
+        ],
       ),
       size: const Size(1500, 1200),
     );
 
-    expect(find.byKey(const ValueKey('maintenance-plan-form-dialog')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('maintenance-plan-form-dialog')),
+      findsOneWidget,
+    );
     expect(find.text('计划配置'), findsOneWidget);
     expect(find.text('执行与排期'), findsOneWidget);
     expect(find.text('设备'), findsOneWidget);
@@ -1095,6 +1122,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(equipmentService.updatePlanCalls, 1);
 
+    await tester.ensureVisible(find.widgetWithText(TextButton, '停用').first);
+    await tester.tap(find.widgetWithText(TextButton, '停用').first);
+    await tester.pumpAndSettle();
+    expect(find.text('停用保养计划确认'), findsOneWidget);
+    expect(find.textContaining('计划“冲压机-A / 月度润滑”'), findsOneWidget);
+    expect(equipmentService.togglePlanCalls, 0);
+
+    await tester.tap(find.widgetWithText(FilledButton, '停用').last);
+    await tester.pumpAndSettle();
+    expect(equipmentService.togglePlanCalls, 1);
+
     await tester.ensureVisible(find.widgetWithText(TextButton, '删除').first);
     await tester.tap(find.widgetWithText(TextButton, '删除').first);
     await tester.pumpAndSettle();
@@ -1109,15 +1147,24 @@ void main() {
       tester,
       MaintenancePlanFormDialog(
         equipmentService: equipmentService,
-        equipmentOptions: [_buildEquipmentLedgerItem(id: 1, code: 'EQ-001', name: '冲压机-A')],
+        equipmentOptions: [
+          _buildEquipmentLedgerItem(id: 1, code: 'EQ-001', name: '冲压机-A'),
+        ],
         itemOptions: [_buildMaintenanceItemEntry(id: 2, name: '月度润滑')],
-        stageOptions: [_buildCraftStageItem(id: 9, code: 'STAMPING', name: '冲压工段')],
-        ownerOptions: [EquipmentOwnerOption(userId: 7, username: 'm1', fullName: null)],
+        stageOptions: [
+          _buildCraftStageItem(id: 9, code: 'STAMPING', name: '冲压工段'),
+        ],
+        ownerOptions: [
+          EquipmentOwnerOption(userId: 7, username: 'm1', fullName: null),
+        ],
       ),
       size: const Size(1500, 1200),
     );
 
-    expect(find.byKey(const ValueKey('maintenance-plan-form-dialog')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('maintenance-plan-form-dialog')),
+      findsOneWidget,
+    );
     expect(find.text('计划配置'), findsOneWidget);
     expect(find.text('设备'), findsOneWidget);
     expect(find.text('保养项目'), findsOneWidget);
@@ -1142,6 +1189,43 @@ void main() {
     expect(find.text('到期日期'), findsOneWidget);
     expect(find.text('结果摘要'), findsOneWidget);
     expect(find.text('#4'), findsOneWidget);
+  });
+
+  testWidgets('保养执行页工段加载失败时展示反馈', (tester) async {
+    final equipmentService = _FakeEquipmentService();
+    final failingCraftService = _FakeCraftService(
+      listStagesError: ApiException('工段列表加载失败', 500),
+    );
+    await _pumpPage(
+      tester,
+      MaintenanceExecutionPage(
+        session: session,
+        onLogout: () {},
+        canExecute: true,
+        equipmentService: equipmentService,
+        craftService: failingCraftService,
+      ),
+    );
+
+    expect(find.textContaining('工段列表加载失败'), findsOneWidget);
+  });
+
+  testWidgets('保养执行页非法 jump payload 会展示反馈', (tester) async {
+    final equipmentService = _FakeEquipmentService();
+
+    await _pumpPage(
+      tester,
+      MaintenanceExecutionPage(
+        session: session,
+        onLogout: () {},
+        canExecute: true,
+        equipmentService: equipmentService,
+        craftService: craftService,
+        jumpPayloadJson: '{"action":',
+      ),
+    );
+
+    expect(find.textContaining('跳转参数解析失败'), findsOneWidget);
   });
 
   testWidgets('保养执行页面工段长文本下拉展开与选中不抛异常', (tester) async {
@@ -1203,6 +1287,13 @@ void main() {
     );
 
     await tester.tap(find.byKey(const Key('maintenance-execution-start-4')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('开始执行确认'), findsOneWidget);
+    expect(find.textContaining('工单“冲压机-A / 月度润滑”'), findsOneWidget);
+    expect(equipmentService.startExecutionCalls, 0);
+
+    await tester.tap(find.widgetWithText(FilledButton, '开始执行').last);
     await tester.pumpAndSettle();
 
     expect(equipmentService.startExecutionCalls, 1);
@@ -1283,7 +1374,10 @@ void main() {
       size: const Size(1400, 1200),
     );
 
-    expect(find.byKey(const ValueKey('maintenance-execution-complete-dialog')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('maintenance-execution-complete-dialog')),
+      findsOneWidget,
+    );
     expect(find.text('完成保养执行'), findsOneWidget);
     expect(find.text('执行结果'), findsOneWidget);
     expect(find.text('结果摘要'), findsOneWidget);

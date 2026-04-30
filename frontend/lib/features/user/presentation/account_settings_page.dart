@@ -203,7 +203,14 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
       _pendingPasswordSectionLanding = true;
       _highlightPasswordSection();
       _tryLandOnPasswordSection();
-    } catch (_) {}
+    } catch (error) {
+      _lastHandledRoutePayloadJson = rawPayload;
+      if (mounted) {
+        setState(() {
+          _message = '路由参数解析失败：${_errorMessage(error)}';
+        });
+      }
+    }
   }
 
   void _highlightPasswordSection() {
@@ -372,8 +379,8 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
         baseUrl: widget.session.baseUrl,
         accessToken: widget.session.accessToken,
       );
-    } catch (_) {
-      // 忽略退出登录错误，直接跳转
+    } catch (error) {
+      debugPrint('退出登录请求失败，继续执行本地退出：$error');
     } finally {
       if (mounted) {
         setState(() => _loggingOut = false);
@@ -838,8 +845,6 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     );
   }
 
-
-
   Widget _buildPill({
     required String label,
     required Color color,
@@ -902,8 +907,6 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
       ),
     );
   }
-
-
 
   @override
   Widget build(BuildContext context) {

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/features/user/presentation/widgets/login_session_action_dialogs.dart';
 import 'package:mes_client/features/user/presentation/widgets/login_session_page_header.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
@@ -176,12 +177,19 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
     return widget.canForceOffline && item.status == 'active';
   }
 
-  Future<void> _forceOfflineSingle(String sessionTokenId) async {
+  Future<void> _forceOfflineSingle(OnlineSessionItem item) async {
     if (!widget.canForceOffline) {
       return;
     }
+    final confirmed = await showForceOfflineSessionDialog(
+      context: context,
+      session: item,
+    );
+    if (!confirmed || !mounted) {
+      return;
+    }
     try {
-      await _userService.forceOffline(sessionTokenId: sessionTokenId);
+      await _userService.forceOffline(sessionTokenId: item.sessionTokenId);
       if (!mounted) {
         return;
       }
@@ -202,6 +210,13 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
 
   Future<void> _forceOfflineBatch() async {
     if (!widget.canForceOffline || _selectedSessionIds.isEmpty) {
+      return;
+    }
+    final confirmed = await showBatchForceOfflineSessionDialog(
+      context: context,
+      sessionCount: _selectedSessionIds.length,
+    );
+    if (!confirmed || !mounted) {
       return;
     }
     try {
@@ -402,8 +417,7 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
                           DataCell(
                             OutlinedButton(
                               onPressed: canForceOffline
-                                  ? () =>
-                                        _forceOfflineSingle(item.sessionTokenId)
+                                  ? () => _forceOfflineSingle(item)
                                   : null,
                               child: const Text('强制下线'),
                             ),

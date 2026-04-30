@@ -87,7 +87,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
       _endDate = widget.initialEndDate!;
     }
     _consumeRoutePayload(widget.routePayloadJson, triggerLoad: false);
-    _loadStats();
+    _loadStats(preserveMessage: _message.isNotEmpty);
   }
 
   @override
@@ -125,8 +125,8 @@ class _QualityDataPageState extends State<QualityDataPage> {
     }
     try {
       final payload = jsonDecode(rawPayload) as Map<String, dynamic>;
-      final dashboardFilter =
-          (payload['dashboard_filter'] as String? ?? '').trim();
+      final dashboardFilter = (payload['dashboard_filter'] as String? ?? '')
+          .trim();
       if (dashboardFilter != 'warning') {
         return;
       }
@@ -141,7 +141,17 @@ class _QualityDataPageState extends State<QualityDataPage> {
         _resultFilter = 'failed';
         _resetLocalPages();
       }
-    } catch (_) {}
+    } catch (error) {
+      final message = '路由参数解析失败：${_errorMessage(error)}';
+      _lastHandledRoutePayloadJson = rawPayload;
+      if (triggerLoad) {
+        setState(() {
+          _message = message;
+        });
+      } else {
+        _message = message;
+      }
+    }
   }
 
   String _formatDate(DateTime value) {
@@ -212,7 +222,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
     onChanged(picked);
   }
 
-  Future<void> _loadStats() async {
+  Future<void> _loadStats({bool preserveMessage = false}) async {
     if (_startDate.isAfter(_endDate)) {
       setState(() {
         _message = '开始日期不能晚于结束日期';
@@ -222,7 +232,9 @@ class _QualityDataPageState extends State<QualityDataPage> {
 
     setState(() {
       _loading = true;
-      _message = '';
+      if (!preserveMessage) {
+        _message = '';
+      }
     });
     try {
       final overview = await _service.getQualityOverview(
@@ -540,10 +552,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
                       ? null
                       : (v) => setState(() => _resultFilter = v),
                 ),
-                Text(
-                  '时间范围默认最近30天（含当天）',
-                  style: theme.textTheme.bodySmall,
-                ),
+                Text('时间范围默认最近30天（含当天）', style: theme.textTheme.bodySmall),
               ],
             ),
             const SizedBox(height: 8),
@@ -666,9 +675,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
               child: TabBarView(
                 children: [
                   _buildPaginatedTableSection(
-                    cardKey: const ValueKey(
-                      'qualityDataProcessTableCard',
-                    ),
+                    cardKey: const ValueKey('qualityDataProcessTableCard'),
                     columns: const [
                       DataColumn(label: Text('工序编码')),
                       DataColumn(label: Text('工序名称')),
@@ -690,17 +697,13 @@ class _QualityDataPageState extends State<QualityDataPage> {
                               DataCell(Text('${item.firstArticleTotal}')),
                               DataCell(Text('${item.passedTotal}')),
                               DataCell(Text('${item.failedTotal}')),
-                              DataCell(
-                                Text(_formatRate(item.passRatePercent)),
-                              ),
+                              DataCell(Text(_formatRate(item.passRatePercent))),
                               DataCell(Text('${item.defectTotal}')),
                               DataCell(Text('${item.scrapTotal}')),
                               DataCell(Text('${item.repairTotal}')),
                               DataCell(
                                 Text(
-                                  _formatDateTime(
-                                    item.latestFirstArticleAt,
-                                  ),
+                                  _formatDateTime(item.latestFirstArticleAt),
                                 ),
                               ),
                             ],
@@ -717,9 +720,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
                     emptyText: '暂无工序品质数据',
                   ),
                   _buildPaginatedTableSection(
-                    cardKey: const ValueKey(
-                      'qualityDataOperatorTableCard',
-                    ),
+                    cardKey: const ValueKey('qualityDataOperatorTableCard'),
                     columns: const [
                       DataColumn(label: Text('操作员')),
                       DataColumn(label: Text('首件总数')),
@@ -739,17 +740,13 @@ class _QualityDataPageState extends State<QualityDataPage> {
                               DataCell(Text('${item.firstArticleTotal}')),
                               DataCell(Text('${item.passedTotal}')),
                               DataCell(Text('${item.failedTotal}')),
-                              DataCell(
-                                Text(_formatRate(item.passRatePercent)),
-                              ),
+                              DataCell(Text(_formatRate(item.passRatePercent))),
                               DataCell(Text('${item.defectTotal}')),
                               DataCell(Text('${item.scrapTotal}')),
                               DataCell(Text('${item.repairTotal}')),
                               DataCell(
                                 Text(
-                                  _formatDateTime(
-                                    item.latestFirstArticleAt,
-                                  ),
+                                  _formatDateTime(item.latestFirstArticleAt),
                                 ),
                               ),
                             ],
@@ -766,9 +763,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
                     emptyText: '暂无人员品质数据',
                   ),
                   _buildPaginatedTableSection(
-                    cardKey: const ValueKey(
-                      'qualityDataProductTableCard',
-                    ),
+                    cardKey: const ValueKey('qualityDataProductTableCard'),
                     columns: const [
                       DataColumn(label: Text('产品编码')),
                       DataColumn(label: Text('产品名称')),
@@ -789,9 +784,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
                               DataCell(Text('${item.firstArticleTotal}')),
                               DataCell(Text('${item.passedTotal}')),
                               DataCell(Text('${item.failedTotal}')),
-                              DataCell(
-                                Text(_formatRate(item.passRatePercent)),
-                              ),
+                              DataCell(Text(_formatRate(item.passRatePercent))),
                               DataCell(Text('${item.defectTotal}')),
                               DataCell(Text('${item.scrapTotal}')),
                               DataCell(Text('${item.repairTotal}')),

@@ -156,8 +156,15 @@ class _ProductPageState extends State<ProductPage>
       return;
     }
     _lastHandledRoutePayloadJson = rawJson;
-    final payload = parseProductMessageJumpPayload(rawJson);
-    if (payload == null) {
+    final ProductMessageJumpPayload payload;
+    try {
+      final parsedPayload = parseProductMessageJumpPayload(rawJson);
+      if (parsedPayload == null) {
+        return;
+      }
+      payload = parsedPayload;
+    } catch (error) {
+      debugPrint('产品跳转参数解析失败：$error');
       return;
     }
     final targetIndex = _orderedVisibleTabCodes.indexOf(payload.targetTabCode);
@@ -417,26 +424,22 @@ ProductMessageJumpPayload? parseProductMessageJumpPayload(String? rawJson) {
   if (normalized.isEmpty) {
     return null;
   }
-  try {
-    final payload = jsonDecode(normalized);
-    if (payload is! Map<String, dynamic>) {
-      return null;
-    }
-    final productId = payload['product_id'] as int?;
-    if (productId == null || productId <= 0) {
-      return null;
-    }
-    return ProductMessageJumpPayload(
-      targetTabCode:
-          payload['target_tab_code'] as String? ??
-          productVersionManagementTabCode,
-      action: payload['action'] as String? ?? 'view_version',
-      productId: productId,
-      productName: payload['product_name'] as String? ?? '',
-      targetVersion: payload['target_version'] as int?,
-      targetVersionLabel: payload['target_version_label'] as String?,
-    );
-  } catch (_) {
+  final payload = jsonDecode(normalized);
+  if (payload is! Map<String, dynamic>) {
     return null;
   }
+  final productId = payload['product_id'] as int?;
+  if (productId == null || productId <= 0) {
+    return null;
+  }
+  return ProductMessageJumpPayload(
+    targetTabCode:
+        payload['target_tab_code'] as String? ??
+        productVersionManagementTabCode,
+    action: payload['action'] as String? ?? 'view_version',
+    productId: productId,
+    productName: payload['product_name'] as String? ?? '',
+    targetVersion: payload['target_version'] as int?,
+    targetVersionLabel: payload['target_version_label'] as String?,
+  );
 }

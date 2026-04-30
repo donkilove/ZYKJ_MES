@@ -182,6 +182,13 @@ void main() {
     await tester.tap(find.widgetWithText(OutlinedButton, '强制下线').first);
     await tester.pumpAndSettle();
 
+    expect(find.text('强制下线确认'), findsOneWidget);
+    expect(find.textContaining('用户“alpha”'), findsOneWidget);
+    expect(userService.forceOfflineCalls, 0);
+
+    await tester.tap(find.widgetWithText(FilledButton, '强制下线').last);
+    await tester.pumpAndSettle();
+
     expect(userService.forceOfflineCalls, 1);
     expect(userService.lastForceOfflineSessionId, 'session-1');
     expect(userService.listCalls, greaterThanOrEqualTo(2));
@@ -223,6 +230,13 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, '批量强制下线（2）'));
     await tester.pumpAndSettle();
 
+    expect(find.text('批量强制下线确认'), findsOneWidget);
+    expect(find.textContaining('2 个在线会话'), findsOneWidget);
+    expect(userService.batchForceOfflineCalls, 0);
+
+    await tester.tap(find.widgetWithText(FilledButton, '批量强制下线').last);
+    await tester.pumpAndSettle();
+
     expect(userService.batchForceOfflineCalls, 1);
     expect(
       userService.lastBatchSessionIds,
@@ -241,6 +255,8 @@ void main() {
     await tester.tap(find.byType(Checkbox).first);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '批量强制下线（2）'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '批量强制下线').last);
     await tester.pumpAndSettle();
 
     expect(find.text('批量下线失败'), findsOneWidget);

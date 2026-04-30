@@ -13,8 +13,29 @@ Future<bool> showMaintenanceExecutionCancelDialog({
       title: const Text('取消工单'),
       content: Container(
         key: const ValueKey('maintenance-execution-cancel-dialog'),
-        child: Text('确认取消工单"${workOrder.equipmentName} / ${workOrder.itemName}"吗？'),
+        child: Text(
+          '确认取消工单"${workOrder.equipmentName} / ${workOrder.itemName}"吗？',
+        ),
       ),
+      onConfirm: () => Navigator.of(dialogContext).pop(true),
+    ),
+  );
+  return confirmed == true;
+}
+
+Future<bool> showMaintenanceExecutionStartDialog({
+  required BuildContext context,
+  required MaintenanceWorkOrderItem workOrder,
+}) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => MesActionDialog(
+      title: const Text('开始执行确认'),
+      width: 420,
+      content: Text(
+        '确认开始执行工单“${workOrder.equipmentName} / ${workOrder.itemName}”吗？',
+      ),
+      confirmLabel: '开始执行',
       onConfirm: () => Navigator.of(dialogContext).pop(true),
     ),
   );

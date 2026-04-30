@@ -545,6 +545,24 @@ void main() {
       );
     });
 
+    test('网络连接失败时转换为统一 ApiException', () async {
+      final service = EquipmentService(
+        AppSession(
+          baseUrl: 'http://127.0.0.1:1',
+          accessToken: 'token-equipment',
+        ),
+      );
+
+      await expectLater(
+        () => service.listEquipment(page: 1, pageSize: 20),
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.statusCode, 'statusCode', 0)
+              .having((e) => e.message, 'message', contains('网络请求失败')),
+        ),
+      );
+    });
+
     test('createEquipmentRule accepts 201 Created', () async {
       final server = await TestHttpServer.start({
         'POST /equipment/rules': (request) {

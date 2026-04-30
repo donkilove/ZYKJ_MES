@@ -129,6 +129,7 @@ class _FakeApprovalCraftService extends CraftService {
     : super(AppSession(baseUrl: '', accessToken: 'token'));
 
   int listStagesCalls = 0;
+  Object? listStagesError;
 
   @override
   Future<CraftStageListResult> listStages({
@@ -138,6 +139,10 @@ class _FakeApprovalCraftService extends CraftService {
     bool? enabled,
   }) async {
     listStagesCalls += 1;
+    final error = listStagesError;
+    if (error != null) {
+      throw error;
+    }
     final items = listStagesCalls == 1
         ? [
             CraftStageItem(
@@ -292,6 +297,37 @@ void main() {
     expect(find.textContaining('已定位注册申请 #572'), findsOneWidget);
   });
 
+  testWidgets('注册审批页非法 route payload 会展示反馈', (tester) async {
+    final userService = _FakeApprovalUserService();
+    final craftService = _FakeApprovalCraftService();
+
+    tester.view.physicalSize = const Size(1920, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RegistrationApprovalPage(
+            session: AppSession(baseUrl: 'http://test', accessToken: 'token'),
+            onLogout: () {},
+            canApprove: true,
+            canReject: true,
+            routePayloadJson: '{"request_id":',
+            userService: userService,
+            craftService: craftService,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('路由参数解析失败'), findsOneWidget);
+  });
+
   testWidgets('审批通过弹窗打开时会刷新工段列表', (tester) async {
     final userService = _FakeApprovalUserService();
     final craftService = _FakeApprovalCraftService();
@@ -312,6 +348,24 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('最新工段'), findsOneWidget);
+  });
+
+  testWidgets('审批通过弹窗刷新工段失败时展示旧数据并提示', (tester) async {
+    final userService = _FakeApprovalUserService();
+    final craftService = _FakeApprovalCraftService();
+    await _pumpApprovalPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    craftService.listStagesError = ApiException('工段加载失败', 500);
+
+    await tester.tap(find.text('通过'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('旧工段'), findsOneWidget);
+    expect(find.text('工段加载失败'), findsOneWidget);
   });
 
   testWidgets('注册审批弹窗允许展示无启用工序的工段', (tester) async {
@@ -349,9 +403,9 @@ void main() {
     expect(find.text('通过'), findsNothing);
     expect(find.text('驳回'), findsOneWidget);
 
-    await tester.tap(find.text('驳回'));
+    await tester.tap(find.widgetWithText(TextButton, '驳回'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('驳回').last);
+    await tester.tap(find.widgetWithText(FilledButton, '确认驳回'));
     await tester.pumpAndSettle();
 
     expect(userService.rejectCalls, 1);
@@ -450,9 +504,9 @@ void main() {
       craftService: craftService,
     );
 
-    await tester.tap(find.text('驳回'));
+    await tester.tap(find.widgetWithText(TextButton, '驳回'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('驳回').last);
+    await tester.tap(find.widgetWithText(FilledButton, '确认驳回'));
     await tester.pumpAndSettle();
 
     expect(userService.rejectCalls, 1);

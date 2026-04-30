@@ -107,6 +107,8 @@ class _EquipmentRuleParameterPageState extends State<EquipmentRuleParameterPage>
     });
   }
 
+  String _errMsg(Object e) => e is ApiException ? e.message : e.toString();
+
   Future<void> _loadEquipmentOptions() async {
     try {
       final result = await _service.listEquipment(
@@ -117,7 +119,14 @@ class _EquipmentRuleParameterPageState extends State<EquipmentRuleParameterPage>
       if (mounted) {
         setState(() => _equipmentOptions = result.items);
       }
-    } catch (_) {}
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('加载设备选项失败：${_errMsg(error)}')));
+    }
   }
 
   Future<void> _refreshCurrentTab() async {
@@ -171,15 +180,15 @@ class _EquipmentRuleParameterPageState extends State<EquipmentRuleParameterPage>
       return const Center(child: Text('当前账号没有可访问的规则/参数页面。'));
     }
     return MesCrudPageScaffold(
-      header: MesRefreshPageHeader(title: '规则与参数', onRefresh: _refreshCurrentTab),
+      header: MesRefreshPageHeader(
+        title: '规则与参数',
+        onRefresh: _refreshCurrentTab,
+      ),
       filters: Material(
         color: Theme.of(context).colorScheme.surface,
         child: TabBar(controller: _innerTabController, tabs: tabs),
       ),
-      content: TabBarView(
-        controller: _innerTabController,
-        children: children,
-      ),
+      content: TabBarView(controller: _innerTabController, children: children),
     );
   }
 }
@@ -333,10 +342,17 @@ class _RulesTabState extends State<_RulesTab> {
   }
 
   Future<void> _toggleRule(EquipmentRuleItem item) async {
+    final nextEnabled = !item.isEnabled;
+    final confirmed = await showEquipmentRuleToggleDialog(
+      context: context,
+      rule: item,
+      nextEnabled: nextEnabled,
+    );
+    if (!confirmed || !mounted) return;
     try {
       await widget.service.toggleEquipmentRule(
         ruleId: item.id,
-        isEnabled: !item.isEnabled,
+        isEnabled: nextEnabled,
       );
       if (mounted) _load();
     } catch (e) {
@@ -828,10 +844,17 @@ class _ParametersTabState extends State<_ParametersTab> {
   }
 
   Future<void> _toggleParam(EquipmentRuntimeParameterItem item) async {
+    final nextEnabled = !item.isEnabled;
+    final confirmed = await showEquipmentRuntimeParameterToggleDialog(
+      context: context,
+      parameter: item,
+      nextEnabled: nextEnabled,
+    );
+    if (!confirmed || !mounted) return;
     try {
       await widget.service.toggleRuntimeParameter(
         paramId: item.id,
-        enabled: !item.isEnabled,
+        enabled: nextEnabled,
       );
       if (mounted) _load();
     } catch (e) {

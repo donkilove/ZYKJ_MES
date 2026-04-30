@@ -107,7 +107,15 @@ class _ProductVersionManagementPageState
         _selectedProduct = product;
       });
       await _loadVersions(product);
-    } catch (_) {}
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _pageMessage = '定位产品失败：$error';
+      });
+      _showError('定位产品失败: $error');
+    }
   }
 
   Future<void> _loadProducts() async {
@@ -238,9 +246,9 @@ class _ProductVersionManagementPageState
 
   void _showSuccess(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: Colors.green),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.green));
   }
 
   Future<void> _createVersion() async {
@@ -478,8 +486,9 @@ class _ProductVersionManagementPageState
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final isStacked = constraints.maxWidth < 960;
-                final stackedTableHeight =
-                    (constraints.maxHeight * 0.6).clamp(320.0, 520.0).toDouble();
+                final stackedTableHeight = (constraints.maxHeight * 0.6)
+                    .clamp(320.0, 520.0)
+                    .toDouble();
 
                 final toolbar = ProductVersionToolbar(
                   product: selectedProduct,
@@ -487,8 +496,7 @@ class _ProductVersionManagementPageState
                   hasDraft: _hasDraftVersion,
                   canManageVersions: widget.canManageVersions,
                   canActivateVersions: widget.canActivateVersions,
-                  canExportVersionParameters:
-                      widget.canExportVersionParameters,
+                  canExportVersionParameters: widget.canExportVersionParameters,
                   onCreateVersion: _createVersion,
                   onCopyVersion: () {
                     if (selectedVersion != null) {

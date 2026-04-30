@@ -66,12 +66,10 @@ class UserManagementPage extends StatefulWidget {
   final bool isCurrentTabVisible;
 
   @override
-  State<UserManagementPage> createState() =>
-      _UserManagementPageState();
+  State<UserManagementPage> createState() => _UserManagementPageState();
 }
 
-class _UserManagementPageState
-    extends State<UserManagementPage> {
+class _UserManagementPageState extends State<UserManagementPage> {
   static const String _roleSystemAdmin = 'system_admin';
   static const String _deletedScopeActive = 'active';
   static const String _deletedScopeDeleted = 'deleted';
@@ -244,7 +242,12 @@ class _UserManagementPageState
   Future<List<CraftStageItem>> _loadEnabledStagesForDialog() async {
     try {
       return await _fetchLatestStages();
-    } catch (_) {
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      }
       return _stages;
     }
   }

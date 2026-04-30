@@ -172,7 +172,14 @@ class _ProductionRepairOrdersPageState
           repairOrderCode: repairOrderCode,
         );
       });
-    } catch (_) {}
+    } catch (error) {
+      _lastHandledJumpPayloadJson = rawPayload;
+      if (mounted) {
+        setState(() {
+          _message = '跳转参数解析失败：${_errorMessage(error)}';
+        });
+      }
+    }
   }
 
   String _formatDateTime(DateTime? value) {
@@ -481,9 +488,7 @@ class _ProductionRepairOrdersPageState
         ),
         OutlinedButton(
           onPressed: _loading ? null : () => _pickDate(isStart: true),
-          child: Text(
-            _startDate == null ? '开始日期' : _formatDate(_startDate!),
-          ),
+          child: Text(_startDate == null ? '开始日期' : _formatDate(_startDate!)),
         ),
         OutlinedButton(
           onPressed: _loading ? null : () => _pickDate(isStart: false),
@@ -510,10 +515,7 @@ class _ProductionRepairOrdersPageState
       filters: filtersToolbar,
       banner: _message.isEmpty
           ? null
-          : Text(
-              _message,
-              style: TextStyle(color: theme.colorScheme.error),
-            ),
+          : Text(_message, style: TextStyle(color: theme.colorScheme.error)),
       content: CrudListTableSection(
         cardKey: const ValueKey('productionRepairOrdersListCard'),
         loading: _loading,

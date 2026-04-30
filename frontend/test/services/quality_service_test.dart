@@ -228,5 +228,20 @@ void main() {
         ),
       );
     });
+
+    test('网络连接失败时转换为统一 ApiException', () async {
+      final service = QualityService(
+        AppSession(baseUrl: 'http://127.0.0.1:1', accessToken: 'token-quality'),
+      );
+
+      await expectLater(
+        () => service.getQualityOverview(),
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.statusCode, 'statusCode', 0)
+              .having((e) => e.message, 'message', contains('网络请求失败')),
+        ),
+      );
+    });
   });
 }

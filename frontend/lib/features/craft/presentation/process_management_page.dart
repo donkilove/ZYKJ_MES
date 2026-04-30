@@ -14,6 +14,7 @@ import 'package:mes_client/features/craft/presentation/widgets/process_managemen
 import 'package:mes_client/features/craft/presentation/widgets/process_management_view_switch.dart';
 import 'package:mes_client/features/craft/presentation/widgets/process_stage_dialog.dart';
 import 'package:mes_client/features/craft/presentation/widgets/process_stage_panel.dart';
+import 'package:mes_client/features/craft/presentation/widgets/process_toggle_dialogs.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
@@ -152,31 +153,32 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
       context: context,
       builder: (_) => ProcessStageDialog(
         existing: existing,
-        onSubmit: ({
-          required String code,
-          required String name,
-          required int sortOrder,
-          required String remark,
-          required bool isEnabled,
-        }) async {
-          if (existing == null) {
-            await _service.createStage(
-              code: code,
-              name: name,
-              sortOrder: sortOrder,
-              remark: remark,
-            );
-          } else {
-            await _service.updateStage(
-              stageId: existing.id,
-              code: code,
-              name: name,
-              sortOrder: sortOrder,
-              isEnabled: isEnabled,
-              remark: remark,
-            );
-          }
-        },
+        onSubmit:
+            ({
+              required String code,
+              required String name,
+              required int sortOrder,
+              required String remark,
+              required bool isEnabled,
+            }) async {
+              if (existing == null) {
+                await _service.createStage(
+                  code: code,
+                  name: name,
+                  sortOrder: sortOrder,
+                  remark: remark,
+                );
+              } else {
+                await _service.updateStage(
+                  stageId: existing.id,
+                  code: code,
+                  name: name,
+                  sortOrder: sortOrder,
+                  isEnabled: isEnabled,
+                  remark: remark,
+                );
+              }
+            },
       ),
     );
 
@@ -203,33 +205,34 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
       builder: (_) => ProcessItemDialog(
         existing: existing,
         stages: _stages,
-        onSubmit: ({
-          required String codeSuffix,
-          required String name,
-          required int stageId,
-          required String remark,
-          required bool isEnabled,
-        }) async {
-          final stage = _stageById(stageId);
-          final fullCode = '${stage.code}-$codeSuffix';
-          if (existing == null) {
-            await _service.createProcess(
-              code: fullCode,
-              name: name,
-              stageId: stageId,
-              remark: remark,
-            );
-          } else {
-            await _service.updateProcess(
-              processId: existing.id,
-              code: fullCode,
-              name: name,
-              stageId: stageId,
-              isEnabled: isEnabled,
-              remark: remark,
-            );
-          }
-        },
+        onSubmit:
+            ({
+              required String codeSuffix,
+              required String name,
+              required int stageId,
+              required String remark,
+              required bool isEnabled,
+            }) async {
+              final stage = _stageById(stageId);
+              final fullCode = '${stage.code}-$codeSuffix';
+              if (existing == null) {
+                await _service.createProcess(
+                  code: fullCode,
+                  name: name,
+                  stageId: stageId,
+                  remark: remark,
+                );
+              } else {
+                await _service.updateProcess(
+                  processId: existing.id,
+                  code: fullCode,
+                  name: name,
+                  stageId: stageId,
+                  isEnabled: isEnabled,
+                  remark: remark,
+                );
+              }
+            },
       ),
     );
 
@@ -255,13 +258,22 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
           _showNoPermission();
           return;
         }
+        final nextEnabled = !item.isEnabled;
+        final confirmed = await showStageToggleDialog(
+          context: context,
+          stage: item,
+          nextEnabled: nextEnabled,
+        );
+        if (!confirmed || !mounted) {
+          return;
+        }
         try {
           await _service.updateStage(
             stageId: item.id,
             code: item.code,
             name: item.name,
             sortOrder: item.sortOrder,
-            isEnabled: !item.isEnabled,
+            isEnabled: nextEnabled,
             remark: item.remark,
           );
           await _loadData();
@@ -353,13 +365,22 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
           _showNoPermission();
           return;
         }
+        final nextEnabled = !item.isEnabled;
+        final confirmed = await showProcessToggleDialog(
+          context: context,
+          process: item,
+          nextEnabled: nextEnabled,
+        );
+        if (!confirmed || !mounted) {
+          return;
+        }
         try {
           await _service.updateProcess(
             processId: item.id,
             code: item.code,
             name: item.name,
             stageId: item.stageId ?? 0,
-            isEnabled: !item.isEnabled,
+            isEnabled: nextEnabled,
             remark: item.remark,
           );
           await _loadData();
@@ -386,7 +407,9 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
         }
         List<RefEntry> refs = [];
         try {
-          final result = await _service.getProcessReferences(processId: item.id);
+          final result = await _service.getProcessReferences(
+            processId: item.id,
+          );
           refs = result.items
               .map(
                 (entry) => RefEntry(
@@ -438,18 +461,20 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
     showProcessReferenceDialog(
       context: context,
       title: '工段引用分析：${stage.name}',
-      loader: () => _service.getStageReferences(stageId: stage.id).then(
-        (result) => result.items
-            .map(
-              (entry) => RefEntry(
-                entry.refType,
-                entry.refName,
-                entry.refCode ?? '#${entry.refId}',
-                entry.detail,
-              ),
-            )
-            .toList(),
-      ),
+      loader: () => _service
+          .getStageReferences(stageId: stage.id)
+          .then(
+            (result) => result.items
+                .map(
+                  (entry) => RefEntry(
+                    entry.refType,
+                    entry.refName,
+                    entry.refCode ?? '#${entry.refId}',
+                    entry.detail,
+                  ),
+                )
+                .toList(),
+          ),
     );
   }
 
@@ -457,18 +482,20 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
     showProcessReferenceDialog(
       context: context,
       title: '工序引用分析：${process.name}',
-      loader: () => _service.getProcessReferences(processId: process.id).then(
-        (result) => result.items
-            .map(
-              (entry) => RefEntry(
-                entry.refType,
-                entry.refName,
-                entry.refCode ?? '#${entry.refId}',
-                entry.detail,
-              ),
-            )
-            .toList(),
-      ),
+      loader: () => _service
+          .getProcessReferences(processId: process.id)
+          .then(
+            (result) => result.items
+                .map(
+                  (entry) => RefEntry(
+                    entry.refType,
+                    entry.refName,
+                    entry.refCode ?? '#${entry.refId}',
+                    entry.detail,
+                  ),
+                )
+                .toList(),
+          ),
     );
   }
 
@@ -476,24 +503,24 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
   Widget build(BuildContext context) {
     final workspace = switch (_viewState.activeView) {
       ProcessManagementPrimaryView.processList => ProcessItemPanel(
-          searchController: _processSearchController,
-          stageFilter: _viewState.processStageFilter,
-          stageOptions: _stages,
-          items: _filteredProcesses,
-          focusedProcessId: _viewState.focusedProcessId,
-          canWrite: widget.canWrite,
-          onKeywordChanged: _pageState.setProcessKeyword,
-          onStageFilterChanged: _pageState.setProcessStageFilter,
-          onFocusProcess: _pageState.focusProcess,
-          onActionSelected: _handleProcessAction,
-        ),
+        searchController: _processSearchController,
+        stageFilter: _viewState.processStageFilter,
+        stageOptions: _stages,
+        items: _filteredProcesses,
+        focusedProcessId: _viewState.focusedProcessId,
+        canWrite: widget.canWrite,
+        onKeywordChanged: _pageState.setProcessKeyword,
+        onStageFilterChanged: _pageState.setProcessStageFilter,
+        onFocusProcess: _pageState.focusProcess,
+        onActionSelected: _handleProcessAction,
+      ),
       ProcessManagementPrimaryView.stageList => ProcessStagePanel(
-          searchController: _stageSearchController,
-          items: _filteredStages,
-          canWrite: widget.canWrite,
-          onKeywordChanged: _pageState.setStageKeyword,
-          onActionSelected: _handleStageAction,
-        ),
+        searchController: _stageSearchController,
+        items: _filteredStages,
+        canWrite: widget.canWrite,
+        onKeywordChanged: _pageState.setStageKeyword,
+        onActionSelected: _handleStageAction,
+      ),
     };
 
     return MesCrudPageScaffold(

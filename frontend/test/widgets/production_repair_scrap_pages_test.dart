@@ -424,10 +424,7 @@ void main() {
           body: ProductionRepairPhenomenaSummaryDialog(
             repairOrderCode: 'RW-1',
             items: [
-              RepairOrderPhenomenonSummaryItem(
-                phenomenon: '毛刺',
-                quantity: 2,
-              ),
+              RepairOrderPhenomenonSummaryItem(phenomenon: '毛刺', quantity: 2),
             ],
           ),
         ),
@@ -474,10 +471,7 @@ void main() {
               'updated_at': '2026-03-01T00:00:00Z',
             }),
             phenomena: [
-              RepairOrderPhenomenonSummaryItem(
-                phenomenon: '毛刺',
-                quantity: 2,
-              ),
+              RepairOrderPhenomenonSummaryItem(phenomenon: '毛刺', quantity: 2),
             ],
             processOptions: const [
               ProductionRepairReturnProcessOption(

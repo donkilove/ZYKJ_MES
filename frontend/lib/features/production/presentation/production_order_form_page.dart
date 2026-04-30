@@ -369,8 +369,9 @@ class _ProductionOrderFormPageState extends State<ProductionOrderFormPage> {
           try {
             final detail = await _loadTemplateDetail(defaultTemplate.id);
             _routeSteps = _mapTemplateSteps(detail);
-          } catch (_) {
+          } catch (error) {
             _selectedTemplateId = null;
+            _message = '加载默认工艺模板失败：${_errorMessage(error)}';
           }
         }
       }

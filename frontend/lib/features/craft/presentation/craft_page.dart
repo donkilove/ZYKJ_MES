@@ -208,8 +208,15 @@ class _CraftPageState extends State<CraftPage> with TickerProviderStateMixin {
       return;
     }
     _lastHandledRoutePayloadJson = rawJson;
-    final payload = parseCraftMessageJumpPayload(rawJson);
-    if (payload == null) {
+    final CraftMessageJumpPayload payload;
+    try {
+      final parsedPayload = parseCraftMessageJumpPayload(rawJson);
+      if (parsedPayload == null) {
+        return;
+      }
+      payload = parsedPayload;
+    } catch (error) {
+      debugPrint('工艺跳转参数解析失败：$error');
       return;
     }
     setState(() {
@@ -244,7 +251,8 @@ class _CraftPageState extends State<CraftPage> with TickerProviderStateMixin {
   Uri? _parseJumpTarget(String jumpTarget) {
     try {
       return Uri.parse(jumpTarget);
-    } catch (_) {
+    } on FormatException catch (error) {
+      debugPrint('工艺引用跳转目标解析失败：$error');
       return null;
     }
   }
@@ -430,24 +438,18 @@ CraftMessageJumpPayload? parseCraftMessageJumpPayload(String? rawJson) {
   if (normalized.isEmpty) {
     return null;
   }
-  try {
-    final payload = jsonDecode(normalized);
-    if (payload is! Map<String, dynamic>) {
-      return null;
-    }
-    final targetTabCode = (payload['target_tab_code'] as String?)?.trim();
-    return CraftMessageJumpPayload(
-      targetTabCode: (targetTabCode == null || targetTabCode.isEmpty)
-          ? productionProcessConfigTabCode
-          : targetTabCode,
-      templateId: _tryParsePositiveInt(payload['template_id']),
-      version: _tryParsePositiveInt(payload['version']),
-      processId: _tryParsePositiveInt(payload['process_id']),
-      systemMasterVersions: _parseFlexibleBool(
-        payload['system_master_versions'],
-      ),
-    );
-  } catch (_) {
+  final payload = jsonDecode(normalized);
+  if (payload is! Map<String, dynamic>) {
     return null;
   }
+  final targetTabCode = (payload['target_tab_code'] as String?)?.trim();
+  return CraftMessageJumpPayload(
+    targetTabCode: (targetTabCode == null || targetTabCode.isEmpty)
+        ? productionProcessConfigTabCode
+        : targetTabCode,
+    templateId: _tryParsePositiveInt(payload['template_id']),
+    version: _tryParsePositiveInt(payload['version']),
+    processId: _tryParsePositiveInt(payload['process_id']),
+    systemMasterVersions: _parseFlexibleBool(payload['system_master_versions']),
+  );
 }

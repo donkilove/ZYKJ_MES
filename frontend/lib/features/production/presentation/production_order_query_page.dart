@@ -104,7 +104,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
       _loadProxyOperators();
       _loadProxyStages();
     }
-    _loadOrders();
+    _loadOrders(preserveMessage: _message.isNotEmpty);
     _syncPollingState();
   }
 
@@ -133,6 +133,16 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
   String _errorMessage(Object error) =>
       error is ApiException ? error.message : error.toString();
 
+  String _appendMessage(String current, String message) {
+    if (current.isEmpty || current == _emptyStateText) {
+      return message;
+    }
+    if (current.contains(message)) {
+      return current;
+    }
+    return '$current\n$message';
+  }
+
   void _consumeRoutePayload(String? rawPayload, {bool triggerLoad = true}) {
     if (rawPayload == null ||
         rawPayload.trim().isEmpty ||
@@ -157,7 +167,17 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         _orderStatusFilter = 'in_progress';
         _page = 1;
       }
-    } catch (_) {}
+    } catch (error) {
+      final message = '路由参数解析失败：${_errorMessage(error)}';
+      _lastHandledRoutePayloadJson = rawPayload;
+      if (triggerLoad) {
+        setState(() {
+          _message = message;
+        });
+      } else {
+        _message = message;
+      }
+    }
   }
 
   String _formatDate(DateTime? value) {
@@ -316,7 +336,19 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
           _proxyOperatorUserId = null;
         }
       });
-    } catch (_) {}
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      setState(() {
+        _message = _appendMessage(
+          _message,
+          '加载代理操作员失败：${_errorMessage(error)}',
+        );
+      });
+    }
   }
 
   Future<void> _loadProxyStages() async {
@@ -332,7 +364,16 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
           _proxyViewOperators = const [];
         }
       });
-    } catch (_) {}
+    } catch (error) {
+      if (!mounted) return;
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      setState(() {
+        _message = _appendMessage(_message, '加载代理工段失败：${_errorMessage(error)}');
+      });
+    }
   }
 
   Future<void> _loadProxyViewOperators(int stageId) async {
@@ -355,12 +396,28 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
           _proxyOperatorUserId = null;
         }
       });
-    } catch (_) {}
+    } catch (error) {
+      if (!mounted || _proxyStageId != stageId) {
+        return;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      setState(() {
+        _proxyViewOperators = const [];
+        _proxyOperatorUserId = null;
+        _message = _appendMessage(
+          _message,
+          '加载工段操作员失败：${_errorMessage(error)}',
+        );
+      });
+    }
   }
 
-  Future<void> _ensureTargetOperatorsLoadedForAssistDialog() async {
+  Future<bool> _ensureTargetOperatorsLoadedForAssistDialog() async {
     if (_proxyOperators.isNotEmpty) {
-      return;
+      return true;
     }
     try {
       final result = await _service.listAssistUserOptions(
@@ -369,13 +426,43 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         roleCode: 'operator',
       );
       _proxyOperators = result.items;
-    } catch (_) {}
+      return true;
+    } catch (error) {
+      if (!mounted) return false;
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return false;
+      }
+      setState(() {
+        _message = _appendMessage(
+          _message,
+          '加载代班目标操作员失败：${_errorMessage(error)}',
+        );
+      });
+      return false;
+    }
   }
 
-  Future<void> _ensureAssistUsersLoaded() async {
-    if (_assistUsers.isNotEmpty) return;
-    final result = await _service.listAssistUserOptions(page: 1, pageSize: 200);
-    _assistUsers = result.items;
+  Future<bool> _ensureAssistUsersLoaded() async {
+    if (_assistUsers.isNotEmpty) return true;
+    try {
+      final result = await _service.listAssistUserOptions(
+        page: 1,
+        pageSize: 200,
+      );
+      _assistUsers = result.items;
+      return true;
+    } catch (error) {
+      if (!mounted) return false;
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return false;
+      }
+      setState(() {
+        _message = _appendMessage(_message, '加载代班选项失败：${_errorMessage(error)}');
+      });
+      return false;
+    }
   }
 
   void _startPolling() {
@@ -407,7 +494,11 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     _startPolling();
   }
 
-  Future<void> _loadOrders({bool silent = false, int? page}) async {
+  Future<void> _loadOrders({
+    bool silent = false,
+    bool preserveMessage = false,
+    int? page,
+  }) async {
     final targetPage = page ?? _page;
     if (_viewMode == 'proxy' &&
         (_proxyStageId == null || _proxyOperatorUserId == null)) {
@@ -425,7 +516,9 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     if (!silent) {
       setState(() {
         _loading = true;
-        _message = '';
+        if (!preserveMessage) {
+          _message = '';
+        }
       });
     }
     try {
@@ -690,8 +783,15 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     MyOrderItem item, {
     bool reloadAfterAction = true,
   }) async {
-    await _ensureAssistUsersLoaded();
-    await _ensureTargetOperatorsLoadedForAssistDialog();
+    final assistUsersLoaded = await _ensureAssistUsersLoaded();
+    if (!assistUsersLoaded) {
+      return false;
+    }
+    final targetOperatorsLoaded =
+        await _ensureTargetOperatorsLoadedForAssistDialog();
+    if (!targetOperatorsLoaded) {
+      return false;
+    }
     if (!mounted) {
       return false;
     }

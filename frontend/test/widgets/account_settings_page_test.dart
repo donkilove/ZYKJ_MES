@@ -132,6 +132,29 @@ void main() {
     );
   });
 
+  testWidgets('account settings invalid route payload shows feedback', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AccountSettingsPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canChangePassword: true,
+            canViewSession: false,
+            routePayloadJson: '{"action":',
+            userService: _FakeUserService(),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.textContaining('路由参数解析失败'), findsOneWidget);
+  });
+
   testWidgets('账号设置页 pollingEnabled=false 时不会启动会话轮询，切回 true 会补拉并恢复轮询', (
     tester,
   ) async {
@@ -276,7 +299,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('account-session-timeout-dialog')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('account-session-timeout-dialog')),
+      findsOneWidget,
+    );
     expect(find.text('会话即将过期'), findsOneWidget);
     expect(find.textContaining('当前会话将在 4 分钟 后过期'), findsOneWidget);
     expect(find.text('即将过期'), findsWidgets);

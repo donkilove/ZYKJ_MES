@@ -899,11 +899,7 @@ void main() {
   testWidgets('质量趋势页接入统一页头锚点', (tester) async {
     await tester.pumpWidget(
       _wrapBody(
-        QualityTrendPage(
-          session: session,
-          onLogout: () {},
-          canExport: true,
-        ),
+        QualityTrendPage(session: session, onLogout: () {}, canExport: true),
       ),
     );
 
@@ -954,6 +950,26 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(service.lastQualityStatsQuery?.result, 'failed');
+  });
+
+  testWidgets('质量数据页 route payload 解析失败时展示错误提示', (tester) async {
+    _setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _wrapBody(
+        QualityDataPage(
+          session: session,
+          onLogout: () {},
+          service: _FakeQualityService(),
+          routePayloadJson: '{"dashboard_filter":',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('路由参数解析失败'), findsOneWidget);
   });
 
   testWidgets('质量数据页支持查询筛选分页与导出', (tester) async {

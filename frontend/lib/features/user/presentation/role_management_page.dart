@@ -154,10 +154,7 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
       context: context,
       barrierDismissible: false,
       builder: (context) {
-        return RoleFormDialog(
-          userService: _userService,
-          role: role,
-        );
+        return RoleFormDialog(userService: _userService, role: role);
       },
     );
 
@@ -170,8 +167,17 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
     if (!widget.canToggleRole) {
       return;
     }
+    final nextEnabled = !role.isEnabled;
+    final confirmed = await showRoleToggleDialog(
+      context: context,
+      role: role,
+      nextEnabled: nextEnabled,
+    );
+    if (!confirmed || !mounted) {
+      return;
+    }
     try {
-      if (role.isEnabled) {
+      if (!nextEnabled) {
         await _userService.disableRole(roleId: role.id);
       } else {
         await _userService.enableRole(roleId: role.id);
@@ -194,10 +200,7 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
     if (!widget.canDeleteRole || _isBuiltinSemanticsRole(role)) {
       return;
     }
-    final confirmed = await showRoleDeleteDialog(
-      context: context,
-      role: role,
-    );
+    final confirmed = await showRoleDeleteDialog(context: context, role: role);
     if (!confirmed) {
       return;
     }

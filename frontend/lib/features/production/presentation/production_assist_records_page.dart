@@ -150,7 +150,14 @@ class _ProductionAssistRecordsPageState
       _lastHandledRoutePayloadJson = rawPayload;
       _pendingDetailAuthorizationId = authorizationId;
       _loadRows(page: 1);
-    } catch (_) {}
+    } catch (error) {
+      _lastHandledRoutePayloadJson = rawPayload;
+      if (mounted) {
+        setState(() {
+          _message = '路由参数解析失败：${_errorMessage(error)}';
+        });
+      }
+    }
   }
 
   void _tryAutoOpenDetail() {
@@ -356,7 +363,10 @@ class _ProductionAssistRecordsPageState
     ];
 
     return MesCrudPageScaffold(
-      header: MesRefreshPageHeader(title: '代班记录', onRefresh: _loading ? null : _loadRows),
+      header: MesRefreshPageHeader(
+        title: '代班记录',
+        onRefresh: _loading ? null : _loadRows,
+      ),
       filters: filtersToolbar,
       banner: bannerWidgets.isEmpty
           ? null
@@ -392,9 +402,7 @@ class _ProductionAssistRecordsPageState
                 DataCell(Text(item.targetOperatorUsername)),
                 DataCell(Text(item.requesterUsername)),
                 DataCell(Text(item.helperUsername)),
-                DataCell(
-                  Text(assistAuthorizationStatusLabel(item.status)),
-                ),
+                DataCell(Text(assistAuthorizationStatusLabel(item.status))),
                 DataCell(Text(item.reviewerUsername ?? '-')),
                 DataCell(
                   Text(

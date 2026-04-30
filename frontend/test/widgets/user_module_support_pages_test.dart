@@ -395,10 +395,7 @@ void main() {
       ),
     );
 
-    expect(
-      find.byKey(const ValueKey('audit-log-page-header')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('audit-log-page-header')), findsOneWidget);
     expect(
       find.byKey(const ValueKey('audit-log-filter-section')),
       findsOneWidget,
@@ -457,6 +454,13 @@ void main() {
       expect(find.text('删除'), findsNothing);
 
       await tester.tap(find.widgetWithText(OutlinedButton, '停用'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('停用角色确认'), findsOneWidget);
+      expect(find.textContaining('角色“维修员”'), findsOneWidget);
+      expect(userService.disableRoleCalls, 0);
+
+      await tester.tap(find.widgetWithText(FilledButton, '停用').last);
       await tester.pumpAndSettle();
 
       expect(userService.disableRoleCalls, 1);
@@ -934,7 +938,10 @@ void main() {
 
     expect(find.text('登录会话'), findsOneWidget);
     expect(find.text('tester'), findsOneWidget);
-    expect(find.byKey(const ValueKey('login-session-page-header')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('login-session-page-header')),
+      findsOneWidget,
+    );
     expect(find.byType(CrudListTableSection), findsOneWidget);
     expect(find.text('登录日志'), findsNothing);
     expect(find.text('全选当前页'), findsOneWidget);
@@ -1016,6 +1023,8 @@ void main() {
     );
 
     await tester.tap(find.widgetWithText(OutlinedButton, '停用'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '停用').last);
     await tester.pumpAndSettle();
 
     expect(find.text('停用失败'), findsOneWidget);

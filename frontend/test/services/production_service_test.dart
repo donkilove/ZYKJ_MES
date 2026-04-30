@@ -1313,6 +1313,24 @@ void main() {
       );
     });
 
+    test('网络连接失败时转换为统一 ApiException', () async {
+      final service = ProductionService(
+        AppSession(
+          baseUrl: 'http://127.0.0.1:1',
+          accessToken: 'token-production',
+        ),
+      );
+
+      await expectLater(
+        () => service.listOrders(page: 1, pageSize: 20),
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.statusCode, 'statusCode', 0)
+              .having((e) => e.message, 'message', contains('网络请求失败')),
+        ),
+      );
+    });
+
     test(
       'parses 422 validation detail message with chinese field labels',
       () async {

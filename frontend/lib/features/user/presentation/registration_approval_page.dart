@@ -161,8 +161,13 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
       if (_items.isNotEmpty || _total > 0 || _loading) {
         _applyJumpTargetHint();
       }
-    } catch (_) {
-      return;
+    } catch (error) {
+      _lastHandledRoutePayloadJson = normalized;
+      if (mounted) {
+        setState(() {
+          _message = '路由参数解析失败：${_errorMessage(error)}';
+        });
+      }
     }
   }
 
@@ -215,16 +220,24 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
   Future<List<CraftStageItem>> _loadEnabledStagesForDialog() async {
     try {
       return await _fetchLatestStages();
-    } catch (_) {
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      }
       return _stages;
     }
   }
 
   Future<void> _loadInitialData({int? page}) async {
     final targetPage = page ?? _requestPage;
+    final pendingMessage = _message;
     setState(() {
       _loading = true;
-      _message = '';
+      if (!pendingMessage.startsWith('路由参数解析失败')) {
+        _message = '';
+      }
     });
 
     try {
@@ -410,25 +423,19 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
           currentStages: currentStages,
           defaultRoleCode: _defaultRoleCode(),
           isOperator: _isOperator,
-          onApprove: ({
-            required account,
-            required roleCode,
-            password,
-            stageId,
-          }) async {
-            return await _approveRequest(
-              item: item,
-              account: account,
-              roleCode: roleCode,
-              password: password,
-              stageId: stageId,
-            );
-          },
+          onApprove:
+              ({required account, required roleCode, password, stageId}) async {
+                return await _approveRequest(
+                  item: item,
+                  account: account,
+                  roleCode: roleCode,
+                  password: password,
+                  stageId: stageId,
+                );
+              },
         );
       },
     );
-
-
 
     if (approved == true && mounted) {
       setState(() {

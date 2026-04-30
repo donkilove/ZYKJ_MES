@@ -95,7 +95,18 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
       if (mounted) {
         setState(() => _stages = result.items);
       }
-    } catch (_) {}
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      setState(() {
+        _message = '加载工段列表失败：${_errorMessage(error)}';
+      });
+    }
   }
 
   bool _isUnauthorized(Object error) {
@@ -203,6 +214,13 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
   }
 
   Future<void> _startExecution(MaintenanceWorkOrderItem item) async {
+    final confirmed = await showMaintenanceExecutionStartDialog(
+      context: context,
+      workOrder: item,
+    );
+    if (!confirmed || !mounted) {
+      return;
+    }
     try {
       await _equipmentService.startExecution(workOrderId: item.id);
       if (mounted) {
@@ -319,8 +337,8 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
     }
     try {
       final payload = jsonDecode(rawPayload) as Map<String, dynamic>;
-      final dashboardFilter =
-          (payload['dashboard_filter'] as String? ?? '').trim();
+      final dashboardFilter = (payload['dashboard_filter'] as String? ?? '')
+          .trim();
       if (dashboardFilter == 'overdue') {
         _lastHandledJumpPayloadJson = rawPayload;
         setState(() {
@@ -345,7 +363,14 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
         }
         _showDetailById(workOrderId);
       });
-    } catch (_) {}
+    } catch (error) {
+      _lastHandledJumpPayloadJson = rawPayload;
+      if (mounted) {
+        setState(() {
+          _message = '跳转参数解析失败：${_errorMessage(error)}';
+        });
+      }
+    }
   }
 
   String _formatDateTime(DateTime value) {
@@ -434,10 +459,7 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                     value: 'overdue',
                     child: Text('已逾期'),
                   ),
-                  DropdownMenuItem<String?>(
-                    value: 'done',
-                    child: Text('已完成'),
-                  ),
+                  DropdownMenuItem<String?>(value: 'done', child: Text('已完成')),
                   DropdownMenuItem<String?>(
                     value: 'cancelled',
                     child: Text('已取消'),
@@ -603,9 +625,7 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       TextButton(
-                        key: Key(
-                          'maintenance-execution-start-${item.id}',
-                        ),
+                        key: Key('maintenance-execution-start-${item.id}'),
                         onPressed: canStart
                             ? () => _startExecution(item)
                             : null,
@@ -613,9 +633,7 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                       ),
                       const SizedBox(width: 8),
                       TextButton(
-                        key: Key(
-                          'maintenance-execution-complete-${item.id}',
-                        ),
+                        key: Key('maintenance-execution-complete-${item.id}'),
                         onPressed: canComplete
                             ? () => _completeExecution(item)
                             : null,
@@ -623,9 +641,7 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                       ),
                       const SizedBox(width: 8),
                       TextButton(
-                        key: Key(
-                          'maintenance-execution-cancel-${item.id}',
-                        ),
+                        key: Key('maintenance-execution-cancel-${item.id}'),
                         onPressed: canCancel
                             ? () => _cancelExecution(item)
                             : null,
@@ -633,9 +649,7 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                       ),
                       const SizedBox(width: 8),
                       TextButton(
-                        key: Key(
-                          'maintenance-execution-detail-${item.id}',
-                        ),
+                        key: Key('maintenance-execution-detail-${item.id}'),
                         onPressed: () => _showDetail(item),
                         child: const Text('详情'),
                       ),

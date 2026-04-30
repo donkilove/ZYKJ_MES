@@ -141,10 +141,7 @@ void main() {
         home: Scaffold(
           body: Column(
             children: [
-              ProductVersionPageHeader(
-                loading: false,
-                onRefresh: () {},
-              ),
+              ProductVersionPageHeader(loading: false, onRefresh: () {}),
               ProductVersionFeedbackBanner(
                 hasDraft: true,
                 product: _buildProduct(
@@ -256,8 +253,14 @@ void main() {
       find.byKey(const ValueKey('product-version-feedback-banner')),
       findsOneWidget,
     );
-    expect(find.byKey(const ValueKey('product-selector-panel')), findsOneWidget);
-    expect(find.byKey(const ValueKey('product-version-toolbar')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('product-selector-panel')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('product-version-toolbar')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey('product-version-table-section')),
       findsOneWidget,
@@ -365,8 +368,14 @@ void main() {
 
     expect(find.byType(ProductVersionPageHeader), findsOneWidget);
     expect(find.byType(MesListDetailShell), findsOneWidget);
-    expect(find.byKey(const ValueKey('product-selector-panel')), findsOneWidget);
-    expect(find.byKey(const ValueKey('product-version-toolbar')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('product-selector-panel')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('product-version-toolbar')),
+      findsOneWidget,
+    );
     expect(
       find.byKey(const ValueKey('product-version-table-section')),
       findsOneWidget,
@@ -418,7 +427,10 @@ void main() {
     );
 
     expect(sidebarRect.top, lessThan(contentRect.top));
-    expect(find.byKey(const ValueKey('product-version-toolbar')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('product-version-toolbar')),
+      findsOneWidget,
+    );
 
     final contentScrollable = find.descendant(
       of: find.byKey(const ValueKey('mes-list-detail-shell-content')),
@@ -450,7 +462,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('product-version-detail-dialog')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('product-version-detail-dialog')),
+      findsOneWidget,
+    );
     expect(find.textContaining('版本详情'), findsOneWidget);
     expect(find.text('版本号'), findsOneWidget);
   });
@@ -471,7 +486,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('product-version-note-dialog')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('product-version-note-dialog')),
+      findsOneWidget,
+    );
     expect(find.textContaining('编辑备注'), findsOneWidget);
     expect(find.text('版本备注'), findsOneWidget);
   });

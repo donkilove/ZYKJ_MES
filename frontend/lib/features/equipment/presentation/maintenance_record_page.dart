@@ -75,7 +75,18 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
           _ownerOptions = owners;
         });
       }
-    } catch (_) {}
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      setState(() {
+        _message = '加载保养记录筛选项失败：${_errorMessage(error)}';
+      });
+    }
   }
 
   bool _isUnauthorized(Object error) {

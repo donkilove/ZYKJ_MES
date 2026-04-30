@@ -343,7 +343,14 @@ class _ProductionScrapStatisticsPageState
         }
         _showDetailById(scrapId: scrapId, orderCode: orderCode);
       });
-    } catch (_) {}
+    } catch (error) {
+      _lastHandledJumpPayloadJson = rawPayload;
+      if (mounted) {
+        setState(() {
+          _message = '跳转参数解析失败：${_errorMessage(error)}';
+        });
+      }
+    }
   }
 
   @override
@@ -402,10 +409,7 @@ class _ProductionScrapStatisticsPageState
             ),
             items: const [
               DropdownMenuItem(value: 'all', child: Text('全部')),
-              DropdownMenuItem(
-                value: 'pending_apply',
-                child: Text('待处理'),
-              ),
+              DropdownMenuItem(value: 'pending_apply', child: Text('待处理')),
               DropdownMenuItem(value: 'applied', child: Text('已处理')),
             ],
             onChanged: (value) {
@@ -421,9 +425,7 @@ class _ProductionScrapStatisticsPageState
         ),
         OutlinedButton(
           onPressed: _loading ? null : () => _pickDate(isStart: true),
-          child: Text(
-            _startDate == null ? '开始日期' : _formatDate(_startDate!),
-          ),
+          child: Text(_startDate == null ? '开始日期' : _formatDate(_startDate!)),
         ),
         OutlinedButton(
           onPressed: _loading ? null : () => _pickDate(isStart: false),
@@ -450,10 +452,7 @@ class _ProductionScrapStatisticsPageState
       filters: filtersToolbar,
       banner: _message.isEmpty
           ? null
-          : Text(
-              _message,
-              style: TextStyle(color: theme.colorScheme.error),
-            ),
+          : Text(_message, style: TextStyle(color: theme.colorScheme.error)),
       content: CrudListTableSection(
         cardKey: const ValueKey('productionScrapStatisticsListCard'),
         loading: _loading,

@@ -1,41 +1,40 @@
 import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/ui/patterns/mes_action_dialog.dart';
-import 'package:mes_client/features/equipment/models/equipment_models.dart';
+import 'package:mes_client/features/craft/models/craft_models.dart';
 
-Future<bool> showMaintenancePlanDeleteDialog({
+Future<bool> showStageToggleDialog({
   required BuildContext context,
-  required MaintenancePlanItem plan,
-}) async {
-  final confirmed = await showDialog<bool>(
-    context: context,
-    builder: (dialogContext) => MesActionDialog(
-      title: const Text('删除保养计划'),
-      content: Text(
-        '确认删除计划“${plan.equipmentName} / ${plan.itemName}”吗？此操作不可恢复。',
-      ),
-      confirmLabel: '删除',
-      isDestructive: true,
-      onConfirm: () => Navigator.of(dialogContext).pop(true),
-    ),
-  );
-  return confirmed == true;
-}
-
-Future<bool> showMaintenancePlanToggleDialog({
-  required BuildContext context,
-  required MaintenancePlanItem plan,
+  required CraftStageItem stage,
   required bool nextEnabled,
 }) async {
   final action = nextEnabled ? '启用' : '停用';
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => MesActionDialog(
-      title: Text('$action保养计划确认'),
+      title: Text('$action工段确认'),
       width: 420,
-      content: Text(
-        '确认$action计划“${plan.equipmentName} / ${plan.itemName}”吗？该变更会影响后续保养工单生成。',
-      ),
+      content: Text('确认$action工段“${stage.name}”吗？该变更会影响工艺配置中的可选状态。'),
+      confirmLabel: action,
+      isDestructive: !nextEnabled,
+      onConfirm: () => Navigator.of(dialogContext).pop(true),
+    ),
+  );
+  return confirmed == true;
+}
+
+Future<bool> showProcessToggleDialog({
+  required BuildContext context,
+  required CraftProcessItem process,
+  required bool nextEnabled,
+}) async {
+  final action = nextEnabled ? '启用' : '停用';
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => MesActionDialog(
+      title: Text('$action工序确认'),
+      width: 420,
+      content: Text('确认$action工序“${process.name}”吗？该变更会影响模板配置中的可选状态。'),
       confirmLabel: action,
       isDestructive: !nextEnabled,
       onConfirm: () => Navigator.of(dialogContext).pop(true),

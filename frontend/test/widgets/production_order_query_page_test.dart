@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/production_first_article_page.dart';
@@ -50,6 +51,9 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
   String? lastAssistReason;
   int processCompletedQuantity = 4;
   int? userCompletedQuantity = 4;
+  Object? proxyOperatorOptionsError;
+  Object? proxyViewOperatorOptionsError;
+  Object? assistUserOptionsError;
 
   @override
   Future<MyOrderListResult> listMyOrders({
@@ -141,6 +145,12 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
     int? stageId,
   }) async {
     if (roleCode == 'operator') {
+      if (stageId == null && proxyOperatorOptionsError != null) {
+        throw proxyOperatorOptionsError!;
+      }
+      if (stageId != null && proxyViewOperatorOptionsError != null) {
+        throw proxyViewOperatorOptionsError!;
+      }
       if (stageId != null) {
         proxyStageFilterRequests.add(stageId);
       }
@@ -177,6 +187,9 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
         ],
       };
       return AssistUserOptionListResult(total: items.length, items: items);
+    }
+    if (assistUserOptionsError != null) {
+      throw assistUserOptionsError!;
     }
     return AssistUserOptionListResult(
       total: 1,
@@ -425,10 +438,15 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
 class _FakeCraftService extends CraftService {
   _FakeCraftService() : super(AppSession(baseUrl: '', accessToken: ''));
 
+  Object? stageLightOptionsError;
+
   @override
   Future<CraftStageLightListResult> listStageLightOptions({
     bool? enabled = true,
   }) async {
+    if (stageLightOptionsError != null) {
+      throw stageLightOptionsError!;
+    }
     return CraftStageLightListResult(
       total: 2,
       items: [
@@ -528,6 +546,34 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(service.lastOrderStatus, 'in_progress');
+  });
+
+  testWidgets('生产订单查询页 route payload 解析失败时展示错误提示', (tester) async {
+    final service = _FakeProductionOrderQueryPageService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionOrderQueryPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canFirstArticle: true,
+            canEndProduction: true,
+            canCreateManualRepairOrder: true,
+            canCreateAssistAuthorization: true,
+            canProxyView: false,
+            canExportCsv: false,
+            routePayloadJson: '{"dashboard_filter":',
+            service: service,
+            pollInterval: Duration.zero,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('路由参数解析失败'), findsOneWidget);
   });
 
   testWidgets('订单查询页 pollingEnabled=false 时不会启动定时刷新，切回 true 会补拉并恢复轮询', (
@@ -986,6 +1032,39 @@ void main() {
     expect(find.text('请先选择工段，再选择代理操作员查看工单'), findsOneWidget);
   });
 
+  testWidgets('代理视角选项加载失败会展示错误提示', (tester) async {
+    final service = _FakeProductionOrderQueryPageService()
+      ..proxyOperatorOptionsError = ApiException('操作员加载失败', 500);
+    final craftService = _FakeCraftService()
+      ..stageLightOptionsError = ApiException('工段加载失败', 500);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionOrderQueryPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canFirstArticle: true,
+            canEndProduction: true,
+            canCreateManualRepairOrder: true,
+            canCreateAssistAuthorization: true,
+            canProxyView: true,
+            canExportCsv: false,
+            service: service,
+            craftService: craftService,
+            pollInterval: Duration.zero,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.textContaining('加载代理操作员失败：操作员加载失败'), findsOneWidget);
+    expect(find.textContaining('加载代理工段失败：工段加载失败'), findsOneWidget);
+  });
+
   testWidgets('代理视角切换工段会重载操作员选项', (tester) async {
     final service = _FakeProductionOrderQueryPageService();
     final craftService = _FakeCraftService();
@@ -1043,6 +1122,49 @@ void main() {
     await tester.tap(_findDropdownByLabel('代理操作员'));
     await tester.pumpAndSettle();
     expect(find.text('stage2_operator (二段操作员)').last, findsOneWidget);
+  });
+
+  testWidgets('代理视角按工段加载操作员失败会展示错误提示', (tester) async {
+    final service = _FakeProductionOrderQueryPageService()
+      ..proxyViewOperatorOptionsError = ApiException('工段操作员失败', 500);
+    final craftService = _FakeCraftService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionOrderQueryPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canFirstArticle: true,
+            canEndProduction: true,
+            canCreateManualRepairOrder: true,
+            canCreateAssistAuthorization: true,
+            canProxyView: true,
+            canExportCsv: false,
+            service: service,
+            craftService: craftService,
+            pollInterval: Duration.zero,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(
+      find.widgetWithText(DropdownButtonFormField<String>, '我的工单'),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('代理操作员视角').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(_findDropdownByLabel('代理工段'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('切割段').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.textContaining('加载工段操作员失败：工段操作员失败'), findsOneWidget);
   });
 
   testWidgets('代理视角未选择操作员时显示提示且不误查列表', (tester) async {
@@ -1233,6 +1355,42 @@ void main() {
     expect(service.lastTargetOperatorUserId, 8);
     expect(service.lastHelperUserId, 301);
     expect(service.lastAssistReason, '夜班支援');
+  });
+
+  testWidgets('订单查询页发起代班选项加载失败会展示错误提示', (tester) async {
+    final service = _FakeProductionOrderQueryPageService()
+      ..assistUserOptionsError = ApiException('代班人加载失败', 500);
+    await tester.binding.setSurfaceSize(const Size(1600, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionOrderQueryPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canFirstArticle: true,
+            canEndProduction: true,
+            canCreateManualRepairOrder: true,
+            canCreateAssistAuthorization: true,
+            canProxyView: false,
+            canExportCsv: false,
+            service: service,
+            pollInterval: Duration.zero,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('代班').last);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('加载代班选项失败：代班人加载失败'), findsOneWidget);
+    expect(service.assistAuthorizationCallCount, 0);
   });
 
   testWidgets('结束生产弹窗展示宽版骨架', (tester) async {

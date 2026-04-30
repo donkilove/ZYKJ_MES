@@ -401,6 +401,29 @@ void main() {
       );
     });
 
+    test('服务端返回非 JSON 错误体时抛出解析失败提示', () async {
+      final server = await TestHttpServer.start({
+        'GET /craft/stages/light': (_) => const TestResponse(
+          statusCode: 500,
+          body: '<html>server error</html>',
+        ),
+      });
+      addTearDown(server.close);
+
+      final service = CraftService(
+        AppSession(baseUrl: server.baseUrl, accessToken: 'token-craft'),
+      );
+
+      await expectLater(
+        () => service.listStageLightOptions(),
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.statusCode, 'statusCode', 500)
+              .having((e) => e.message, 'message', contains('响应解析失败')),
+        ),
+      );
+    });
+
     test('supports stage/process detail queries by id and code', () async {
       final server = await TestHttpServer.start({
         'GET /craft/stages/detail': (request) {

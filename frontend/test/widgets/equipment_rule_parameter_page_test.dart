@@ -64,6 +64,8 @@ class _FakeEquipmentService extends EquipmentService {
       <_RuntimeParameterRequest>[];
   late List<EquipmentRuleItem> rules;
   late List<EquipmentRuntimeParameterItem> parameters;
+  int toggleRuleCalls = 0;
+  int toggleParameterCalls = 0;
 
   @override
   Future<EquipmentLedgerListResult> listEquipment({
@@ -192,6 +194,7 @@ class _FakeEquipmentService extends EquipmentService {
     required int ruleId,
     required bool isEnabled,
   }) async {
+    toggleRuleCalls += 1;
     rules = rules.map((item) {
       if (item.id != ruleId) {
         return item;
@@ -349,6 +352,7 @@ class _FakeEquipmentService extends EquipmentService {
     required int paramId,
     required bool enabled,
   }) async {
+    toggleParameterCalls += 1;
     parameters = parameters.map((item) {
       if (item.id != paramId) {
         return item;
@@ -498,6 +502,20 @@ void main() {
       const Key('equipment-rule-actions-12'),
       '停用',
     );
+    await tester.pumpAndSettle();
+
+    expect(find.text('停用设备规则确认'), findsOneWidget);
+    expect(find.textContaining('规则“温度规则-已编辑”'), findsOneWidget);
+    expect(service.toggleRuleCalls, 0);
+    expect(
+      service.rules.singleWhere((item) => item.id == 12).isEnabled,
+      isTrue,
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, '停用').last);
+    await tester.pumpAndSettle();
+
+    expect(service.toggleRuleCalls, 1);
     expect(
       service.rules.singleWhere((item) => item.id == 12).isEnabled,
       isFalse,
@@ -549,6 +567,20 @@ void main() {
       const Key('equipment-parameter-actions-22'),
       '停用',
     );
+    await tester.pumpAndSettle();
+
+    expect(find.text('停用运行参数确认'), findsOneWidget);
+    expect(find.textContaining('参数“温度-已编辑”'), findsOneWidget);
+    expect(service.toggleParameterCalls, 0);
+    expect(
+      service.parameters.singleWhere((item) => item.id == 22).isEnabled,
+      isTrue,
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, '停用').last);
+    await tester.pumpAndSettle();
+
+    expect(service.toggleParameterCalls, 1);
     expect(
       service.parameters.singleWhere((item) => item.id == 22).isEnabled,
       isFalse,
