@@ -4,21 +4,20 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/features/craft/presentation/widgets/system_master_template_form_dialog.dart';
+import 'package:mes_client/features/craft/presentation/widgets/template_action_confirm_dialog.dart';
+import 'package:mes_client/features/craft/presentation/widgets/template_version_dialog.dart';
+import 'package:mes_client/features/craft/presentation/widgets/system_master_copy_dialog.dart';
+import 'package:mes_client/features/craft/presentation/widgets/template_publish_dialog.dart';
+import 'package:mes_client/features/craft/presentation/widgets/template_detail_dialog.dart';
+import 'package:mes_client/features/craft/presentation/widgets/template_form_dialog.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
-import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
-
-class _TemplateStepDraft {
-  _TemplateStepDraft({required this.stageId, required this.processId});
-
-  int stageId;
-  int processId;
-}
 
 enum _TemplateAction {
   detail,
@@ -318,129 +317,17 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     return '${local.year}-$month-$day $hour:$minute';
   }
 
-  List<CraftProcessItem> _processesByStage(int stageId) {
-    return _processes.where((item) => item.stageId == stageId).toList();
-  }
-
-  _TemplateStepDraft? _firstStepDraft() {
-    for (final stage in _stages) {
-      final processRows = _processesByStage(stage.id);
-      if (processRows.isEmpty) {
-        continue;
-      }
-      return _TemplateStepDraft(
-        stageId: stage.id,
-        processId: processRows.first.id,
-      );
-    }
-    return null;
-  }
-
-  List<CraftTemplateStepPayload> _buildPayloadSteps(
-    List<_TemplateStepDraft> steps,
-  ) {
-    final payload = <CraftTemplateStepPayload>[];
-    for (var i = 0; i < steps.length; i++) {
-      payload.add(
-        CraftTemplateStepPayload(
-          stepOrder: i + 1,
-          stageId: steps[i].stageId,
-          processId: steps[i].processId,
-        ),
-      );
-    }
-    return payload;
-  }
-
-  Future<CraftTemplateDetail> _getTemplateDetail(int templateId) async {
-    final cached = _detailCache[templateId];
-    if (cached != null) {
-      return cached;
-    }
-    final detail = await _craftService.getTemplateDetail(
-      templateId: templateId,
-    );
-    _detailCache[templateId] = detail;
-    return detail;
-  }
-
   Future<void> _showTemplateDetailDialog(CraftTemplateItem item) async {
     if (!_canViewTemplates) {
       _showNoPermission();
       return;
     }
-    try {
-      final detail = await _getTemplateDetail(item.id);
-      if (!mounted) {
-        return;
-      }
-      await showDialog<void>(
-        context: context,
-        builder: (dialogContext) => MesDialog(
-          title: Text('模板详情 - ${item.templateName}'),
-          width: 820,
-          content: SizedBox(
-            height: 520,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('产品：${item.productName}'),
-                Text('版本：${item.version} / 已发布 P${item.publishedVersion}'),
-                Text('生命周期：${_lifecycleLabel(item.lifecycleStatus)}'),
-                Text('状态：${item.isEnabled ? '启用' : '停用'}'),
-                Text('来源：${_templateSourceLabel(item)}'),
-                if (item.remark.trim().isNotEmpty)
-                  Text('备注：${item.remark.trim()}'),
-                const SizedBox(height: 10),
-                const Text(
-                  '步骤列表',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: detail.steps.isEmpty
-                      ? const Center(child: Text('暂无步骤'))
-                      : ListView.separated(
-                          itemCount: detail.steps.length,
-                          separatorBuilder: (context, index) =>
-                              const Divider(height: 1),
-                          itemBuilder: (context, index) {
-                            final step = detail.steps[index];
-                            return ListTile(
-                              dense: true,
-                              leading: Text('#${step.stepOrder}'),
-                              title: Text(
-                                '${step.stageCode} ${step.stageName}',
-                              ),
-                              subtitle: Text(
-                                '${step.processCode} ${step.processName}',
-                              ),
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
-        ),
-      );
-    } catch (error) {
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
-      }
-    }
+    await showTemplateDetailDialog(
+      context: context,
+      craftService: _craftService,
+      item: item,
+      onLogout: widget.onLogout,
+    );
   }
 
   Future<void> _showTemplateDialog({CraftTemplateItem? existing}) async {
@@ -449,371 +336,23 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       return;
     }
     if (_products.isEmpty || _stages.isEmpty || _processes.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请先配置产品、工段和小工序')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先配置产品、工段和小工序')),
+      );
       return;
     }
 
-    final isEdit = existing != null;
-    final formKey = GlobalKey<FormState>();
-    final templateNameController = TextEditingController(
-      text: existing?.templateName ?? '',
-    );
-    final remarkController = TextEditingController(
-      text: existing?.remark ?? '',
-    );
-
-    int selectedProductId =
-        existing?.productId ?? _productFilterId ?? _products.first.id;
-    bool isDefault = existing?.isDefault ?? false;
-    bool isEnabled = existing?.isEnabled ?? true;
-    bool syncOrders = true;
-
-    List<_TemplateStepDraft> steps = [];
-    if (isEdit) {
-      CraftTemplateDetail detail;
-      try {
-        detail = await _getTemplateDetail(existing.id);
-      } catch (error) {
-        if (_isUnauthorized(error)) {
-          widget.onLogout();
-          return;
-        }
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
-        }
-        return;
-      }
-      steps = detail.steps
-          .map(
-            (item) => _TemplateStepDraft(
-              stageId: item.stageId,
-              processId: item.processId,
-            ),
-          )
-          .toList();
-    }
-    if (steps.isEmpty) {
-      final firstStep = _firstStepDraft();
-      if (firstStep != null) {
-        steps = [firstStep];
-      }
-    }
-    if (!mounted) {
-      return;
-    }
-
-    final saved = await showMesLockedFormDialog<bool>(
+    final saved = await showTemplateFormDialog(
       context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            void addStep() {
-              final firstStep = _firstStepDraft();
-              if (firstStep == null) {
-                return;
-              }
-              setDialogState(() {
-                steps = [...steps, firstStep];
-              });
-            }
-
-            return MesDialog(
-              title: Text(isEdit ? '编辑模板' : '新建模板'),
-              width: 860,
-              content: Form(
-                key: formKey,
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      DropdownButtonFormField<int>(
-                        initialValue: selectedProductId,
-                        decoration: const InputDecoration(
-                          labelText: '产品',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: _products
-                            .map(
-                              (item) => DropdownMenuItem(
-                                value: item.id,
-                                child: Text(item.name),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: isEdit
-                            ? null
-                            : (value) {
-                                if (value == null) {
-                                  return;
-                                }
-                                setDialogState(() {
-                                  selectedProductId = value;
-                                });
-                              },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: templateNameController,
-                        decoration: const InputDecoration(
-                          labelText: '模板名称',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return '请输入模板名称';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: remarkController,
-                        maxLength: 500,
-                        maxLines: 3,
-                        decoration: const InputDecoration(
-                          labelText: '备注（可选）',
-                          border: OutlineInputBorder(),
-                          alignLabelWithHint: true,
-                        ),
-                      ),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('设为默认模板'),
-                        value: isDefault,
-                        onChanged: (value) {
-                          setDialogState(() {
-                            isDefault = value;
-                          });
-                        },
-                      ),
-                      if (!isEdit)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Text(
-                            '新建模板统一先保存为草稿，完成评审后再由列表中的“发布”入口生效。',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ),
-                      if (isEdit)
-                        SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('启用模板'),
-                          value: isEnabled,
-                          onChanged: (value) {
-                            setDialogState(() {
-                              isEnabled = value;
-                            });
-                          },
-                        ),
-                      if (isEdit)
-                        SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text('同步未完成订单'),
-                          value: syncOrders,
-                          onChanged: (value) {
-                            setDialogState(() {
-                              syncOrders = value;
-                            });
-                          },
-                        ),
-                      if (isEdit)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Text(
-                            '提示：保存编辑后模板会进入草稿状态，请在列表中执行“发布”使其生效。',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ),
-                      Row(
-                        children: [
-                          const Text(
-                            '步骤',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          const Spacer(),
-                          OutlinedButton.icon(
-                            onPressed: addStep,
-                            icon: const Icon(Icons.add),
-                            label: const Text('新增步骤'),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      ...List.generate(steps.length, (index) {
-                        final step = steps[index];
-                        final processRows = _processesByStage(step.stageId);
-                        if (!processRows.any(
-                              (item) => item.id == step.processId,
-                            ) &&
-                            processRows.isNotEmpty) {
-                          step.processId = processRows.first.id;
-                        }
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          child: Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: Column(
-                              children: [
-                                Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 48,
-                                      child: Text('#${index + 1}'),
-                                    ),
-                                    Expanded(
-                                      child: DropdownButtonFormField<int>(
-                                        initialValue: step.stageId,
-                                        decoration: const InputDecoration(
-                                          labelText: '工段',
-                                          border: OutlineInputBorder(),
-                                          isDense: true,
-                                        ),
-                                        items: _stages
-                                            .map(
-                                              (item) => DropdownMenuItem(
-                                                value: item.id,
-                                                child: Text(item.name),
-                                              ),
-                                            )
-                                            .toList(),
-                                        onChanged: (value) {
-                                          if (value == null) {
-                                            return;
-                                          }
-                                          final nextRows = _processesByStage(
-                                            value,
-                                          );
-                                          setDialogState(() {
-                                            step.stageId = value;
-                                            if (nextRows.isNotEmpty) {
-                                              step.processId =
-                                                  nextRows.first.id;
-                                            }
-                                          });
-                                        },
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: DropdownButtonFormField<int>(
-                                        initialValue: processRows.isEmpty
-                                            ? null
-                                            : (processRows.any(
-                                                    (item) =>
-                                                        item.id ==
-                                                        step.processId,
-                                                  )
-                                                  ? step.processId
-                                                  : processRows.first.id),
-                                        decoration: const InputDecoration(
-                                          labelText: '小工序',
-                                          border: OutlineInputBorder(),
-                                          isDense: true,
-                                        ),
-                                        items: processRows
-                                            .map(
-                                              (item) => DropdownMenuItem(
-                                                value: item.id,
-                                                child: Text(item.name),
-                                              ),
-                                            )
-                                            .toList(),
-                                        onChanged: processRows.isEmpty
-                                            ? null
-                                            : (value) {
-                                                if (value == null) {
-                                                  return;
-                                                }
-                                                setDialogState(() {
-                                                  step.processId = value;
-                                                });
-                                              },
-                                      ),
-                                    ),
-                                    IconButton(
-                                      tooltip: '删除',
-                                      onPressed: steps.length <= 1
-                                          ? null
-                                          : () {
-                                              setDialogState(() {
-                                                steps = [...steps]
-                                                  ..removeAt(index);
-                                              });
-                                            },
-                                      icon: const Icon(Icons.delete_outline),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    if (!formKey.currentState!.validate()) {
-                      return;
-                    }
-                    final payloadSteps = _buildPayloadSteps(steps);
-                    try {
-                      if (isEdit) {
-                        await _craftService.updateTemplate(
-                          templateId: existing.id,
-                          templateName: templateNameController.text.trim(),
-                          isDefault: isDefault,
-                          isEnabled: isEnabled,
-                          steps: payloadSteps,
-                          syncOrders: syncOrders,
-                          remark: remarkController.text.trim(),
-                        );
-                      } else {
-                        await _craftService.createTemplate(
-                          productId: selectedProductId,
-                          templateName: templateNameController.text.trim(),
-                          isDefault: isDefault,
-                          remark: remarkController.text.trim(),
-                          steps: payloadSteps,
-                        );
-                      }
-                      if (dialogContext.mounted) {
-                        Navigator.of(dialogContext).pop(true);
-                      }
-                    } catch (error) {
-                      if (_isUnauthorized(error)) {
-                        widget.onLogout();
-                        return;
-                      }
-                      if (dialogContext.mounted) {
-                        ScaffoldMessenger.of(dialogContext).showSnackBar(
-                          SnackBar(content: Text(_errorMessage(error))),
-                        );
-                      }
-                    }
-                  },
-                  child: const Text('保存'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      craftService: _craftService,
+      products: _products,
+      stages: _stages,
+      processes: _processes,
+      existing: existing,
+      initialProductId: _productFilterId,
+      onLogout: widget.onLogout,
+      onSuccess: () {},
     );
-
-    templateNameController.dispose();
-    remarkController.dispose();
 
     if (saved == true) {
       if (existing != null) {
@@ -860,247 +399,20 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       return;
     }
     if (_stages.isEmpty || _processes.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请先配置工段和小工序')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先配置工段和小工序')),
+      );
       return;
     }
 
-    final isEdit = _systemMasterTemplate != null;
-    final formKey = GlobalKey<FormState>();
-    List<_TemplateStepDraft> steps = isEdit
-        ? _systemMasterTemplate!.steps
-              .map(
-                (item) => _TemplateStepDraft(
-                  stageId: item.stageId,
-                  processId: item.processId,
-                ),
-              )
-              .toList()
-        : <_TemplateStepDraft>[];
-
-    if (steps.isEmpty) {
-      final firstStep = _firstStepDraft();
-      if (firstStep != null) {
-        steps = [firstStep];
-      }
-    }
-
-    if (steps.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('当前工段下暂无可用小工序，请先配置小工序')));
-      return;
-    }
-
-    final saved = await showMesLockedFormDialog<bool>(
+    final saved = await showSystemMasterTemplateFormDialog(
       context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            void addStep() {
-              final firstStep = _firstStepDraft();
-              if (firstStep == null) {
-                return;
-              }
-              setDialogState(() {
-                steps = [...steps, firstStep];
-              });
-            }
-
-            return MesDialog(
-              title: Text(isEdit ? '编辑系统母版' : '新建系统母版'),
-              width: 860,
-              content: Form(
-                key: formKey,
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (isEdit)
-                        Text(
-                          '当前版本：v${_systemMasterTemplate!.version}',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      if (isEdit) const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          const Text(
-                            '步骤',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          const Spacer(),
-                          OutlinedButton.icon(
-                            onPressed: addStep,
-                            icon: const Icon(Icons.add),
-                            label: const Text('新增步骤'),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      ...List.generate(steps.length, (index) {
-                        final step = steps[index];
-                        final processRows = _processesByStage(step.stageId);
-                        if (!processRows.any(
-                              (item) => item.id == step.processId,
-                            ) &&
-                            processRows.isNotEmpty) {
-                          step.processId = processRows.first.id;
-                        }
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          child: Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: Column(
-                              children: [
-                                Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 48,
-                                      child: Text('#${index + 1}'),
-                                    ),
-                                    Expanded(
-                                      child: DropdownButtonFormField<int>(
-                                        initialValue: step.stageId,
-                                        decoration: const InputDecoration(
-                                          labelText: '工段',
-                                          border: OutlineInputBorder(),
-                                          isDense: true,
-                                        ),
-                                        items: _stages
-                                            .map(
-                                              (item) => DropdownMenuItem(
-                                                value: item.id,
-                                                child: Text(item.name),
-                                              ),
-                                            )
-                                            .toList(),
-                                        onChanged: (value) {
-                                          if (value == null) {
-                                            return;
-                                          }
-                                          final nextRows = _processesByStage(
-                                            value,
-                                          );
-                                          setDialogState(() {
-                                            step.stageId = value;
-                                            if (nextRows.isNotEmpty) {
-                                              step.processId =
-                                                  nextRows.first.id;
-                                            }
-                                          });
-                                        },
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: DropdownButtonFormField<int>(
-                                        initialValue: processRows.isEmpty
-                                            ? null
-                                            : (processRows.any(
-                                                    (item) =>
-                                                        item.id ==
-                                                        step.processId,
-                                                  )
-                                                  ? step.processId
-                                                  : processRows.first.id),
-                                        decoration: const InputDecoration(
-                                          labelText: '小工序',
-                                          border: OutlineInputBorder(),
-                                          isDense: true,
-                                        ),
-                                        items: processRows
-                                            .map(
-                                              (item) => DropdownMenuItem(
-                                                value: item.id,
-                                                child: Text(item.name),
-                                              ),
-                                            )
-                                            .toList(),
-                                        onChanged: processRows.isEmpty
-                                            ? null
-                                            : (value) {
-                                                if (value == null) {
-                                                  return;
-                                                }
-                                                setDialogState(() {
-                                                  step.processId = value;
-                                                });
-                                              },
-                                      ),
-                                    ),
-                                    IconButton(
-                                      tooltip: '删除',
-                                      onPressed: steps.length <= 1
-                                          ? null
-                                          : () {
-                                              setDialogState(() {
-                                                steps = [...steps]
-                                                  ..removeAt(index);
-                                              });
-                                            },
-                                      icon: const Icon(Icons.delete_outline),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    if (!(formKey.currentState?.validate() ?? false)) {
-                      return;
-                    }
-                    final payloadSteps = _buildPayloadSteps(steps);
-                    if (payloadSteps.isEmpty) {
-                      ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        const SnackBar(content: Text('请至少配置一个步骤')),
-                      );
-                      return;
-                    }
-                    try {
-                      if (isEdit) {
-                        await _craftService.updateSystemMasterTemplate(
-                          steps: payloadSteps,
-                        );
-                      } else {
-                        await _craftService.createSystemMasterTemplate(
-                          steps: payloadSteps,
-                        );
-                      }
-                      if (dialogContext.mounted) {
-                        Navigator.of(dialogContext).pop(true);
-                      }
-                    } catch (error) {
-                      if (_isUnauthorized(error)) {
-                        widget.onLogout();
-                        return;
-                      }
-                      if (dialogContext.mounted) {
-                        ScaffoldMessenger.of(dialogContext).showSnackBar(
-                          SnackBar(content: Text(_errorMessage(error))),
-                        );
-                      }
-                    }
-                  },
-                  child: const Text('保存'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      craftService: _craftService,
+      stages: _stages,
+      processes: _processes,
+      existing: _systemMasterTemplate,
+      onLogout: widget.onLogout,
+      onSuccess: () {},
     );
 
     if (saved == true) {
@@ -1115,81 +427,20 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     }
     try {
       final result = await _craftService.listSystemMasterTemplateVersions();
-      if (!mounted) {
-        return;
-      }
-      await showDialog<void>(
+      if (!mounted) return;
+      await showTemplateVersionDialog(
         context: context,
-        builder: (dialogContext) {
-          return MesDialog(
-            title: const Text('系统母版历史版本'),
-            width: 920,
-            content: SizedBox(
-              height: 560,
-              child: result.items.isEmpty
-                  ? const Center(child: Text('暂无历史版本'))
-                  : ListView.separated(
-                      itemCount: result.items.length,
-                      separatorBuilder: (context, index) =>
-                          const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final item = result.items[index];
-                        final subtitleParts = <String>[
-                          item.createdAt.toLocal().toString(),
-                          if ((item.createdByUsername ?? '').trim().isNotEmpty)
-                            '操作人：${item.createdByUsername}',
-                          if ((item.note ?? '').trim().isNotEmpty)
-                            item.note!.trim(),
-                        ];
-                        return ExpansionTile(
-                          tilePadding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                          ),
-                          childrenPadding: const EdgeInsets.fromLTRB(
-                            16,
-                            0,
-                            16,
-                            12,
-                          ),
-                          title: Text('v${item.version} · ${item.action}'),
-                          subtitle: Text(subtitleParts.join(' · ')),
-                          children: [
-                            if (item.steps.isEmpty)
-                              const Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text('该版本无步骤数据'),
-                              )
-                            else
-                              Column(
-                                children: item.steps
-                                    .map(
-                                      (step) => ListTile(
-                                        dense: true,
-                                        contentPadding: EdgeInsets.zero,
-                                        leading: Text('#${step.stepOrder}'),
-                                        title: Text(
-                                          '${step.stageCode} ${step.stageName}',
-                                        ),
-                                        subtitle: Text(
-                                          '${step.processCode} ${step.processName}',
-                                        ),
-                                      ),
-                                    )
-                                    .toList(),
-                              ),
-                          ],
-                        );
-                      },
-                    ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('关闭'),
-              ),
-            ],
-          );
-        },
+        title: '系统母版历史版本',
+        subtitle: '查看工艺母版的演进历史及每个版本的工序构成',
+        versions: result.items.map((e) => TemplateVersionDisplayEntry(
+          version: e.version,
+          action: 'v${e.version} · ${e.action}',
+          note: e.note ?? '',
+          createdBy: e.createdByUsername ?? '未知',
+          createdAt: e.createdAt,
+          steps: e.steps,
+          isCurrent: _systemMasterTemplate?.version == e.version,
+        )).toList(),
       );
     } catch (error) {
       if (_isUnauthorized(error)) {
@@ -1197,9 +448,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         return;
       }
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
       }
     }
   }
@@ -1209,105 +458,30 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       _showNoPermission();
       return;
     }
-    var selectedProductId = _productFilterId;
-    if (selectedProductId == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请先选择产品')));
+    if (_productFilterId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先选择产品')),
+      );
       return;
     }
     if (_products.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('暂无可用产品')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('暂无可用产品')),
+      );
       return;
     }
-    final nameController = TextEditingController(text: '系统母版套版');
-    final saved = await showMesLockedFormDialog<bool>(
+
+    final saved = await showSystemMasterCopyDialog(
       context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (ctx, setDialogState) {
-            return MesDialog(
-              title: const Text('从系统母版套版'),
-              width: 420,
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  DropdownButtonFormField<int>(
-                    initialValue: selectedProductId,
-                    decoration: const InputDecoration(
-                      labelText: '目标产品',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: _products
-                        .map(
-                          (p) => DropdownMenuItem(
-                            value: p.id,
-                            child: Text(p.name),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (v) {
-                      if (v != null) {
-                        setDialogState(() => selectedProductId = v);
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(
-                      labelText: '新模板名称',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    final newName = nameController.text.trim();
-                    if (newName.isEmpty) {
-                      ScaffoldMessenger.of(
-                        dialogContext,
-                      ).showSnackBar(const SnackBar(content: Text('请输入新模板名称')));
-                      return;
-                    }
-                    try {
-                      await _craftService.copySystemMasterToProduct(
-                        productId: selectedProductId!,
-                        newName: newName,
-                      );
-                      if (dialogContext.mounted) {
-                        Navigator.of(dialogContext).pop(true);
-                      }
-                    } catch (error) {
-                      if (_isUnauthorized(error)) {
-                        widget.onLogout();
-                        return;
-                      }
-                      if (dialogContext.mounted) {
-                        ScaffoldMessenger.of(dialogContext).showSnackBar(
-                          SnackBar(content: Text(_errorMessage(error))),
-                        );
-                      }
-                    }
-                  },
-                  child: const Text('套版'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      craftService: _craftService,
+      products: _products,
+      initialProductId: _productFilterId,
+      onLogout: widget.onLogout,
     );
-    nameController.dispose();
-    if (saved == true) await _loadData();
+
+    if (saved == true) {
+      await _loadData();
+    }
   }
 
   Future<void> _setTemplateEnabled(
@@ -1421,19 +595,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     }
   }
 
-  String _templateSourceLabel(CraftTemplateItem item) {
-    switch (item.sourceType) {
-      case 'template':
-        return '同产品模板复制：${item.sourceTemplateName ?? '-'}${item.sourceTemplateVersion != null ? ' v${item.sourceTemplateVersion}' : ''}';
-      case 'cross_product_template':
-        return '跨产品模板复制：${item.sourceTemplateName ?? '-'}${item.sourceTemplateVersion != null ? ' v${item.sourceTemplateVersion}' : ''}';
-      case 'system_master':
-        return '系统母版套版${item.sourceSystemMasterVersion != null ? ' v${item.sourceSystemMasterVersion}' : ''}';
-      default:
-        return '手工创建';
-    }
-  }
-
   String _templateVersionActionLabel(CraftTemplateVersionItem version) {
     final recordTitle = version.recordTitle.trim();
     if (recordTitle.isNotEmpty) {
@@ -1448,20 +609,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     return '版本记录 P${version.version}';
   }
 
-  String _templateVersionSummary(CraftTemplateVersionItem version) {
-    final recordSummary = version.recordSummary.trim();
-    if (recordSummary.isNotEmpty) {
-      return recordSummary;
-    }
-    if (version.action == 'publish') {
-      return '该记录对应一次正式发布，版本已进入生效态。';
-    }
-    if (version.action == 'rollback') {
-      return '该记录对应一次回滚后重新发布，已替换当前生效版本。';
-    }
-    return '该记录仅用于历史追溯，是否生效以发布记录为准。';
-  }
-
   Future<void> _showTopCopyFromMasterShortcut() async {
     if (!_canManageTemplates) {
       _showNoPermission();
@@ -1470,200 +617,22 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     await _copyFromSystemMaster();
   }
 
-  String _impactReferenceTitle(CraftTemplateImpactReferenceItem item) {
-    final code = item.refCode?.trim();
-    if (code != null && code.isNotEmpty && code != item.refName) {
-      return '$code ${item.refName}';
-    }
-    return item.refName;
-  }
-
-  Widget _buildImpactSummaryWrap(CraftTemplateImpactAnalysis analysis) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        Chip(label: Text('总计 ${analysis.totalOrders}')),
-        Chip(label: Text('待开工 ${analysis.pendingOrders}')),
-        Chip(label: Text('生产中 ${analysis.inProgressOrders}')),
-        Chip(label: Text('可同步 ${analysis.syncableOrders}')),
-        Chip(label: Text('受阻 ${analysis.blockedOrders}')),
-        if (analysis.totalReferences > 0)
-          Chip(label: Text('关键引用 ${analysis.totalReferences}')),
-        if (analysis.userStageReferenceCount > 0)
-          Chip(label: Text('用户工段 ${analysis.userStageReferenceCount}')),
-        if (analysis.templateReuseReferenceCount > 0)
-          Chip(label: Text('模板复用 ${analysis.templateReuseReferenceCount}')),
-      ],
-    );
-  }
-
-  Widget _buildImpactReferenceSection(CraftTemplateImpactAnalysis analysis) {
-    if (analysis.referenceItems.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 12),
-        const Text('关键引用对象', style: TextStyle(fontWeight: FontWeight.w600)),
-        const SizedBox(height: 8),
-        SizedBox(
-          height: 168,
-          child: ListView.separated(
-            itemCount: analysis.referenceItems.length,
-            separatorBuilder: (context, index) => const Divider(height: 1),
-            itemBuilder: (context, index) {
-              final ref = analysis.referenceItems[index];
-              return ListTile(
-                dense: true,
-                title: Text(_impactReferenceTitle(ref)),
-                subtitle: Text(
-                  [
-                    if ((ref.detail ?? '').isNotEmpty) ref.detail!,
-                    if ((ref.riskNote ?? '').isNotEmpty) ref.riskNote!,
-                  ].join('｜'),
-                ),
-                trailing: Text(ref.refStatus ?? '-'),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildActionImpactPreview(CraftTemplateImpactAnalysis analysis) {
-    final previewOrders = analysis.items.take(3).toList();
-    final previewReferences = analysis.referenceItems.take(3).toList();
-    if (previewOrders.isEmpty && previewReferences.isEmpty) {
-      return const Text('当前未发现受影响订单与关键引用。');
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (previewOrders.isNotEmpty) ...[
-          const Text('订单影响摘要', style: TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          ...previewOrders.map(
-            (order) => Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text(
-                '${order.orderCode} · ${order.orderStatus}${(order.reason ?? '').isNotEmpty ? ' · ${order.reason}' : ''}',
-              ),
-            ),
-          ),
-          if (analysis.items.length > previewOrders.length)
-            Text(
-              '其余 ${analysis.items.length - previewOrders.length} 条请通过“影响分析”查看。',
-            ),
-        ],
-        if (previewReferences.isNotEmpty) ...[
-          if (previewOrders.isNotEmpty) const SizedBox(height: 12),
-          const Text('关键引用摘要', style: TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
-          ...previewReferences.map(
-            (ref) => Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text(
-                '${_impactReferenceTitle(ref)}${(ref.detail ?? '').isNotEmpty ? ' · ${ref.detail}' : ''}${(ref.riskNote ?? '').isNotEmpty ? ' · ${ref.riskNote}' : ''}',
-              ),
-            ),
-          ),
-          if (analysis.referenceItems.length > previewReferences.length)
-            Text(
-              '其余 ${analysis.referenceItems.length - previewReferences.length} 条关键引用请通过“影响分析”查看。',
-            ),
-        ],
-      ],
-    );
-  }
-
-  bool _isTemplateActionBlocked(CraftTemplateImpactAnalysis analysis) {
-    return analysis.blockedOrders > 0;
-  }
-
   Future<bool> _confirmTemplateActionWithImpact({
     required CraftTemplateItem item,
     required String title,
     required String confirmText,
     required String description,
   }) async {
-    try {
-      final analysis = await _craftService.getTemplateImpactAnalysis(
-        templateId: item.id,
-      );
-      final isBlocked = _isTemplateActionBlocked(analysis);
-      if (!mounted) {
-        return false;
-      }
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => MesDialog(
-          title: Text(title),
-          width: 720,
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(description),
-                if (isBlocked) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Theme.of(
-                        dialogContext,
-                      ).colorScheme.errorContainer,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '当前存在 ${analysis.blockedOrders} 条阻断级引用，后端会拦截本次$confirmText；请先处理进行中工单后再操作。',
-                      style: TextStyle(
-                        color: Theme.of(
-                          dialogContext,
-                        ).colorScheme.onErrorContainer,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                _buildImpactSummaryWrap(analysis),
-                const SizedBox(height: 12),
-                _buildActionImpactPreview(analysis),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: isBlocked
-                  ? null
-                  : () => Navigator.of(dialogContext).pop(true),
-              child: Text(confirmText),
-            ),
-          ],
-        ),
-      );
-      return confirmed == true;
-    } catch (error) {
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return false;
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
-      }
-      return false;
-    }
+    final confirmed = await showTemplateActionConfirmDialog(
+      context: context,
+      craftService: _craftService,
+      item: item,
+      title: title,
+      confirmText: confirmText,
+      description: description,
+      onLogout: widget.onLogout,
+    );
+    return confirmed == true;
   }
 
   Future<void> _showPublishDialog(CraftTemplateItem item) async {
@@ -1671,147 +640,12 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       _showNoPermission();
       return;
     }
-    final noteController = TextEditingController();
-    bool applyOrderSync = false;
-    bool confirmed = false;
-    CraftTemplateImpactAnalysis? analysis;
-
-    try {
-      analysis = await _craftService.getTemplateImpactAnalysis(
-        templateId: item.id,
-      );
-    } catch (error) {
-      noteController.dispose();
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return;
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
-      }
-      return;
-    }
-    if (!mounted) {
-      noteController.dispose();
-      return;
-    }
-
-    final saved = await showMesLockedFormDialog<bool>(
+    final saved = await showTemplatePublishDialog(
       context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return MesDialog(
-              title: Text('发布模板 - ${item.templateName}'),
-              width: 720,
-              content: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildImpactSummaryWrap(analysis!),
-                    const SizedBox(height: 8),
-                    if (analysis.items.any((item) => !item.syncable))
-                      Text(
-                        '存在无法同步的订单，发布时会自动跳过受阻订单。',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
-                    if (analysis.referenceItems.isNotEmpty)
-                      Text(
-                        '已纳入用户工段引用与模板复用关系，请发布前同步确认关键引用对象。',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                    _buildImpactReferenceSection(analysis),
-                    const SizedBox(height: 8),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('同步未完成订单'),
-                      subtitle: const Text('将模板变更同步到关联订单可同步工序'),
-                      value: applyOrderSync,
-                      onChanged: (value) {
-                        setDialogState(() {
-                          applyOrderSync = value;
-                          if (!value) {
-                            confirmed = false;
-                          }
-                        });
-                      },
-                    ),
-                    if (applyOrderSync)
-                      CheckboxListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('我已确认上述影响并继续发布'),
-                        value: confirmed,
-                        onChanged: (value) {
-                          setDialogState(() {
-                            confirmed = value ?? false;
-                          });
-                        },
-                      ),
-                    TextField(
-                      controller: noteController,
-                      maxLength: 256,
-                      decoration: const InputDecoration(
-                        labelText: '发布说明（可选）',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    if (applyOrderSync && !confirmed) {
-                      ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        const SnackBar(content: Text('请先确认影响后再发布')),
-                      );
-                      return;
-                    }
-                    try {
-                      await _craftService.publishTemplate(
-                        templateId: item.id,
-                        applyOrderSync: applyOrderSync,
-                        confirmed: !applyOrderSync || confirmed,
-                        expectedVersion: item.version,
-                        note: noteController.text.trim().isEmpty
-                            ? null
-                            : noteController.text.trim(),
-                      );
-                      if (dialogContext.mounted) {
-                        Navigator.of(dialogContext).pop(true);
-                      }
-                    } catch (error) {
-                      if (_isUnauthorized(error)) {
-                        widget.onLogout();
-                        return;
-                      }
-                      if (dialogContext.mounted) {
-                        ScaffoldMessenger.of(dialogContext).showSnackBar(
-                          SnackBar(content: Text(_errorMessage(error))),
-                        );
-                      }
-                    }
-                  },
-                  child: const Text('确认发布'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      craftService: _craftService,
+      item: item,
+      onLogout: widget.onLogout,
     );
-
-    noteController.dispose();
     if (saved == true) {
       _detailCache.remove(item.id);
       await _loadData();
@@ -1827,93 +661,37 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       return;
     }
     try {
-      final versions = await _craftService.listTemplateVersions(
-        templateId: item.id,
-      );
-      if (!mounted) {
-        return;
-      }
+      final versions = await _craftService.listTemplateVersions(templateId: item.id);
+      if (!mounted) return;
       if (versions.items.isEmpty) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('该模板暂无发布版本记录')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('该模板暂无发布版本记录')));
         return;
       }
 
       final hasInitialTargetVersion =
           initialTargetVersion != null &&
           versions.items.any((entry) => entry.version == initialTargetVersion);
+      final subtitle =
+          '当前产品：${item.productName} · 当前版本 v${item.version} · 已发布 P${item.publishedVersion}'
+          '${hasInitialTargetVersion ? ' · 已自动定位目标版本 v$initialTargetVersion' : ''}';
 
-      await showDialog<void>(
+      await showTemplateVersionDialog(
         context: context,
-        builder: (dialogContext) => MesDialog(
-          title: Text('版本管理 - ${item.templateName}'),
-          width: 860,
-          content: SizedBox(
-            height: 560,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '当前产品：${item.productName} · 当前版本 v${item.version} · 已发布 P${item.publishedVersion}',
-                ),
-                if (hasInitialTargetVersion)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      '已自动定位目标版本 v$initialTargetVersion',
-                      style: Theme.of(dialogContext).textTheme.bodySmall,
-                    ),
-                  ),
-                const SizedBox(height: 12),
-                const Text(
-                  '历史版本',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                Expanded(
-                  child: ListView.separated(
-                    itemCount: versions.items.length,
-                    separatorBuilder: (context, index) =>
-                        const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final version = versions.items[index];
-                      final isTargetVersion =
-                          version.version == initialTargetVersion;
-                      return ListTile(
-                        dense: true,
-                        tileColor: isTargetVersion
-                            ? Theme.of(dialogContext)
-                                  .colorScheme
-                                  .primaryContainer
-                                  .withValues(alpha: 0.28)
-                            : null,
-                        title: Text(
-                          isTargetVersion
-                              ? '${_templateVersionActionLabel(version)} · 目标版本'
-                              : _templateVersionActionLabel(version),
-                        ),
-                        subtitle: Text(
-                          '${version.createdAt.toLocal()} · ${_templateVersionSummary(version)}'
-                          '${version.note != null && version.note!.trim().isNotEmpty ? '\n说明：${version.note}' : ''}'
-                          '${version.createdByUsername != null && version.createdByUsername!.trim().isNotEmpty ? '\n操作人：${version.createdByUsername}' : ''}'
-                          '${version.sourceVersion != null ? '\n来源版本：v${version.sourceVersion}' : ''}',
-                        ),
-                        isThreeLine: true,
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
-        ),
+        title: '版本管理 - ${item.templateName}',
+        subtitle: subtitle,
+        highlightVersion: initialTargetVersion,
+        versions: versions.items.map((e) => TemplateVersionDisplayEntry(
+          version: e.version,
+          action: _templateVersionActionLabel(e),
+          note: e.note?.trim() ?? '',
+          createdBy: e.createdByUsername?.trim().isNotEmpty == true
+              ? e.createdByUsername!.trim()
+              : '未知',
+          createdAt: e.createdAt,
+          steps: const [],
+          isCurrent: item.version == e.version,
+          isPublished: e.action == 'publish' || e.recordType == 'publish',
+        )).toList(),
       );
     } catch (error) {
       if (_isUnauthorized(error)) {
@@ -1921,9 +699,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         return;
       }
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
       }
     }
   }

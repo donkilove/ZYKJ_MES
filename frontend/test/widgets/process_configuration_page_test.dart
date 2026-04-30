@@ -25,6 +25,8 @@ class _FakeCraftService extends CraftService {
   final List<int?> requestedImpactVersions = [];
   final List<int> disabledTemplateIds = [];
   final List<int> deletedTemplateIds = [];
+  final List<int> publishedTemplateIds = [];
+  final List<int> copiedSystemMasterProductIds = [];
 
   @override
   Future<CraftStageListResult> listStages({
@@ -143,6 +145,59 @@ class _FakeCraftService extends CraftService {
   @override
   Future<void> deleteTemplate({required int templateId}) async {
     deletedTemplateIds.add(templateId);
+  }
+
+  @override
+  Future<CraftTemplateUpdateResult> publishTemplate({
+    required int templateId,
+    required bool applyOrderSync,
+    required bool confirmed,
+    int? expectedVersion,
+    String? note,
+  }) async {
+    publishedTemplateIds.add(templateId);
+    return CraftTemplateUpdateResult(
+      detail: CraftTemplateDetail(
+        template: templates.firstWhere((item) => item.id == templateId),
+        steps: const [],
+      ),
+      syncResult: CraftTemplateSyncResult(
+        total: 0,
+        synced: 0,
+        skipped: 0,
+        reasons: [],
+      ),
+    );
+  }
+
+  @override
+  Future<CraftTemplateDetail> copySystemMasterToProduct({
+    required int productId,
+    required String newName,
+  }) async {
+    copiedSystemMasterProductIds.add(productId);
+    return CraftTemplateDetail(
+      template: templates.isNotEmpty
+          ? templates.first
+          : CraftTemplateItem(
+              id: 999,
+              productId: productId,
+              productName: '产品$productId',
+              templateName: newName,
+              version: 1,
+              lifecycleStatus: 'draft',
+              publishedVersion: 0,
+              isDefault: false,
+              isEnabled: true,
+              createdByUserId: 9,
+              createdByUsername: 'planner',
+              updatedByUserId: 9,
+              updatedByUsername: 'planner',
+              createdAt: DateTime.parse('2026-03-02T00:00:00Z'),
+              updatedAt: DateTime.parse('2026-03-02T00:00:00Z'),
+            ),
+      steps: const [],
+    );
   }
 }
 
@@ -574,5 +629,98 @@ void main() {
     );
     expect(confirmButton.onPressed, isNull);
     expect(craftService.disabledTemplateIds, isEmpty);
+  });
+
+  testWidgets('从系统母版套版弹窗展示宽版表单骨架', (tester) async {
+    final craftService = _FakeCraftService(
+      templates: [
+        buildTemplate(
+          id: 1,
+          productId: 1,
+          productName: '产品A',
+          templateName: 'A-模板',
+        ),
+      ],
+    );
+
+    await pumpPage(tester, craftService: craftService);
+    await tester.tap(find.text('产品A').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('从系统母版套版'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('从系统母版套版'), findsAtLeastNWidgets(2));
+    expect(find.text('目标产品'), findsOneWidget);
+    expect(find.text('新模板名称'), findsOneWidget);
+    expect(find.text('开始套版'), findsOneWidget);
+  });
+
+  testWidgets('草稿模板可打开发布弹窗并展示发布设置', (tester) async {
+    final craftService = _FakeCraftService(
+      templates: [
+        buildTemplate(
+          id: 18,
+          productId: 1,
+          productName: '产品A',
+          templateName: '切割模板18',
+          lifecycleStatus: 'draft',
+          version: 5,
+        ),
+      ],
+      templateImpactByVersion: {
+        null: CraftTemplateImpactAnalysis(
+          targetVersion: 5,
+          totalOrders: 2,
+          pendingOrders: 1,
+          inProgressOrders: 1,
+          syncableOrders: 1,
+          blockedOrders: 1,
+          totalReferences: 1,
+          userStageReferenceCount: 1,
+          templateReuseReferenceCount: 0,
+          items: [
+            CraftTemplateImpactOrderItem(
+              orderId: 1002,
+              orderCode: 'MO-1002',
+              orderStatus: 'in_progress',
+              syncable: false,
+              reason: '当前工序无法对齐目标版本',
+            ),
+          ],
+          referenceItems: [
+            CraftTemplateImpactReferenceItem(
+              refType: 'user_stage',
+              refId: 7,
+              refCode: 'CUT',
+              refName: '切割段',
+              detail: '用户工段引用',
+              refStatus: 'enabled',
+              jumpModule: 'user',
+              jumpTarget: 'user-management?user_id=7',
+              riskLevel: 'medium',
+              riskNote: '发布前需确认引用方',
+            ),
+          ],
+        ),
+      },
+    );
+
+    await pumpPage(tester, craftService: craftService);
+    await tester.tap(find.text('产品A').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byWidgetPredicate((widget) => widget is PopupMenuButton).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('发布').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('发布模板 - 切割模板18'), findsOneWidget);
+    expect(find.text('发布设置'), findsOneWidget);
+    expect(find.text('关键引用对象'), findsOneWidget);
+    expect(find.text('确认发布'), findsOneWidget);
   });
 }
