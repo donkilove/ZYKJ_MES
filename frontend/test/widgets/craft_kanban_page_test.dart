@@ -208,9 +208,10 @@ void main() {
     );
 
     expect(find.text('选择产品'), findsOneWidget);
-    expect(find.text('主筛选'), findsOneWidget);
-    expect(find.text('日期范围'), findsOneWidget);
     expect(find.text('工段筛选'), findsOneWidget);
+    expect(find.text('工序筛选'), findsOneWidget);
+    expect(find.text('开始日期'), findsOneWidget);
+    expect(find.text('结束日期'), findsOneWidget);
     expect(find.text('导出数据'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -276,6 +277,7 @@ void main() {
     );
 
     expect(find.text('暂无产品数据'), findsOneWidget);
-    expect(find.text('主筛选'), findsNothing);
+    expect(find.text('选择产品'), findsNothing);
+    expect(find.text('导出数据'), findsNothing);
   });
 }

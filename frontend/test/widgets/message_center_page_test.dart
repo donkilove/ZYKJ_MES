@@ -3,11 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
-import 'package:mes_client/core/ui/patterns/mes_detail_panel.dart';
 import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/features/message/models/message_models.dart';
 import 'package:mes_client/features/craft/presentation/craft_page.dart';
+import 'package:mes_client/features/message/presentation/widgets/message_center_preview_panel.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/features/message/presentation/message_center_page.dart';
 import 'package:mes_client/features/product/presentation/product_page.dart';
@@ -591,6 +591,7 @@ Widget _buildMessageCenterPageApp({
   bool canViewDetail = true,
   bool canUseJump = true,
   bool pollingEnabled = true,
+  int refreshTick = 0,
   String? routePayloadJson,
   void Function(int count)? onUnreadCountChanged,
   VoidCallback? onLogout,
@@ -612,6 +613,7 @@ Widget _buildMessageCenterPageApp({
             canViewDetail: canViewDetail,
             canUseJump: canUseJump,
             pollingEnabled: pollingEnabled,
+            refreshTick: refreshTick,
             routePayloadJson: routePayloadJson,
             service: service,
             userService: userService ?? _FakeUserService(),
@@ -635,6 +637,7 @@ Future<void> _pumpMessageCenterPage(
   bool canViewDetail = true,
   bool canUseJump = true,
   bool pollingEnabled = true,
+  int refreshTick = 0,
   String? routePayloadJson,
   void Function(int count)? onUnreadCountChanged,
   VoidCallback? onLogout,
@@ -658,6 +661,7 @@ Future<void> _pumpMessageCenterPage(
       canViewDetail: canViewDetail,
       canUseJump: canUseJump,
       pollingEnabled: pollingEnabled,
+      refreshTick: refreshTick,
       routePayloadJson: routePayloadJson,
       onUnreadCountChanged: onUnreadCountChanged,
       onLogout: onLogout,
@@ -728,23 +732,10 @@ void main() {
     expect(service.listMessagesCallCount, 1);
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            width: 1280,
-            child: MessageCenterPage(
-              session: AppSession(baseUrl: '', accessToken: ''),
-              onLogout: () {},
-              canPublishAnnouncement: true,
-              canViewDetail: true,
-              canUseJump: true,
-              pollingEnabled: false,
-              refreshTick: 1,
-              service: service,
-              userService: _FakeUserService(),
-            ),
-          ),
-        ),
+      _buildMessageCenterPageApp(
+        service: service,
+        pollingEnabled: false,
+        refreshTick: 1,
       ),
     );
     await tester.pumpAndSettle();
@@ -782,11 +773,7 @@ void main() {
     expect(service.summaryCallCount, 1);
     expect(find.text('待办消息'), findsWidgets);
     expect(find.byType(LinearProgressIndicator), findsNothing);
-
-    final refreshButton = tester.widget<OutlinedButton>(
-      find.widgetWithText(OutlinedButton, '刷新'),
-    );
-    expect(refreshButton.onPressed, isNotNull);
+    expect(find.text('刷新'), findsOneWidget);
 
     service.summaryCompleter!.complete(
       const MessageSummaryResult(
@@ -830,11 +817,7 @@ void main() {
     );
     expect(find.text('摘要接口失败'), findsNothing);
     expect(find.byType(LinearProgressIndicator), findsNothing);
-
-    final refreshButton = tester.widget<OutlinedButton>(
-      find.widgetWithText(OutlinedButton, '刷新'),
-    );
-    expect(refreshButton.onPressed, isNotNull);
+    expect(find.text('刷新'), findsOneWidget);
   });
 
   testWidgets('message center 会丢弃旧轮次延迟返回的摘要结果', (tester) async {
@@ -871,7 +854,7 @@ void main() {
     expect(find.text('待办消息'), findsWidgets);
     expect(find.byType(LinearProgressIndicator), findsNothing);
 
-    await tester.tap(find.widgetWithText(OutlinedButton, '刷新'));
+    await tester.tap(find.text('刷新').first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 1));
     await tester.pump();
@@ -952,7 +935,7 @@ void main() {
     await _pumpMessageCenterPage(tester, service: service);
 
     expect(find.byType(MesPageHeader), findsOneWidget);
-    expect(find.byType(MesDetailPanel), findsOneWidget);
+    expect(find.byType(MessageCenterPreviewPanel), findsOneWidget);
     expect(find.byType(MesPaginationBar), findsOneWidget);
     expect(find.text('筛选条件'), findsNothing);
     expect(find.text('消息概览'), findsNothing);
@@ -1416,10 +1399,7 @@ void main() {
     expect(find.byKey(const ValueKey('message-center-jump-1')), findsNothing);
 
     service.listError = ApiException('无权限访问消息接口', 403);
-    final refreshButton = tester.widget<OutlinedButton>(
-      find.widgetWithText(OutlinedButton, '刷新'),
-    );
-    refreshButton.onPressed!.call();
+    await tester.tap(find.text('刷新').first);
     await tester.pumpAndSettle();
     expect(find.text('无权限访问消息接口'), findsOneWidget);
 
@@ -1432,10 +1412,7 @@ void main() {
     expect(find.text('无详情权限'), findsOneWidget);
 
     service.markAllReadError = ApiException('全部已读失败', 403);
-    final markAllReadButton = tester.widget<FilledButton>(
-      find.byKey(const ValueKey('message-center-mark-all-read-button')),
-    );
-    markAllReadButton.onPressed!.call();
+    await tester.tap(find.byKey(const ValueKey('message-center-mark-all-read-button')));
     await tester.pumpAndSettle();
     expect(find.text('全部已读失败'), findsOneWidget);
 
@@ -1457,10 +1434,7 @@ void main() {
     );
 
     service.listError = ApiException('登录已过期，请重新登录', 401);
-    final refreshButtonAfterLogout = tester.widget<OutlinedButton>(
-      find.widgetWithText(OutlinedButton, '刷新'),
-    );
-    refreshButtonAfterLogout.onPressed!.call();
+    await tester.tap(find.text('刷新').first);
     await tester.pumpAndSettle();
     expect(logoutCount, 1);
 
