@@ -83,8 +83,8 @@ class MesDialog extends StatelessWidget {
                       const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
                   child: title!,
                 ),
-      content: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: dialogWidth),
+      content: SizedBox(
+        width: dialogWidth,
         child: scrollable ? SingleChildScrollView(child: content) : content,
       ),
       actions: actions,

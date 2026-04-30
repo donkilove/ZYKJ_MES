@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_error_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
+import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
@@ -129,65 +132,74 @@ class _ProductionScrapStatisticsDetailPageState
       body: _loading
           ? const MesLoadingState(label: '报废详情加载中...')
           : detail == null
-          ? Center(child: Text(_message.isEmpty ? '加载失败' : _message))
+          ? MesErrorState(
+              message: _message.isEmpty ? '加载失败' : _message,
+              onRetry: _load,
+            )
           : Padding(
               padding: const EdgeInsets.all(16),
               child: ListView(
                 children: [
-                  _detailRow('订单号', detail.orderCode ?? '-'),
-                  _detailRow('产品', detail.productName ?? '-'),
-                  _detailRow('工序', detail.processName ?? '-'),
-                  _detailRow('工序编码', detail.processCode ?? '-'),
-                  _detailRow('报废原因', detail.scrapReason),
-                  _detailRow('报废数量', '${detail.scrapQuantity}'),
-                  _detailRow('进度', scrapProgressLabel(detail.progress)),
-                  _detailRow('最近报废时间', _formatDateTime(detail.lastScrapTime)),
-                  _detailRow('申请时间', _formatDateTime(detail.appliedAt)),
-                  _detailRow('创建时间', _formatDateTime(detail.createdAt)),
-                  const SizedBox(height: 12),
-                  const Text(
-                    '关联维修工单',
-                    style: TextStyle(fontWeight: FontWeight.w600),
+                  MesSectionCard(
+                    title: '基础信息',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _detailRow('订单号', detail.orderCode ?? '-'),
+                        _detailRow('产品', detail.productName ?? '-'),
+                        _detailRow('工序', detail.processName ?? '-'),
+                        _detailRow('工序编码', detail.processCode ?? '-'),
+                        _detailRow('报废原因', detail.scrapReason),
+                        _detailRow('报废数量', '${detail.scrapQuantity}'),
+                        _detailRow('进度', scrapProgressLabel(detail.progress)),
+                        _detailRow('最近报废时间', _formatDateTime(detail.lastScrapTime)),
+                        _detailRow('申请时间', _formatDateTime(detail.appliedAt)),
+                        _detailRow('创建时间', _formatDateTime(detail.createdAt)),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 6),
-                  if (detail.relatedRepairOrders.isEmpty)
-                    const Text('无')
-                  else
-                    ...detail.relatedRepairOrders.map(
-                      (repair) => Card(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        child: ListTile(
-                          title: Text(repair.repairOrderCode),
-                          subtitle: Text(
-                            '${repairOrderStatusLabel(repair.status)} | 送修:${repair.repairQuantity} 已修:${repair.repairedQuantity} 报废:${repair.scrapQuantity}\n${_formatDateTime(repair.repairTime)}',
+                  const SizedBox(height: 16),
+                  MesSectionCard(
+                    title: '关联维修工单',
+                    child: detail.relatedRepairOrders.isEmpty
+                        ? const MesEmptyState(title: '暂无关联维修工单')
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: detail.relatedRepairOrders.map(
+                              (repair) => ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(repair.repairOrderCode),
+                                subtitle: Text(
+                                  '${repairOrderStatusLabel(repair.status)} | 送修:${repair.repairQuantity} 已修:${repair.repairedQuantity} 报废:${repair.scrapQuantity}\n${_formatDateTime(repair.repairTime)}',
+                                ),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: () => _openRepairDetail(repair),
+                              ),
+                            ).toList(),
                           ),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => _openRepairDetail(repair),
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    '相关日志',
-                    style: TextStyle(fontWeight: FontWeight.w600),
                   ),
-                  const SizedBox(height: 6),
-                  if (detail.relatedEventLogs.isEmpty)
-                    const Text('无')
-                  else
-                    ...detail.relatedEventLogs.map(
-                      (event) => Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Text(
-                          '${_formatDateTime(event.createdAt)} | ${event.eventTitle}'
-                          '${(event.eventDetail ?? '').trim().isEmpty ? '' : ' | ${event.eventDetail!.trim()}'}'
-                          '${(event.orderCode ?? '').trim().isEmpty ? '' : ' | ${event.orderCode}'}'
-                          '${(event.processCode ?? '').trim().isEmpty ? '' : ' | ${event.processCode}'}'
-                          '${(event.orderStatus ?? '').trim().isEmpty ? '' : ' | ${event.orderStatus}'}'
-                          '${(event.payloadJson ?? '').trim().isEmpty ? '' : '\n载荷：${event.payloadJson!.trim()}'}',
-                        ),
-                      ),
-                    ),
+                  const SizedBox(height: 16),
+                  MesSectionCard(
+                    title: '相关日志',
+                    child: detail.relatedEventLogs.isEmpty
+                        ? const MesEmptyState(title: '暂无相关日志')
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: detail.relatedEventLogs.map(
+                              (event) => Padding(
+                                padding: const EdgeInsets.only(bottom: 6),
+                                child: Text(
+                                  '${_formatDateTime(event.createdAt)} | ${event.eventTitle}'
+                                  '${(event.eventDetail ?? '').trim().isEmpty ? '' : ' | ${event.eventDetail!.trim()}'}'
+                                  '${(event.orderCode ?? '').trim().isEmpty ? '' : ' | ${event.orderCode}'}'
+                                  '${(event.processCode ?? '').trim().isEmpty ? '' : ' | ${event.processCode}'}'
+                                  '${(event.orderStatus ?? '').trim().isEmpty ? '' : ' | ${event.orderStatus}'}'
+                                  '${(event.payloadJson ?? '').trim().isEmpty ? '' : '\n载荷：${event.payloadJson!.trim()}'}',
+                                ),
+                              ),
+                            ).toList(),
+                          ),
+                  ),
                 ],
               ),
             ),

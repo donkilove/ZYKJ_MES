@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_error_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
@@ -431,60 +433,46 @@ class _ProductionOrderDetailPageState extends State<ProductionOrderDetailPage> {
           child: _loading
               ? const MesLoadingState(label: '订单详情加载中...')
               : detail == null
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _message.isEmpty ? '暂无订单详情数据' : _message,
-                        style: TextStyle(
-                          color: _message.isEmpty
-                              ? Theme.of(context).colorScheme.onSurface
-                              : Theme.of(context).colorScheme.error,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      FilledButton.icon(
-                        onPressed: _loadDetail,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('重试'),
-                      ),
-                    ],
-                  ),
+              ? MesErrorState(
+                  message: _message.isEmpty ? '暂无订单详情数据' : _message,
+                  onRetry: _loadDetail,
                 )
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildActionBar(detail.order),
                     const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 16,
-                      runSpacing: 8,
-                      children: [
-                        Text('订单号：${detail.order.orderCode}'),
-                        Text('产品：${detail.order.productName}'),
-                        Text('产品版本：${detail.order.productVersion ?? '-'}'),
-                        Text('数量：${detail.order.quantity}'),
-                        Text(
-                          '状态：${productionOrderStatusLabel(detail.order.status)}',
-                        ),
-                        Text('当前工序：${detail.order.currentProcessName ?? '-'}'),
-                        Text('模板：${detail.order.processTemplateName ?? '-'}'),
-                        Text(
-                          '模板版本：${detail.order.processTemplateVersion ?? '-'}',
-                        ),
-                        Text(
-                          '并行模式：${detail.order.pipelineEnabled ? '开启' : '关闭'}',
-                        ),
-                        Text('创建人：${detail.order.createdByUsername ?? '-'}'),
-                        Text('创建时间：${_formatDateTime(detail.order.createdAt)}'),
-                        Text('更新时间：${_formatDateTime(detail.order.updatedAt)}'),
-                        Text('开始日期：${_formatDate(detail.order.startDate)}'),
-                        Text('交期：${_formatDate(detail.order.dueDate)}'),
-                        Text(
-                          '备注：${(detail.order.remark ?? '').trim().isEmpty ? '-' : detail.order.remark}',
-                        ),
-                      ],
+                    MesSectionCard(
+                      title: '基础信息',
+                      child: Wrap(
+                        spacing: 16,
+                        runSpacing: 8,
+                        children: [
+                          Text('订单号：${detail.order.orderCode}'),
+                          Text('产品：${detail.order.productName}'),
+                          Text('产品版本：${detail.order.productVersion ?? '-'}'),
+                          Text('数量：${detail.order.quantity}'),
+                          Text(
+                            '状态：${productionOrderStatusLabel(detail.order.status)}',
+                          ),
+                          Text('当前工序：${detail.order.currentProcessName ?? '-'}'),
+                          Text('模板：${detail.order.processTemplateName ?? '-'}'),
+                          Text(
+                            '模板版本：${detail.order.processTemplateVersion ?? '-'}',
+                          ),
+                          Text(
+                            '并行模式：${detail.order.pipelineEnabled ? '开启' : '关闭'}',
+                          ),
+                          Text('创建人：${detail.order.createdByUsername ?? '-'}'),
+                          Text('创建时间：${_formatDateTime(detail.order.createdAt)}'),
+                          Text('更新时间：${_formatDateTime(detail.order.updatedAt)}'),
+                          Text('开始日期：${_formatDate(detail.order.startDate)}'),
+                          Text('交期：${_formatDate(detail.order.dueDate)}'),
+                          Text(
+                            '备注：${(detail.order.remark ?? '').trim().isEmpty ? '-' : detail.order.remark}',
+                          ),
+                        ],
+                      ),
                     ),
                     if (_message.isNotEmpty)
                       Padding(

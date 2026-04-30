@@ -4,6 +4,7 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_error_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_inline_banner.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
@@ -153,47 +154,24 @@ class _EquipmentDetailPageState extends State<EquipmentDetailPage> {
   }
 
   Widget _buildRiskOverview(EquipmentDetailResult detail) {
-    final theme = Theme.of(context);
     final riskMessages = _buildRiskMessages(detail);
     final latestRecord = detail.recentRecords.isEmpty
         ? null
         : detail.recentRecords.first;
-    return Card(
-      color: const Color(0xFFFFF7ED),
-      child: Padding(
+    return MesSectionCard(
+      title: '设备风险提示',
+      subtitle: '请先确认待办任务、计划排程与最近执行结果，再进行设备调整。',
+      child: Container(
+        width: double.infinity,
         padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF7ED),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFFFEDD5)),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  Icons.warning_amber_rounded,
-                  color: theme.colorScheme.error,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '设备风险提示',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '请先确认待办任务、计划排程与最近执行结果，再进行设备调整。',
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
             if (detail.activePlansScopeLimited ||
                 detail.pendingWorkOrdersScopeLimited ||
                 detail.recentRecordsScopeLimited)
@@ -303,7 +281,6 @@ class _EquipmentDetailPageState extends State<EquipmentDetailPage> {
                   : '暂无启用保养计划',
             )
           : Column(
-              key: _plansSectionKey,
               children: [
                 for (final plan in detail.activePlans)
                   ListTile(
@@ -328,7 +305,6 @@ class _EquipmentDetailPageState extends State<EquipmentDetailPage> {
                   : '暂无未完成工单',
             )
           : Column(
-              key: _workOrdersSectionKey,
               children: [
                 for (final order in detail.pendingWorkOrders)
                   ListTile(
@@ -367,7 +343,6 @@ class _EquipmentDetailPageState extends State<EquipmentDetailPage> {
                   : '暂无保养记录',
             )
           : Column(
-              key: _recordsSectionKey,
               children: [
                 for (final record in detail.recentRecords)
                   ListTile(
@@ -404,11 +379,9 @@ class _EquipmentDetailPageState extends State<EquipmentDetailPage> {
       body: _loading
           ? const MesLoadingState(label: '设备详情加载中...')
           : detail == null
-          ? Center(
-              child: MesEmptyState(
-                title: '加载失败',
-                description: _message.isEmpty ? '未获取到设备详情。' : _message,
-              ),
+          ? MesErrorState(
+              message: _message.isEmpty ? '未获取到设备详情。' : _message,
+              onRetry: _load,
             )
           : ListView(
               controller: _scrollController,

@@ -37,8 +37,6 @@ class MessageCenterMessageCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isUnread = !item.isRead;
-    final selectedColor = theme.colorScheme.primaryContainer.withAlpha(70);
-    final unreadColor = theme.colorScheme.primaryContainer.withAlpha(34);
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -47,17 +45,48 @@ class MessageCenterMessageCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         child: Ink(
           decoration: BoxDecoration(
-            color: selected
-                ? selectedColor
+            gradient: selected
+                ? LinearGradient(
+                    colors: [
+                      theme.colorScheme.primaryContainer.withAlpha(150),
+                      theme.colorScheme.primaryContainer.withAlpha(40),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
                 : isUnread
-                ? unreadColor
-                : theme.colorScheme.surface,
+                ? LinearGradient(
+                    colors: [
+                      theme.colorScheme.secondaryContainer.withAlpha(100),
+                      theme.colorScheme.secondaryContainer.withAlpha(30),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : null,
+            color: selected || isUnread ? null : theme.colorScheme.surface.withAlpha(150),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: selected
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.outlineVariant,
+                  ? theme.colorScheme.primary.withAlpha(150)
+                  : theme.colorScheme.outlineVariant.withAlpha(80),
+              width: selected ? 1.5 : 1.0,
             ),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: theme.colorScheme.primary.withAlpha(40),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    )
+                  ]
+                : [
+                    BoxShadow(
+                      color: Colors.black.withAlpha(10),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    )
+                  ],
           ),
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -140,22 +169,22 @@ class MessageCenterMessageCard extends StatelessWidget {
                         TextButton(
                           key: ValueKey('message-center-detail-${item.id}'),
                           onPressed: canShowDetail ? onShowDetail : null,
-                          style: _compactActionStyle(),
-                          child: const Text('详情', style: TextStyle(fontSize: 12)),
+                          style: _compactActionStyle(theme),
+                          child: const Text('详情', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                         ),
                         if (canJump)
                           TextButton(
                             key: ValueKey('message-center-jump-${item.id}'),
                             onPressed: onJump,
-                            style: _compactActionStyle(),
-                            child: const Text('跳转', style: TextStyle(fontSize: 12)),
+                            style: _compactActionStyle(theme, isPrimary: true),
+                            child: const Text('跳转', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                           ),
                         if (!item.isRead)
                           TextButton(
                             key: ValueKey('message-center-read-${item.id}'),
                             onPressed: onMarkRead,
-                            style: _compactActionStyle(),
-                            child: const Text('已读', style: TextStyle(fontSize: 12)),
+                            style: _compactActionStyle(theme, isPrimary: true),
+                            child: const Text('已读', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                           ),
                       ],
                     ),
@@ -200,11 +229,14 @@ class MessageCenterMessageCard extends StatelessWidget {
     }
   }
 
-  ButtonStyle _compactActionStyle() {
+  ButtonStyle _compactActionStyle(ThemeData theme, {bool isPrimary = false}) {
     return TextButton.styleFrom(
       minimumSize: Size.zero,
       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      backgroundColor: isPrimary ? theme.colorScheme.primaryContainer.withAlpha(100) : theme.colorScheme.surfaceContainerHighest.withAlpha(150),
+      foregroundColor: isPrimary ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       visualDensity: VisualDensity.compact,
     );
   }

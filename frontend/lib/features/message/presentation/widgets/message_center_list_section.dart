@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_error_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
@@ -30,14 +29,52 @@ class MessageCenterListSection extends StatelessWidget {
   final VoidCallback onPrevious;
   final VoidCallback onNext;
 
+  Widget _buildStunningEmptyState(ThemeData theme) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primaryContainer.withAlpha(50),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.mark_email_read_rounded,
+              size: 64,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            '这里风平浪静',
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '暂无任何消息，您可以稍后再来查看',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final content = loading && isEmpty
         ? const MesLoadingState()
         : error.isNotEmpty && isEmpty
         ? MesErrorState(message: error, onRetry: onRetry)
         : isEmpty
-        ? const MesEmptyState(title: '暂无消息')
+        ? _buildStunningEmptyState(theme)
         : body;
 
     return LayoutBuilder(

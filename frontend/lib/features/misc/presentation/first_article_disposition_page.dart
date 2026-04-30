@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_error_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
+import 'package:mes_client/core/ui/patterns/mes_inline_banner.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
@@ -185,7 +188,10 @@ class _FirstArticleDispositionPageState
         child: _loading
             ? const MesLoadingState(label: '首件处置加载中...')
             : _detail == null
-            ? Center(child: Text(_message.isNotEmpty ? _message : '加载失败'))
+            ? MesErrorState(
+                message: _message.isNotEmpty ? _message : '加载失败',
+                onRetry: _loadDetail,
+              )
             : SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Center(
@@ -194,19 +200,11 @@ class _FirstArticleDispositionPageState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '首件基础信息',
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium,
-                                ),
-                                const SizedBox(height: 12),
+                        MesSectionCard(
+                          title: '首件基础信息',
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                                 _InfoRow('校验码', _detail!.verificationCode),
                                 _InfoRow('订单号', _detail!.productionOrderCode),
                                 _InfoRow(
@@ -247,22 +245,13 @@ class _FirstArticleDispositionPageState
                                 ),
                               ],
                             ),
-                          ),
                         ),
-                        const SizedBox(height: 12),
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '首件处置',
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium,
-                                ),
-                                const SizedBox(height: 12),
+                        const SizedBox(height: 16),
+                        MesSectionCard(
+                          title: '首件处置',
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                                 if (_detail!.disposition != null) ...[
                                   _InfoRow(
                                     '处置人',
@@ -426,23 +415,14 @@ class _FirstArticleDispositionPageState
                                     ),
                                   ),
                                 ],
-                                if (_message.isNotEmpty)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 8),
-                                    child: Text(
-                                      _message,
-                                      style: TextStyle(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.error,
-                                      ),
-                                    ),
-                                  ),
                               ],
                             ),
-                          ),
                         ),
                         const SizedBox(height: 16),
+                        if (_message.isNotEmpty) ...[
+                          MesInlineBanner.error(message: _message),
+                          const SizedBox(height: 16),
+                        ],
                         Row(
                           children: [
                             OutlinedButton(
