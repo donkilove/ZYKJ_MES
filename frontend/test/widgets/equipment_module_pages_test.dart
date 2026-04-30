@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/ui/patterns/mes_action_dialog.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
 import 'package:mes_client/features/equipment/presentation/equipment_ledger_page.dart';
@@ -9,6 +10,7 @@ import 'package:mes_client/features/equipment/presentation/maintenance_execution
 import 'package:mes_client/features/equipment/presentation/maintenance_item_page.dart';
 import 'package:mes_client/features/equipment/presentation/maintenance_plan_page.dart';
 import 'package:mes_client/features/equipment/presentation/widgets/maintenance_execution_complete_dialog.dart';
+import 'package:mes_client/features/equipment/presentation/widgets/maintenance_item_form_dialog.dart';
 import 'package:mes_client/features/equipment/presentation/widgets/maintenance_plan_form_dialog.dart';
 import 'package:mes_client/features/equipment/presentation/maintenance_record_page.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
@@ -92,6 +94,10 @@ class _FakeEquipmentService extends EquipmentService {
   int updatePlanCalls = 0;
   int togglePlanCalls = 0;
   int deletePlanCalls = 0;
+  int createMaintenanceItemCalls = 0;
+  int updateMaintenanceItemCalls = 0;
+  int toggleMaintenanceItemCalls = 0;
+  int deleteMaintenanceItemCalls = 0;
   int startExecutionCalls = 0;
   int completeExecutionCalls = 0;
   int cancelExecutionCalls = 0;
@@ -218,6 +224,84 @@ class _FakeEquipmentService extends EquipmentService {
       total: _maintenanceItems.length,
       items: _maintenanceItems,
     );
+  }
+
+  @override
+  Future<void> createMaintenanceItem({
+    required String name,
+    required int defaultCycleDays,
+    String category = '',
+    int? defaultDurationMinutes,
+    String standardDescription = '',
+  }) async {
+    createMaintenanceItemCalls += 1;
+    _maintenanceItems.add(
+      MaintenanceItemEntry(
+        id: _maintenanceItems.length + 10,
+        name: name,
+        category: category,
+        defaultCycleDays: defaultCycleDays,
+        defaultDurationMinutes: defaultDurationMinutes ?? 0,
+        standardDescription: standardDescription,
+        isEnabled: true,
+        createdAt: DateTime.parse('2026-03-05T08:00:00Z'),
+        updatedAt: DateTime.parse('2026-03-05T08:00:00Z'),
+      ),
+    );
+  }
+
+  @override
+  Future<void> updateMaintenanceItem({
+    required int itemId,
+    required String name,
+    required int defaultCycleDays,
+    String category = '',
+    int? defaultDurationMinutes,
+    String standardDescription = '',
+  }) async {
+    updateMaintenanceItemCalls += 1;
+    final index = _maintenanceItems.indexWhere((item) => item.id == itemId);
+    if (index < 0) return;
+    final existing = _maintenanceItems[index];
+    _maintenanceItems[index] = MaintenanceItemEntry(
+      id: existing.id,
+      name: name,
+      category: category,
+      defaultCycleDays: defaultCycleDays,
+      defaultDurationMinutes: defaultDurationMinutes ?? 0,
+      standardDescription: standardDescription,
+      isEnabled: existing.isEnabled,
+      createdAt: existing.createdAt,
+      updatedAt: DateTime.parse('2026-03-06T08:00:00Z'),
+    );
+  }
+
+  @override
+  Future<void> toggleMaintenanceItem({
+    required int itemId,
+    required bool enabled,
+  }) async {
+    toggleMaintenanceItemCalls += 1;
+    final index = _maintenanceItems.indexWhere((item) => item.id == itemId);
+    if (index < 0) return;
+    final existing = _maintenanceItems[index];
+    _maintenanceItems[index] = MaintenanceItemEntry(
+      id: existing.id,
+      name: existing.name,
+      category: existing.category,
+      defaultCycleDays: existing.defaultCycleDays,
+      defaultDurationMinutes: existing.defaultDurationMinutes,
+      standardDescription: existing.standardDescription,
+      isEnabled: enabled,
+      createdAt: existing.createdAt,
+      updatedAt: DateTime.parse('2026-03-06T09:00:00Z'),
+    );
+  }
+
+  @override
+  Future<void> deleteMaintenanceItem({required int itemId}) async {
+    deleteMaintenanceItemCalls += 1;
+    _maintenanceItems.removeWhere((item) => item.id == itemId);
   }
 
   @override
@@ -762,13 +846,89 @@ void main() {
     expect(equipmentService.toggleEquipmentCalls, 1);
     expect(find.text('启用'), findsWidgets);
 
-    await tester.ensureVisible(find.widgetWithText(TextButton, '删除').first);
-    await tester.tap(find.widgetWithText(TextButton, '删除').first);
+    await tester.ensureVisible(find.widgetWithText(TextButton, '删除').last);
+    await tester.tap(find.widgetWithText(TextButton, '删除').last);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '删除').last);
     await tester.pumpAndSettle();
 
     expect(equipmentService.deleteEquipmentCalls, 1);
+  });
+
+  testWidgets('保养项目表单弹窗展示宽版双栏骨架', (tester) async {
+    final equipmentService = _FakeEquipmentService();
+    await _pumpPage(
+      tester,
+      MaintenanceItemFormDialog(
+        equipmentService: equipmentService,
+        item: _buildMaintenanceItemEntry(id: 2, name: '月度润滑'),
+      ),
+      size: const Size(1400, 1200),
+    );
+
+    expect(find.byKey(const ValueKey('maintenance-item-form-dialog')), findsOneWidget);
+    expect(find.text('项目配置'), findsOneWidget);
+    expect(find.text('周期与说明'), findsOneWidget);
+    expect(find.text('项目名称'), findsOneWidget);
+    expect(find.text('默认周期天数'), findsOneWidget);
+  });
+
+  testWidgets('保养项目页面可完成新增 编辑 与 启停', (tester) async {
+    final equipmentService = _FakeEquipmentService();
+    await _pumpPage(
+      tester,
+      MaintenanceItemPage(
+        session: session,
+        onLogout: () {},
+        canWrite: true,
+        equipmentService: equipmentService,
+      ),
+      size: const Size(1600, 1200),
+    );
+
+    await tester.tap(find.text('新增项目'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, '项目名称'), '周度点检');
+    await tester.enterText(find.widgetWithText(TextField, '默认周期天数'), '7');
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+    expect(equipmentService.createMaintenanceItemCalls, 1);
+
+    await tester.ensureVisible(find.widgetWithText(TextButton, '编辑').first);
+    await tester.tap(find.widgetWithText(TextButton, '编辑').first);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, '项目名称'), '周度点检-已编辑');
+    await tester.tap(find.text('保存').last);
+    await tester.pumpAndSettle();
+    expect(equipmentService.updateMaintenanceItemCalls, 1);
+
+    await tester.ensureVisible(find.widgetWithText(TextButton, '停用').first);
+    await tester.tap(find.widgetWithText(TextButton, '停用').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '确认').last);
+    await tester.pumpAndSettle();
+    expect(equipmentService.toggleMaintenanceItemCalls, 1);
+  });
+
+  testWidgets('保养项目删除确认弹窗展示统一骨架', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MesActionDialog(
+            title: const Text('删除保养项目'),
+            content: const Text('确认删除项目“月度润滑”吗？此操作不可恢复。'),
+            confirmLabel: '删除',
+            isDestructive: true,
+            onConfirm: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('删除保养项目'), findsOneWidget);
+    expect(find.textContaining('月度润滑'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '删除'), findsOneWidget);
   });
 
   testWidgets('保养项目页面按需求字段展示创建时间与更新时间', (tester) async {

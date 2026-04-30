@@ -9,9 +9,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
-import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
-import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_dialog.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_action_dialogs.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_feedback_banner.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_filter_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_page_header.dart';
@@ -273,21 +272,9 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
 
   Future<void> _showParametersDialog(ProductItem product) async {
     if (product.effectiveVersion == 0) {
-      await showDialog<void>(
+      await showProductParameterUnavailableDialog(
         context: context,
-        builder: (context) {
-          return MesDialog(
-            title: Text('产品参数 - ${product.name}'),
-            width: 420,
-            content: const Text('该产品暂无生效版本，无法查看参数。\n请先在产品管理中激活一个版本。'),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('关闭'),
-              ),
-            ],
-          );
-        },
+        productName: product.name,
       );
       return;
     }
@@ -315,15 +302,10 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
       return;
     }
 
-    await showDialog<void>(
+    await showProductParameterResultDialog(
       context: context,
-      builder: (context) {
-        return ProductParameterQueryDialog(
-          result: result,
-          buildParameterValueCell: _buildParameterValueCell,
-          onClose: () => Navigator.of(context).pop(),
-        );
-      },
+      result: result,
+      buildParameterValueCell: _buildParameterValueCell,
     );
   }
 

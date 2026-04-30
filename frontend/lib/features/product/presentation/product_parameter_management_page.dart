@@ -6,16 +6,14 @@ import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
-import 'package:mes_client/core/ui/patterns/mes_action_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_action_dialogs.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_footer.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_header.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_table.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_toolbar.dart';
-import 'package:mes_client/features/product/presentation/widgets/product_parameter_history_dialog.dart';
-import 'package:mes_client/features/product/presentation/widgets/product_parameter_history_snapshot_dialog.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_feedback_banner.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_filter_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_page_header.dart';
@@ -402,28 +400,12 @@ class _ProductParameterManagementPageState
 
     final dialogHistory = historyResult;
 
-    await showDialog<void>(
+    await showProductParameterHistoryFlowDialog(
       context: context,
-      builder: (context) {
-        return ProductParameterHistoryDialog(
-          row: row,
-          history: dialogHistory,
-          formatTime: _formatTime,
-          historyTypeLabel: _historyTypeLabel,
-          onClose: () => Navigator.of(context).pop(),
-          onViewSnapshot: (item) {
-            showDialog<void>(
-              context: context,
-              builder: (snapshotContext) {
-                return ProductParameterHistorySnapshotDialog(
-                  item: item,
-                  onClose: () => Navigator.of(snapshotContext).pop(),
-                );
-              },
-            );
-          },
-        );
-      },
+      row: row,
+      history: dialogHistory,
+      formatTime: _formatTime,
+      historyTypeLabel: _historyTypeLabel,
     );
   }
 
@@ -466,20 +448,7 @@ class _ProductParameterManagementPageState
     if (!_hasUnsavedChanges) {
       return true;
     }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return MesActionDialog(
-          title: const Text('放弃未保存的修改？'),
-          content: const Text('当前编辑内容尚未保存，离开后将丢失本次修改。'),
-          cancelLabel: '继续编辑',
-          confirmLabel: '放弃修改',
-          isDestructive: true,
-          onConfirm: () => Navigator.of(context).pop(true),
-        );
-      },
-    );
-    return confirmed ?? false;
+    return showProductParameterDiscardDialog(context: context);
   }
 
   Future<bool> _confirmImpactForEffectiveUpdate(
@@ -488,29 +457,10 @@ class _ProductParameterManagementPageState
     if (!impact.requiresConfirmation) {
       return true;
     }
-    final confirmed = await showDialog<bool>(
+    return showProductParameterImpactDialog(
       context: context,
-      builder: (context) {
-        return MesActionDialog(
-          title: const Text('变更影响确认'),
-          width: 520,
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '存在 ${impact.totalOrders} 条未完工订单（待开工 ${impact.pendingOrders}，生产中 ${impact.inProgressOrders}）。',
-              ),
-              const SizedBox(height: 8),
-              const Text('确认后将按强制模式继续保存。'),
-            ],
-          ),
-          confirmLabel: '确认继续',
-          onConfirm: () => Navigator.of(context).pop(true),
-        );
-      },
+      impact: impact,
     );
-    return confirmed ?? false;
   }
 
   Future<bool> _exitEditor({bool force = false}) async {

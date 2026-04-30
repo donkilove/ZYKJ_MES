@@ -2103,7 +2103,7 @@ void main() {
 
       await tester.tap(find.widgetWithText(FilledButton, '立即生效'));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(ElevatedButton, '确认生效'));
+      await tester.tap(find.widgetWithText(FilledButton, '确认生效'));
       await tester.pumpAndSettle();
       expect(service.activateCalls, [2]);
       expect(find.textContaining('V1.1 已生效'), findsOneWidget);
@@ -2111,7 +2111,7 @@ void main() {
       await _openPopupMenu(tester, _popupMenuButtonFinder().at(1));
       await tester.tap(find.text('停用版本'));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(ElevatedButton, '确认停用'));
+      await tester.tap(find.widgetWithText(FilledButton, '确认停用'));
       await tester.pumpAndSettle();
       expect(service.disableCalls, [1]);
       expect(find.text('已停用'), findsWidgets);
@@ -2124,7 +2124,7 @@ void main() {
       await _openPopupMenu(tester, _popupMenuButtonFinder().first);
       await tester.tap(find.text('删除版本'));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(ElevatedButton, '确认删除'));
+      await tester.tap(find.widgetWithText(FilledButton, '确认删除'));
       await tester.pumpAndSettle();
       expect(service.deleteCalls, [3]);
       expect(find.text('V1.2'), findsNothing);

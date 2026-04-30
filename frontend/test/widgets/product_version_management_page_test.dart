@@ -6,6 +6,8 @@ import 'package:mes_client/core/ui/patterns/mes_list_detail_shell.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/product_page.dart';
 import 'package:mes_client/features/product/presentation/product_version_management_page.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_version_detail_dialog.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_version_note_dialog.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_selector_panel.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_version_feedback_banner.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_version_page_header.dart';
@@ -429,5 +431,48 @@ void main() {
       find.byKey(const ValueKey('product-version-table-section')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('版本详情弹窗展示统一骨架', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductVersionDetailDialog(
+            version: _buildVersion(
+              version: 2,
+              label: 'V1.1',
+              lifecycleStatus: 'draft',
+              note: '草稿版本',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('product-version-detail-dialog')), findsOneWidget);
+    expect(find.textContaining('版本详情'), findsOneWidget);
+    expect(find.text('版本号'), findsOneWidget);
+  });
+
+  testWidgets('版本备注弹窗展示统一骨架', (tester) async {
+    final controller = TextEditingController(text: '原备注');
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductVersionNoteDialog(
+            versionLabel: 'V1.1',
+            controller: controller,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('product-version-note-dialog')), findsOneWidget);
+    expect(find.textContaining('编辑备注'), findsOneWidget);
+    expect(find.text('版本备注'), findsOneWidget);
   });
 }

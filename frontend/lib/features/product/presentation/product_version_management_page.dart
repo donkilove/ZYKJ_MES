@@ -4,24 +4,17 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
-import 'package:mes_client/core/ui/patterns/mes_action_dialog.dart';
-import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_list_detail_shell.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_version_action_dialogs.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_version_detail_dialog.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_version_note_dialog.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_selector_panel.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_version_feedback_banner.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_version_page_header.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_version_table_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_version_toolbar.dart';
 import 'package:mes_client/features/product/services/product_service.dart';
-
-const Map<String, String> _statusLabels = {
-  'draft': '草稿',
-  'effective': '已生效',
-  'obsolete': '已失效',
-  'disabled': '已停用',
-  'inactive': '已失效',
-};
 
 class ProductVersionManagementPage extends StatefulWidget {
   const ProductVersionManagementPage({
@@ -284,18 +277,11 @@ class _ProductVersionManagementPageState
   Future<void> _activateVersion(ProductVersionItem rev) async {
     final product = _selectedProduct;
     if (product == null) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showProductVersionActivateDialog(
       context: context,
-      builder: (ctx) => MesActionDialog(
-        title: const Text('确认生效'),
-        content: Text(
-          '确认将版本 ${rev.versionLabel} 设为生效版本？\n生效后，当前生效版本将自动变为已失效。',
-        ),
-        confirmLabel: '确认生效',
-        onConfirm: () => Navigator.pop(ctx, true),
-      ),
+      version: rev,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
     try {
       await _service.activateProductVersion(
         productId: product.id,
@@ -315,19 +301,11 @@ class _ProductVersionManagementPageState
   Future<void> _disableVersion(ProductVersionItem rev) async {
     final product = _selectedProduct;
     if (product == null) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showProductVersionDisableDialog(
       context: context,
-      builder: (ctx) => MesActionDialog(
-        title: const Text('确认停用'),
-        content: Text(
-          '确认停用版本 ${rev.versionLabel}？停用后不可直接恢复，如需再次使用请复制出新草稿。',
-        ),
-        confirmLabel: '确认停用',
-        isDestructive: true,
-        onConfirm: () => Navigator.pop(ctx, true),
-      ),
+      version: rev,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
     try {
       await _service.disableProductVersion(
         productId: product.id,
@@ -352,17 +330,11 @@ class _ProductVersionManagementPageState
   Future<void> _deleteVersion(ProductVersionItem rev) async {
     final product = _selectedProduct;
     if (product == null) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showProductVersionDeleteDialog(
       context: context,
-      builder: (ctx) => MesActionDialog(
-        title: const Text('确认删除'),
-        content: Text('确认删除草稿版本 ${rev.versionLabel}？此操作不可撤销。'),
-        confirmLabel: '确认删除',
-        isDestructive: true,
-        onConfirm: () => Navigator.pop(ctx, true),
-      ),
+      version: rev,
     );
-    if (confirmed != true) return;
+    if (!confirmed) return;
     try {
       await _service.deleteProductVersion(
         productId: product.id,
@@ -380,49 +352,7 @@ class _ProductVersionManagementPageState
   Future<void> _showVersionDetail(ProductVersionItem rev) async {
     await showDialog<void>(
       context: context,
-      builder: (ctx) => MesDialog(
-        title: Text('版本详情 - ${rev.versionLabel}'),
-        width: 400,
-        scrollable: true,
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _detailRow('版本号', rev.versionLabel),
-            _detailRow('状态', _statusLabels[rev.lifecycleStatus] ?? rev.lifecycleStatus),
-            _detailRow('变更摘要', rev.note ?? '-'),
-            _detailRow('来源版本', rev.sourceVersionLabel ?? '-'),
-            _detailRow('创建人', rev.createdByUsername ?? '-'),
-            _detailRow('创建时间', _formatDate(rev.createdAt)),
-            if (rev.updatedAt != null) _detailRow('最后更新', _formatDate(rev.updatedAt!)),
-          ],
-        ),
-        actions: [
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('关闭'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _detailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(
-              label,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
-          ),
-          Expanded(child: SelectableText(value)),
-        ],
-      ),
+      builder: (ctx) => ProductVersionDetailDialog(version: rev),
     );
   }
 
@@ -432,28 +362,9 @@ class _ProductVersionManagementPageState
     final controller = TextEditingController(text: rev.note ?? '');
     final result = await showDialog<String>(
       context: context,
-      builder: (ctx) => MesDialog(
-        title: Text('编辑备注 - ${rev.versionLabel}'),
-        width: 400,
-        content: TextField(
-          controller: controller,
-          maxLength: 256,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            labelText: '版本备注',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('保存'),
-          ),
-        ],
+      builder: (ctx) => ProductVersionNoteDialog(
+        versionLabel: rev.versionLabel,
+        controller: controller,
       ),
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {

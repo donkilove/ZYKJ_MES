@@ -4,9 +4,9 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/models/authz_models.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
-import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/features/auth/services/authz_service.dart';
+import 'package:mes_client/features/user/presentation/widgets/function_permission_action_dialogs.dart';
 import 'package:mes_client/features/user/presentation/widgets/function_permission_config_page_header.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 
@@ -376,27 +376,10 @@ class _FunctionPermissionConfigPageState
       return;
     }
     if (_hasDirty) {
-      final discard = await showDialog<bool>(
+      final discard = await showFunctionPermissionDiscardDialog(
         context: context,
-        builder: (context) {
-          return MesDialog(
-            title: const Text('切换模块'),
-            width: 420,
-            content: const Text('当前有未保存改动，是否放弃并切换？'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('放弃并切换'),
-              ),
-            ],
-          );
-        },
       );
-      if (discard != true) {
+      if (!discard) {
         return;
       }
     }
@@ -433,27 +416,8 @@ class _FunctionPermissionConfigPageState
       return;
     }
 
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return MesDialog(
-          title: const Text('确认保存'),
-          width: 420,
-          content: const Text('将保存当前模块的权限配置，是否继续？'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('确认保存'),
-            ),
-          ],
-        );
-      },
-    );
-    if (confirm != true) {
+    final confirm = await showFunctionPermissionSaveDialog(context: context);
+    if (!confirm) {
       return;
     }
 

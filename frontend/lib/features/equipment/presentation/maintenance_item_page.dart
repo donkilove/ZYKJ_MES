@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
+import 'package:mes_client/features/equipment/presentation/widgets/maintenance_item_action_dialogs.dart';
+import 'package:mes_client/features/equipment/presentation/widgets/maintenance_item_form_dialog.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
-import 'package:mes_client/core/ui/patterns/mes_action_dialog.dart';
-import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
-import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 
 class MaintenanceItemPage extends StatefulWidget {
@@ -133,197 +132,11 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
     if (!mounted) {
       return;
     }
-    final pageContext = context;
-    final isCreate = item == null;
-    final nameController = TextEditingController(text: item?.name ?? '');
-    final durationController = TextEditingController(
-      text:
-          item?.defaultDurationMinutes != null &&
-              item!.defaultDurationMinutes > 0
-          ? '${item.defaultDurationMinutes}'
-          : '',
+    final saved = await showMaintenanceItemFormDialog(
+      context: context,
+      equipmentService: _equipmentService,
+      item: item,
     );
-    final cycleDaysController = TextEditingController(
-      text: item != null ? '${item.defaultCycleDays}' : '',
-    );
-    final standardDescController = TextEditingController(
-      text: item?.standardDescription ?? '',
-    );
-    final formKey = GlobalKey<FormState>();
-    const categoryOptions = ['', '点检', '润滑', '校准', '清洁'];
-    var selectedCategory = item?.category ?? '';
-    if (!categoryOptions.contains(selectedCategory)) {
-      selectedCategory = '';
-    }
-
-    final saved = await showMesLockedFormDialog<bool>(
-      context: pageContext,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (innerContext, setInnerState) {
-            return MesDialog(
-              title: Text(isCreate ? '新增保养项目' : '编辑保养项目'),
-              width: 520,
-              content: Form(
-                key: formKey,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextFormField(
-                        controller: nameController,
-                        decoration: const InputDecoration(
-                          labelText: '项目名称',
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return '请输入项目名称';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: cycleDaysController,
-                        decoration: const InputDecoration(
-                          labelText: '默认周期天数',
-                          helperText: '常用值：7 / 30 / 90 / 365',
-                          border: OutlineInputBorder(),
-                        ),
-                        keyboardType: TextInputType.number,
-                        validator: (value) {
-                          final normalized = value?.trim() ?? '';
-                          if (normalized.isEmpty) {
-                            return '请输入默认周期天数';
-                          }
-                          final n = int.tryParse(normalized);
-                          if (n == null || n < 1 || n > 3650) {
-                            return '请输入1-3650之间的整数';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        initialValue: selectedCategory,
-                        items: categoryOptions
-                            .map(
-                              (c) => DropdownMenuItem<String>(
-                                value: c,
-                                child: Text(c.isEmpty ? '(不限)' : c),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          setInnerState(() {
-                            selectedCategory = value ?? '';
-                          });
-                        },
-                        decoration: const InputDecoration(
-                          labelText: '类别',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: durationController,
-                        decoration: const InputDecoration(
-                          labelText: '默认时长(分钟)',
-                          border: OutlineInputBorder(),
-                        ),
-                        keyboardType: TextInputType.number,
-                        validator: (value) {
-                          if (value != null && value.trim().isNotEmpty) {
-                            final n = int.tryParse(value.trim());
-                            if (n == null || n < 1 || n > 1440) {
-                              return '请输入1-1440之间的整数';
-                            }
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: standardDescController,
-                        decoration: const InputDecoration(
-                          labelText: '标准描述',
-                          border: OutlineInputBorder(),
-                        ),
-                        maxLines: 3,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(dialogContext).pop(false),
-                  child: const Text('取消'),
-                ),
-                FilledButton(
-                  onPressed: () async {
-                    if (!formKey.currentState!.validate()) {
-                      return;
-                    }
-                    final cycleDays = int.parse(
-                      cycleDaysController.text.trim(),
-                    );
-                    final durationText = durationController.text.trim();
-                    final duration = durationText.isNotEmpty
-                        ? int.tryParse(durationText)
-                        : null;
-                    try {
-                      if (isCreate) {
-                        await _equipmentService.createMaintenanceItem(
-                          name: nameController.text.trim(),
-                          defaultCycleDays: cycleDays,
-                          category: selectedCategory,
-                          defaultDurationMinutes: duration,
-                          standardDescription: standardDescController.text
-                              .trim(),
-                        );
-                      } else {
-                        await _equipmentService.updateMaintenanceItem(
-                          itemId: item.id,
-                          name: nameController.text.trim(),
-                          defaultCycleDays: cycleDays,
-                          category: selectedCategory,
-                          defaultDurationMinutes: duration,
-                          standardDescription: standardDescController.text
-                              .trim(),
-                        );
-                      }
-                      if (dialogContext.mounted) {
-                        Navigator.of(dialogContext).pop(true);
-                      }
-                    } catch (error) {
-                      if (_isUnauthorized(error)) {
-                        widget.onLogout();
-                        return;
-                      }
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('保存保养项目失败: ${_errorMessage(error)}'),
-                          ),
-                        );
-                      }
-                    }
-                  },
-                  child: const Text('保存'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-
-    nameController.dispose();
-    durationController.dispose();
-    cycleDaysController.dispose();
-    standardDescController.dispose();
 
     if (saved == true) {
       await _loadItems();
@@ -336,15 +149,12 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
     if (!mounted) {
       return;
     }
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showMaintenanceItemToggleDialog(
       context: context,
-      builder: (dialogContext) => MesActionDialog(
-        title: Text('$action保养项目'),
-        content: Text('确认$action项目“${item.name}”吗？'),
-        onConfirm: () => Navigator.of(dialogContext).pop(true),
-      ),
+      item: item,
+      nextEnabled: nextEnabled,
     );
-    if (confirmed != true) {
+    if (!confirmed) {
       return;
     }
     try {
@@ -376,17 +186,11 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
     if (!mounted) {
       return;
     }
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showMaintenanceItemDeleteDialog(
       context: context,
-      builder: (dialogContext) => MesActionDialog(
-        title: const Text('删除保养项目'),
-        content: Text('确认删除项目“${item.name}”吗？此操作不可恢复。'),
-        confirmLabel: '删除',
-        isDestructive: true,
-        onConfirm: () => Navigator.of(dialogContext).pop(true),
-      ),
+      item: item,
     );
-    if (confirmed != true) {
+    if (!confirmed) {
       return;
     }
     try {
