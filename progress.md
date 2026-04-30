@@ -218,3 +218,16 @@
 - 限制：数据库型质量/设备集成测试曾因 Docker PostgreSQL 未映射失败；映射到 5433 后又因当前容器 `admin/Admin@123456` 登录 401 未进入业务断言，已用端点单元回归补偿并写入 evidence。
 - 提交前复测：`python -m pytest backend/tests/test_message_service_unit.py backend/tests/test_home_dashboard_service_unit.py backend/tests/test_todo_closure_endpoint_unit.py -q` 输出 28 passed。
 - 提交前复核：`git diff --check` 退出码 0，仅 Git 行尾转换提示。
+
+## 2026-04-30 Graphify 项目结构记忆接入
+
+- 用户决定采用 Graphify 构建每个项目的结构记忆，并要求同步更新相关规则。
+- 已核对 Graphify 官方用法与本地 CLI：Python 包名为 `graphifyy`，命令为 `graphify`，默认输出 `graphify-out/GRAPH_REPORT.md`、`graphify-out/graph.json`、`graphify-out/graph.html`。
+- 当前环境未预装全局 `graphify`，且 `uv`/`pipx` 不可用；已创建本地 `.graphify-venv` 并安装 `graphifyy==0.5.6`，`.graphify-venv/` 已加入 `.gitignore`。
+- 已新增 `.graphifyignore`，排除密钥、环境文件、构建产物、缓存、日志、临时目录、工具虚拟环境和任务流水，避免进入项目结构记忆。
+- 已更新根 `AGENTS.md` 与 `docs/AGENTS/10/30/40/50`：Graphify 作为项目级结构记忆层，Memory MCP 只存跨会话稳定偏好与长期约定；Graphify 只作辅助索引，最终结论仍以源码、测试、契约、规则和 evidence 为准。
+- 已写入 Memory MCP 两组稳定事实：`ZYKJ_MES 项目记忆策略`、`ZYKJ_MES Graphify 运行约定`，并用 `read_graph` 验证存在。
+- 已执行 `.graphify-venv\Scripts\graphify.exe update .` 生成 AST-only 代码结构图谱：7614 nodes、15401 edges；`graphify-out/GRAPH_REPORT.md` 与 `graphify-out/graph.json` 已生成，`graph.html` 因超过 5000 nodes 被 Graphify 跳过。
+- 已验证图谱查询：`.graphify-venv\Scripts\graphify.exe query "message service todo dashboard" --budget 1200` 可返回消息中心/待办相关测试和 schema 节点；中文业务词直接查询未命中，说明当前图谱主要是代码结构图，后续文档语义抽取需按子目录或明确范围分批执行。
+- 留痕文件：`evidence/2026-04-30_Graphify项目结构记忆接入.md`。
+- 提交前复核：`git diff --check` 退出码 0，仅 Git 行尾转换提示；`git status --short --untracked-files=all` 确认待提交范围为规则、Graphify 忽略配置、图谱报告/JSON、evidence 与计划/进度文件；`.graphify-venv/` 与 `graphify-out/cache/` 已忽略。

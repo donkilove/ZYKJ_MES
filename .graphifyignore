@@ -1,0 +1,104 @@
+# Graphify 项目结构记忆忽略配置
+#
+# 目标：让图谱聚焦源码、规则与架构文档，避免把密钥、运行产物、
+# 缓存、历史任务流水和工具环境纳入项目结构记忆。
+
+# 敏感配置与凭据
+.env
+.env.*
+backend/.env
+backend/.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.cert
+*.crt
+*.der
+*.p8
+*.pgpass
+*.netrc
+*credential*
+*secret*
+*passwd*
+*password*
+*token*
+*private_key*
+
+# 本地环境、依赖、缓存与构建产物
+.git/
+.venv/
+.graphify-venv/
+venv/
+env/
+ENV/
+__pycache__/
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyre/
+.hypothesis/
+.tox/
+.nox/
+frontend/.dart_tool/
+frontend/.pub/
+frontend/.pub-cache/
+frontend/build/
+frontend/coverage/
+frontend/windows/flutter/ephemeral/
+desktop_tests/**/bin/
+desktop_tests/**/obj/
+desktop_tests/**/TestResults/
+plugins/runtime/python312/
+plugins/**/vendor/
+node_modules/
+build/
+dist/
+target/
+out/
+
+# 本地工具与临时目录
+.claude/
+.codex/
+.serena/
+.superpowers/
+.tmp_runtime/
+.tmp_t5/
+.trae/
+.trae-cn/
+.worktrees/
+tmp/
+
+# 运行日志、导出文件与数据库/缓存噪音
+*.log
+*.tmp
+*.temp
+*.bak
+*.orig
+*.csv
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+dump.rdb
+backend/runtime_exports/
+frontend/query-export.csv
+frontend/version-export.csv
+frontend/*-export.csv
+frontend/export-*.csv
+
+# 任务过程留痕由 evidence/progress 承载，不作为结构图谱输入
+evidence/
+task_plan.md
+progress.md
+findings.md
+
+# Graphify 自身中间产物；正式输出 GRAPH_REPORT.md / graph.json / graph.html 可保留
+graphify-out/cache/
+graphify-out/converted/
+graphify-out/memory/
+graphify-out/manifest.json
+graphify-out/cost.json
+graphify-out/.graphify_*
+graphify-out/needs_update
