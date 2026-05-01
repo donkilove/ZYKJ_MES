@@ -223,13 +223,9 @@ class _AuditLogPageState extends State<AuditLogPage> {
       ),
       filters: UserModuleFilterPanel(
         sectionKey: const ValueKey('audit-log-filter-section'),
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
+        child: Row(
           children: [
-            SizedBox(
-              width: 160,
+            Expanded(
               child: TextField(
                 controller: _operatorController,
                 decoration: const InputDecoration(
@@ -240,30 +236,7 @@ class _AuditLogPageState extends State<AuditLogPage> {
                 onSubmitted: (_) => _loadAuditLogs(page: 1),
               ),
             ),
-            SizedBox(
-              width: 160,
-              child: TextField(
-                controller: _actionController,
-                decoration: const InputDecoration(
-                  labelText: '操作编码',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                onSubmitted: (_) => _loadAuditLogs(page: 1),
-              ),
-            ),
-            SizedBox(
-              width: 160,
-              child: TextField(
-                controller: _targetController,
-                decoration: const InputDecoration(
-                  labelText: '目标类型',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                onSubmitted: (_) => _loadAuditLogs(page: 1),
-              ),
-            ),
+            const SizedBox(width: 8),
             OutlinedButton.icon(
               onPressed: _pickDateRange,
               icon: const Icon(Icons.date_range, size: 16),
@@ -274,7 +247,8 @@ class _AuditLogPageState extends State<AuditLogPage> {
                 style: const TextStyle(fontSize: 13),
               ),
             ),
-            if (_startTime != null)
+            const SizedBox(width: 8),
+            if (_startTime != null) ...[
               IconButton(
                 onPressed: _clearDateRange,
                 icon: const Icon(Icons.clear, size: 16),
@@ -285,6 +259,8 @@ class _AuditLogPageState extends State<AuditLogPage> {
                   minHeight: 28,
                 ),
               ),
+            ],
+            const SizedBox(width: 8),
             FilledButton(
               onPressed: () => _loadAuditLogs(page: 1),
               child: const Text('查询'),

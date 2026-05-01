@@ -6,10 +6,14 @@ class RoleManagementPageHeader extends StatelessWidget {
     super.key,
     required this.onRefresh,
     required this.loading,
+    this.canCreateRole = false,
+    this.onCreateRole,
   });
 
   final VoidCallback onRefresh;
   final bool loading;
+  final bool canCreateRole;
+  final VoidCallback? onCreateRole;
 
   @override
   Widget build(BuildContext context) {
@@ -17,8 +21,14 @@ class RoleManagementPageHeader extends StatelessWidget {
       key: const ValueKey('role-management-page-header'),
       child: MesRefreshPageHeader(
         title: '角色管理',
-        subtitle: '统一管理角色、启停与删除动作。',
         onRefresh: loading ? null : onRefresh,
+        actionsBeforeRefresh: [
+          if (canCreateRole && onCreateRole != null)
+            FilledButton(
+              onPressed: onCreateRole,
+              child: const Text('新增角色'),
+            ),
+        ],
       ),
     );
   }

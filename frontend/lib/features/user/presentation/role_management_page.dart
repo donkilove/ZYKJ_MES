@@ -229,6 +229,8 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
       header: RoleManagementPageHeader(
         loading: _loading,
         onRefresh: () => _loadRoles(page: _page),
+        canCreateRole: widget.canCreateRole,
+        onCreateRole: widget.canCreateRole ? () => _showRoleDialog() : null,
       ),
       filters: Row(
         children: [
@@ -248,12 +250,6 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
             onPressed: () => _loadRoles(page: 1),
             child: const Text('查询'),
           ),
-          const SizedBox(width: 10),
-          if (widget.canCreateRole)
-            FilledButton(
-              onPressed: () => _showRoleDialog(),
-              child: const Text('新增角色'),
-            ),
         ],
       ),
       banner: _message.isEmpty
@@ -275,8 +271,6 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
           enableUnifiedHeaderStyle: true,
           child: DataTable(
             columnSpacing: 20,
-            dataRowMinHeight: 60,
-            dataRowMaxHeight: 84,
             columns: [
               UnifiedListTableHeaderStyle.column(context, '角色名称'),
               UnifiedListTableHeaderStyle.column(context, '角色说明'),

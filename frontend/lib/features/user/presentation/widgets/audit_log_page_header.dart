@@ -17,7 +17,6 @@ class AuditLogPageHeader extends StatelessWidget {
       key: const ValueKey('audit-log-page-header'),
       child: MesRefreshPageHeader(
         title: '审计日志',
-        subtitle: '统一查看操作人、目标对象与动作结果。',
         onRefresh: loading ? null : onRefresh,
       ),
     );
