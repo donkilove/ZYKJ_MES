@@ -1249,7 +1249,7 @@ class _HomeShellIntegrationAppState extends State<_HomeShellIntegrationApp> {
 
     return MainShellPage(
       session: _session!,
-      onLogout: () {
+      onLogout: ({String? reason}) {
         setState(() {
           _session = null;
         });
@@ -1571,14 +1571,14 @@ class _IntegrationAuthService extends AuthService {
   }
 
   @override
-  Future<({String token, bool mustChangePassword})> login({
+  Future<({String token, bool mustChangePassword, int expiresIn})> login({
     required String baseUrl,
     required String username,
     required String password,
   }) async {
     lastUsername = username;
     lastPassword = password;
-    return (token: 'token', mustChangePassword: false);
+    return (token: 'token', mustChangePassword: false, expiresIn: 7200);
   }
 
   @override

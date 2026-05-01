@@ -60,8 +60,9 @@ def create_access_token(
 ) -> str:
     ensure_runtime_settings_secure()
     resolved_minutes = expires_minutes or settings.jwt_expire_minutes
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=resolved_minutes)
-    payload: dict[str, Any] = {"sub": subject, "exp": expires_at}
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(minutes=resolved_minutes)
+    payload: dict[str, Any] = {"sub": subject, "exp": expires_at, "iat": now}
     if extra_claims:
         payload.update(extra_claims)
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)

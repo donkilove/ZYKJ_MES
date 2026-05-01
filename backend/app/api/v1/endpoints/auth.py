@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -30,6 +31,8 @@ from app.schemas.auth import (
     RegisterRequest,
     RegisterResult,
     RejectRegistrationRequest,
+    RenewTokenRequest,
+    RenewTokenResult,
 )
 from app.schemas.common import ApiResponse, success_response
 from app.services.audit_service import write_audit_log
@@ -43,9 +46,11 @@ from app.services.session_service import (
     cleanup_expired_login_logs_if_due,
     create_login_log,
     create_or_reuse_user_session,
+    force_offline_user_sessions_except,
     mark_session_logout,
     normalize_terminal_info,
     remember_active_session_token,
+    renew_session,
     should_record_success_login,
 )
 from app.services.user_service import (
@@ -83,10 +88,11 @@ def _build_login_success_response(
     user: User,
     session_row: object,
     expires_minutes: int,
+    login_type: str = "web",
 ) -> ApiResponse[LoginResult]:
     token = create_access_token(
         subject=str(user.id),
-        extra_claims={"sid": session_row.session_token_id},
+        extra_claims={"sid": session_row.session_token_id, "login_type": login_type},
         expires_minutes=expires_minutes,
     )
     return success_response(
@@ -105,6 +111,7 @@ def _login_with_expiry(
     request: Request | None,
     db: Session,
     expires_minutes: int,
+    login_type: str = "web",
 ) -> ApiResponse[LoginResult]:
     username = form_data.username.strip()
     ip_address = request.client.host if request and request.client else None
@@ -192,6 +199,15 @@ def _login_with_expiry(
         ip_address=ip_address,
         terminal_info=terminal_info,
     )
+
+    # 单会话并发控制：web登录时强制下线该用户所有其他活跃会话
+    if login_type == "web":
+        force_offline_user_sessions_except(
+            db,
+            user_id=user.id,
+            exclude_session_token_id=session_row.session_token_id,
+        )
+
     if should_record_success_login(
         user_id=user.id,
         ip_address=ip_address,
@@ -221,6 +237,7 @@ def _login_with_expiry(
         user=user,
         session_row=session_row,
         expires_minutes=expires_minutes,
+        login_type=login_type,
     )
 
 
@@ -235,6 +252,7 @@ def login(
         request=request,
         db=db,
         expires_minutes=settings.jwt_expire_minutes,
+        login_type="web",
     )
 
 
@@ -249,6 +267,7 @@ def mobile_scan_review_login(
         request=request,
         db=db,
         expires_minutes=settings.mobile_scan_review_jwt_expire_minutes,
+        login_type="mobile_scan",
     )
 
 
@@ -278,6 +297,88 @@ def logout(
     db.commit()
     clear_user(current_user.id)
     return success_response({"logged_out": True}, message="logged_out")
+
+
+@router.post("/renew-token", response_model=ApiResponse[RenewTokenResult])
+def renew_token(
+    payload: RenewTokenRequest,
+    request: Request,
+    token: str = Depends(oauth2_scheme),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+) -> ApiResponse[RenewTokenResult]:
+    if not verify_password_cached(
+        payload.password,
+        current_user.password_hash,
+        cache_scope=f"user:{current_user.id}",
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="密码错误",
+        )
+
+    try:
+        token_payload = decode_access_token(token)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token无效",
+        )
+
+    session_token_id = str(token_payload.get("sid") or "").strip() or None
+    if not session_token_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token中缺少会话信息",
+        )
+
+    iat = token_payload.get("iat")
+    if iat is not None:
+        iat_dt = datetime.fromtimestamp(iat, tz=timezone.utc)
+        token_age_seconds = (datetime.now(timezone.utc) - iat_dt).total_seconds()
+        if token_age_seconds < 3600:
+            remaining = int(3600 - token_age_seconds)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Token使用时长不足1小时，还需等待{remaining}秒后才能续期",
+            )
+
+    extend_seconds = 3600
+    session_row = renew_session(db, session_token_id=session_token_id, extend_seconds=extend_seconds)
+    if not session_row:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="会话已失效，请重新登录",
+        )
+
+    login_type = str(token_payload.get("login_type") or "web")
+    new_expires_minutes = settings.jwt_expire_minutes + (extend_seconds // 60)
+    new_token = create_access_token(
+        subject=str(current_user.id),
+        extra_claims={"sid": session_token_id, "login_type": login_type},
+        expires_minutes=new_expires_minutes,
+    )
+
+    write_audit_log(
+        db,
+        action_code="auth.renew_token",
+        action_name="续期Token",
+        target_type="session",
+        target_id=session_token_id,
+        operator=current_user,
+        ip_address=request.client.host if request and request.client else None,
+        terminal_info=request.headers.get("user-agent") if request else None,
+    )
+    db.commit()
+
+    return success_response(
+        RenewTokenResult(
+            access_token=new_token,
+            token_type="bearer",
+            expires_in=new_expires_minutes * 60,
+        ),
+        message="renewed",
+    )
 
 
 @router.post(

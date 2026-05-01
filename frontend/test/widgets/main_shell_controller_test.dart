@@ -105,11 +105,11 @@ MainShellController _buildController({
   MessageService? messageService,
   HomeDashboardService? homeDashboardService,
   SoftwareSettingsController? softwareSettingsController,
-  VoidCallback? onLogout,
+  void Function({String? reason})? onLogout,
 }) {
   return MainShellController(
     session: testSession,
-    onLogout: onLogout ?? () {},
+    onLogout: onLogout ?? ({String? reason}) {},
     authService: authService ?? _ControllerAuthService(),
     authzService: authzService ?? _ControllerAuthzService(),
     pageCatalogService: pageCatalogService ?? _ControllerPageCatalogService(),
@@ -181,7 +181,7 @@ void main() {
       authService: _ControllerAuthService(
         error: ApiException('unauthorized', 401),
       ),
-      onLogout: () {
+      onLogout: ({String? reason}) {
         logoutCalled = true;
       },
     );

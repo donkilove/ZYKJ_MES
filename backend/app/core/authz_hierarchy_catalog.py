@@ -139,6 +139,14 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         dependency_permission_codes=("feature.user.user_management.view",),
     ),
     FeatureDefinition(
+        permission_code="feature.user.user_management.import",
+        permission_name="批量导入用户",
+        module_code="user",
+        page_code="user_management",
+        action_permission_codes=("user.users.import",),
+        dependency_permission_codes=("feature.user.user_management.view",),
+    ),
+    FeatureDefinition(
         permission_code="feature.user.registration_approval.view",
         permission_name="查看注册申请",
         module_code="user",

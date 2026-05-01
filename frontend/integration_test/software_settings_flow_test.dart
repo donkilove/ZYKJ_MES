@@ -240,7 +240,7 @@ Future<void> _pumpMainShellPage(
     MaterialApp(
       home: MainShellPage(
         session: _session,
-        onLogout: () {},
+        onLogout: ({String? reason}) {},
         softwareSettingsController: controller,
         timeSyncController: _buildTimeSyncController(controller),
         authService: _FakeAuthService(),

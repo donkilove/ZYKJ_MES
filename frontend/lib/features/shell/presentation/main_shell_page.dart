@@ -49,7 +49,7 @@ class MainShellPage extends StatefulWidget {
   });
 
   final AppSession session;
-  final VoidCallback onLogout;
+  final void Function({String? reason}) onLogout;
   final SoftwareSettingsController softwareSettingsController;
   final TimeSyncController timeSyncController;
   final MessageWsService Function({
@@ -189,7 +189,7 @@ class _MainShellPageState extends State<MainShellPage>
       pageCode: pageCode,
       session: widget.session,
       state: _controller.state,
-      onLogout: widget.onLogout,
+      onLogout: () => widget.onLogout(),
       onRefreshShellData: _controller.refreshShellDataFromUi,
       onNavigateToPageTarget:
           ({
@@ -263,7 +263,7 @@ class _MainShellPageState extends State<MainShellPage>
           onOpenPluginHost: _controller.openPluginHost,
           onOpenSoftwareSettings: _controller.openSoftwareSettings,
           sidebarCollapsed: sidebarCollapsed,
-          onLogout: widget.onLogout,
+          onLogout: () => widget.onLogout(),
           onRetry: () {
             unawaited(_handleRetry());
           },

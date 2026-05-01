@@ -1213,6 +1213,8 @@ class UserFeaturePermissionCodes {
       'feature.user.user_management.restore';
   static const String userManagementExport =
       'feature.user.user_management.export';
+  static const String userManagementImport =
+      'feature.user.user_management.import';
   static const String registrationApprovalView =
       'feature.user.registration_approval.view';
   static const String registrationApprovalApprove =

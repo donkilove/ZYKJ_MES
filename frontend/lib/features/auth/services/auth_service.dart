@@ -16,7 +16,7 @@ class AuthService {
     return _performLogin(uri, username: username, password: password);
   }
 
-  Future<({String token, bool mustChangePassword})> login({
+  Future<({String token, bool mustChangePassword, int expiresIn})> login({
     required String baseUrl,
     required String username,
     required String password,
@@ -27,7 +27,11 @@ class AuthService {
       username: username,
       password: password,
     );
-    return (token: result.token, mustChangePassword: result.mustChangePassword);
+    return (
+      token: result.token,
+      mustChangePassword: result.mustChangePassword,
+      expiresIn: result.expiresIn,
+    );
   }
 
   Future<({String token, bool mustChangePassword, int expiresIn})>
@@ -165,6 +169,40 @@ class AuthService {
         response.statusCode,
       );
     }
+  }
+
+  Future<({String token, int expiresIn})> renewToken({
+    required String baseUrl,
+    required String accessToken,
+    required String password,
+  }) async {
+    final uri = Uri.parse('$baseUrl/auth/renew-token');
+    final response = await http
+        .post(
+          uri,
+          headers: {
+            'Authorization': 'Bearer $accessToken',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({'password': password}),
+        )
+        .timeout(const Duration(seconds: 30));
+
+    final decoded = _decodeBody(response.body);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(decoded, response.statusCode),
+        response.statusCode,
+      );
+    }
+
+    final data = decoded['data'] as Map<String, dynamic>?;
+    final newToken = data?['access_token'] as String? ?? '';
+    final expiresIn = (data?['expires_in'] as int?) ?? 0;
+    if (newToken.isEmpty) {
+      throw ApiException('续期失败：缺少新的访问令牌', response.statusCode);
+    }
+    return (token: newToken, expiresIn: expiresIn);
   }
 
   Map<String, dynamic> _decodeBody(String body) {

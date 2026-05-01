@@ -1,7 +1,8 @@
 import 'dart:convert';
 
-import 'package:mes_client/core/network/http_client.dart' as http;
+import 'package:http/http.dart' show MultipartRequest, MultipartFile, Response;
 
+import 'package:mes_client/core/network/http_client.dart' as http;
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
@@ -838,5 +839,24 @@ class UserService {
       return message;
     }
     return '请求失败，状态码：$statusCode';
+  }
+
+  Future<UserImportResult> importUsers({
+    required List<int> fileBytes,
+    required String fileName,
+  }) async {
+    final uri = Uri.parse('${session.baseUrl}/users/import');
+    final request = MultipartRequest('POST', uri);
+    request.headers['Authorization'] = 'Bearer ${session.accessToken}';
+    request.files.add(
+      MultipartFile.fromBytes('file', fileBytes, filename: fileName),
+    );
+
+    final streamedResponse =
+        await request.send().timeout(const Duration(seconds: 120));
+    final response = await Response.fromStream(streamedResponse);
+    final json = _decodeBody(response);
+    _throwIfNotSuccess(response, json, expectedCode: 200);
+    return UserImportResult.fromJson(_dataObject(json));
   }
 }

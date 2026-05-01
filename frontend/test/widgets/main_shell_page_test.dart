@@ -488,7 +488,7 @@ Future<void> _pumpMainShellPage(
   productionPageBuilder,
   SoftwareSettingsController? softwareSettingsController,
   TimeSyncController? timeSyncController,
-  required VoidCallback onLogout,
+  required void Function({String? reason}) onLogout,
 }) async {
   tester.view.physicalSize = const Size(1600, 1200);
   tester.view.devicePixelRatio = 1.0;
@@ -605,7 +605,7 @@ void main() {
               pageCode: 'user',
               session: _session,
               state: baseState.copyWith(selectedPageCode: selectedPageCode),
-              onLogout: () {},
+              onLogout: ({String? reason}) {},
               onRefreshShellData: ({loadCatalog = false}) async {},
               onNavigateToPageTarget:
                   ({
@@ -670,7 +670,7 @@ void main() {
               pageCode: 'production',
               session: _session,
               state: baseState.copyWith(selectedPageCode: selectedPageCode),
-              onLogout: () {},
+              onLogout: ({String? reason}) {},
               onRefreshShellData: ({loadCatalog = false}) async {},
               onNavigateToPageTarget:
                   ({
@@ -746,7 +746,7 @@ void main() {
                 pageCode: 'message',
                 session: _session,
                 state: baseState.copyWith(selectedPageCode: selectedPageCode),
-                onLogout: () {},
+                onLogout: ({String? reason}) {},
                 onRefreshShellData: ({loadCatalog = false}) async {},
                 onNavigateToPageTarget:
                     ({
@@ -805,7 +805,7 @@ void main() {
             onEvent: onEvent,
             onDisconnected: onDisconnected,
           ),
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     await tester.tap(
@@ -838,7 +838,7 @@ void main() {
             onEvent: onEvent,
             onDisconnected: onDisconnected,
           ),
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     await tester.tap(
@@ -900,7 +900,7 @@ void main() {
             onEvent: onEvent,
             onDisconnected: onDisconnected,
           ),
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     await tester.tap(
@@ -939,7 +939,7 @@ void main() {
             return wsService!;
           },
       homeDashboardService: homeDashboardService,
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     expect(homeDashboardService.loadCount, 1);
@@ -994,7 +994,7 @@ void main() {
               ),
             );
           },
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     await tester.tap(find.byKey(const ValueKey('main-shell-menu-user')));
@@ -1047,7 +1047,7 @@ void main() {
           }) {
             return Center(child: Text('tabs:${visibleTabCodes.join(',')}'));
           },
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     expect(find.text('页面目录加载失败，已使用本地兜底配置。'), findsOneWidget);
@@ -1126,7 +1126,7 @@ void main() {
               ),
             );
           },
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     expect(find.text('我的待办队列'), findsOneWidget);
@@ -1167,7 +1167,7 @@ void main() {
             onEvent: onEvent,
             onDisconnected: onDisconnected,
           ),
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     expect(authService.callCount, 1);
@@ -1210,7 +1210,7 @@ void main() {
             return wsService!;
           },
       homeDashboardService: homeDashboardService,
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     expect(homeDashboardService.loadCount, 1);
@@ -1250,7 +1250,7 @@ void main() {
             );
             return wsService!;
           },
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     expect(authzService.callCount, 1);
@@ -1299,7 +1299,7 @@ void main() {
             return wsService!;
           },
       homeDashboardService: homeDashboardService,
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     expect(homeDashboardService.loadCount, 1);
@@ -1354,7 +1354,7 @@ void main() {
             return wsService!;
           },
       homeDashboardService: homeDashboardService,
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     expect(homeDashboardService.loadCount, 1);
@@ -1393,7 +1393,7 @@ void main() {
             onDisconnected: onDisconnected,
           ),
       homeDashboardService: homeDashboardService,
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     expect(homeDashboardService.loadCount, 1);
@@ -1431,7 +1431,7 @@ void main() {
             return wsService!;
           },
       homeDashboardService: homeDashboardService,
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     expect(homeDashboardService.loadCount, 1);
@@ -1478,7 +1478,7 @@ void main() {
             return wsService!;
           },
       homeDashboardService: homeDashboardService,
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     expect(homeDashboardService.loadCount, 1);
@@ -1526,7 +1526,7 @@ void main() {
             onEvent: onEvent,
             onDisconnected: onDisconnected,
           ),
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     expect(find.text('当前账号暂无可访问页面'), findsOneWidget);
@@ -1553,7 +1553,7 @@ void main() {
             onEvent: onEvent,
             onDisconnected: onDisconnected,
           ),
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     expect(find.textContaining('加载当前用户失败：用户接口失败'), findsOneWidget);
@@ -1573,7 +1573,7 @@ void main() {
       pageCatalogService: _TestShellPageCatalogService(),
       messageService: _TestShellMessageService(),
       pluginHostController: pluginHostController,
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     expect(
@@ -1615,7 +1615,7 @@ void main() {
       pageCatalogService: _TestShellPageCatalogService(),
       messageService: _TestShellMessageService(),
       pluginHostController: pluginHostController,
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     await tester.tap(
@@ -1663,7 +1663,7 @@ void main() {
             onEvent: onEvent,
             onDisconnected: onDisconnected,
           ),
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     expect(find.textContaining('加载权限快照失败：权限快照失败'), findsOneWidget);
@@ -1701,7 +1701,7 @@ void main() {
             );
             return wsService!;
           },
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     expect(find.byType(Badge), findsNothing);
@@ -1780,7 +1780,7 @@ void main() {
               ),
             );
           },
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     await tester.tap(find.byKey(const ValueKey('main-shell-menu-message')));
@@ -1845,7 +1845,7 @@ void main() {
             onEvent: onEvent,
             onDisconnected: onDisconnected,
           ),
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
     );
 
     await tester.tap(find.byKey(const ValueKey('main-shell-menu-message')));

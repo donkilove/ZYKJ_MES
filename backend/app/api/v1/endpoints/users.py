@@ -3,7 +3,7 @@ import csv
 import io
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,8 @@ from app.schemas.user import (
     UserExportTaskCreateRequest,
     UserExportTaskItem,
     UserExportTaskListResult,
+    UserImportItemResult,
+    UserImportResult,
     UserItem,
     UserLifecycleRequest,
     UserLifecycleResult,
@@ -916,3 +918,183 @@ def restore_user_api(
             cleared_online_status=lifecycle_change.cleared_online_status,
         )
     )
+
+
+@router.post("/import", response_model=ApiResponse[UserImportResult])
+async def import_users(
+    file: UploadFile = File(...),
+    request: Request = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("user.users.import")),
+) -> ApiResponse[UserImportResult]:
+    content = await file.read()
+    filename = (file.filename or "").lower()
+    rows_data: list[dict[str, str]] = []
+
+    if filename.endswith(".csv"):
+        text = content.decode("utf-8-sig")
+        reader = csv.DictReader(io.StringIO(text))
+        for row in reader:
+            rows_data.append({k.strip(): (v or "").strip() for k, v in row.items()})
+    elif filename.endswith((".xlsx", ".xls")):
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True)
+            ws = wb.active
+            if ws is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Excel文件无有效工作表",
+                )
+            rows_iter = ws.iter_rows(values_only=True)
+            headers = [str(h or "").strip() for h in next(rows_iter)]
+            for row in rows_iter:
+                row_dict = {}
+                for i, val in enumerate(row):
+                    if i < len(headers):
+                        row_dict[headers[i]] = str(val or "").strip()
+                rows_data.append(row_dict)
+        except ImportError:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="服务端未安装openpyxl，无法解析Excel文件",
+            )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="仅支持 .csv、.xlsx、.xls 格式",
+        )
+
+    required_columns = {"username", "role_code"}
+    if not rows_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="文件为空",
+        )
+    actual_columns = set(rows_data[0].keys())
+    missing = required_columns - actual_columns
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"缺少必须列：{', '.join(sorted(missing))}",
+        )
+
+    results: list[UserImportItemResult] = []
+    success_count = 0
+    failure_count = 0
+
+    for idx, row_data in enumerate(rows_data, start=2):
+        username = row_data.get("username", "").strip()
+        role_code = row_data.get("role_code", "").strip()
+        full_name = row_data.get("full_name", "").strip() or None
+        stage_id_raw = row_data.get("stage_id", "").strip()
+        stage_id = int(stage_id_raw) if stage_id_raw.isdigit() else None
+        remark = row_data.get("remark", "").strip() or None
+
+        if not username:
+            results.append(UserImportItemResult(
+                row_number=idx, username=username, success=False, error="用户名为空",
+            ))
+            failure_count += 1
+            continue
+
+        payload = UserCreate(
+            username=username,
+            full_name=full_name,
+            password="123456",
+            role_code=role_code,
+            stage_id=stage_id,
+            is_active=True,
+        )
+        user, error = create_user(db, payload)
+        if error:
+            results.append(UserImportItemResult(
+                row_number=idx, username=username, success=False, error=error,
+            ))
+            failure_count += 1
+            continue
+
+        db.flush()
+        results.append(UserImportItemResult(
+            row_number=idx, username=username, success=True,
+            user_id=user.id if user else None,
+        ))
+        success_count += 1
+
+    write_audit_log(
+        db,
+        action_code="user.import",
+        action_name="批量导入用户",
+        target_type="user",
+        target_id=str(current_user.id),
+        target_name=current_user.username,
+        operator=current_user,
+        after_data={
+            "total_rows": len(rows_data),
+            "success_count": success_count,
+            "failure_count": failure_count,
+        },
+        ip_address=request.client.host if request and request.client else None,
+        terminal_info=request.headers.get("user-agent") if request else None,
+    )
+    db.commit()
+
+    return success_response(
+        UserImportResult(
+            total_rows=len(rows_data),
+            success_count=success_count,
+            failure_count=failure_count,
+            items=results,
+        ),
+        message="completed",
+    )
+
+
+@router.get("/import-template")
+def download_import_template(
+    format: str = Query(default="csv", pattern="^(csv|excel)$"),
+    _: User = Depends(require_permission("user.users.import")),
+) -> ApiResponse[UserExportResult]:
+    headers = ["username", "full_name", "role_code", "stage_id", "remark"]
+    sample_rows = [
+        ["zhangsan", "张三", "operator", "", "冲压工段"],
+        ["lisi", "李四", "production_admin", "", ""],
+    ]
+
+    if format == "excel":
+        try:
+            import openpyxl
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            if ws is None:
+                ws = wb.create_sheet("用户导入模板")
+            else:
+                ws.title = "用户导入模板"
+            ws.append(headers)
+            for row in sample_rows:
+                ws.append(row)
+            buffer = io.BytesIO()
+            wb.save(buffer)
+            content_base64 = base64.b64encode(buffer.getvalue()).decode()
+            return success_response(UserExportResult(
+                filename="user_import_template.xlsx",
+                content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                content_base64=content_base64,
+            ))
+        except ImportError:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="服务端未安装openpyxl，无法生成Excel模板",
+            )
+
+    buffer = io.StringIO()
+    buffer.write("\ufeff")
+    writer = csv.writer(buffer)
+    writer.writerow(headers)
+    writer.writerows(sample_rows)
+    content_base64 = base64.b64encode(buffer.getvalue().encode("utf-8")).decode()
+    return success_response(UserExportResult(
+        filename="user_import_template.csv",
+        content_type="text/csv",
+        content_base64=content_base64,
+    ))

@@ -46,7 +46,7 @@ class MainShellController extends ChangeNotifier {
        _messageWsServiceFactory = messageWsServiceFactory;
 
   final AppSession session;
-  final VoidCallback onLogout;
+  final void Function({String? reason}) onLogout;
   final AuthService _authService;
   final AuthzService _authzService;
   final PageCatalogService _pageCatalogService;
@@ -125,7 +125,7 @@ class MainShellController extends ChangeNotifier {
       );
     } catch (error) {
       if (_isUnauthorized(error)) {
-        onLogout();
+        onLogout(reason: '您的账号已在其他终端登录，或会话已失效');
         return;
       }
       _setState(
@@ -227,7 +227,7 @@ class MainShellController extends ChangeNotifier {
       );
     } catch (error) {
       if (_isUnauthorized(error)) {
-        onLogout();
+        onLogout(reason: '您的账号已在其他终端登录，或会话已失效');
         return;
       }
       if (!silent) {
@@ -311,7 +311,7 @@ class MainShellController extends ChangeNotifier {
       _setState(_state.copyWith(lastManualRefreshAt: DateTime.now()));
     } catch (error) {
       if (_isUnauthorized(error)) {
-        onLogout();
+        onLogout(reason: '您的账号已在其他终端登录，或会话已失效');
         return;
       }
       _setState(_state.copyWith(message: '刷新失败：${_errorMessage(error)}'));

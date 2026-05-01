@@ -17,6 +17,7 @@ import 'package:mes_client/features/user/presentation/widgets/user_edit_dialog.d
 import 'package:mes_client/features/user/presentation/widgets/user_export_task_dialog.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_reset_password_dialog.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_action_dialogs.dart';
+import 'package:mes_client/features/user/presentation/widgets/user_import_dialog.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_management_feedback_banner.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_management_filter_section.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_management_page_header.dart';
@@ -43,6 +44,7 @@ class UserManagementPage extends StatefulWidget {
     required this.canDeleteUser,
     this.canRestoreUser = false,
     required this.canExport,
+    this.canImport = false,
     this.onNavigateToRoleManagement,
     this.userService,
     this.craftService,
@@ -59,6 +61,7 @@ class UserManagementPage extends StatefulWidget {
   final bool canDeleteUser;
   final bool canRestoreUser;
   final bool canExport;
+  final bool canImport;
   final VoidCallback? onNavigateToRoleManagement;
   final UserService? userService;
   final CraftService? craftService;
@@ -964,6 +967,21 @@ class _UserManagementPageState extends State<UserManagementPage> {
           onPressed: _loading ? null : _showExportTaskDialog,
           icon: const Icon(Icons.history),
           label: const Text('导出任务'),
+        ),
+      );
+    }
+
+    if (widget.canImport) {
+      buttons.add(
+        OutlinedButton.icon(
+          onPressed: _loading
+              ? null
+              : () => showUserImportDialog(
+                  context: context,
+                  userService: _userService,
+                ),
+          icon: const Icon(Icons.upload_file),
+          label: const Text('批量导入'),
         ),
       );
     }

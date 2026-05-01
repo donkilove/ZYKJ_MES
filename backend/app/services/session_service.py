@@ -397,6 +397,24 @@ def mark_session_logout(
     return row
 
 
+def renew_session(
+    db: Session,
+    *,
+    session_token_id: str,
+    extend_seconds: int = 3600,
+) -> UserSession | None:
+    """延长活跃session的过期时间，返回session行或None（不可续期）。"""
+    now = _now_utc()
+    row = get_session_by_token_id(db, session_token_id)
+    if not row or row.status != "active" or row.expires_at <= now:
+        return None
+    row.expires_at = row.expires_at + timedelta(seconds=extend_seconds)
+    row.last_active_at = now
+    db.flush()
+    remember_active_session_token(session_token_id, expires_at=row.expires_at)
+    return row
+
+
 def cleanup_expired_sessions(db: Session) -> int:
     now = _now_utc()
     result = db.execute(
@@ -562,6 +580,38 @@ def force_offline_sessions(
         row.logout_time = now
         row.last_active_at = now
         forget_active_session_token(row.session_token_id)
+    if rows:
+        db.flush()
+    return len(rows)
+
+
+def force_offline_user_sessions_except(
+    db: Session,
+    *,
+    user_id: int,
+    exclude_session_token_id: str | None = None,
+) -> int:
+    """强制下线指定用户的所有活跃会话（可排除指定session）。
+
+    用于web登录时的单会话并发控制。
+    """
+    now = _now_utc()
+    stmt = select(UserSession).where(
+        UserSession.user_id == user_id,
+        UserSession.status == "active",
+        UserSession.is_forced_offline.is_(False),
+    )
+    if exclude_session_token_id:
+        stmt = stmt.where(UserSession.session_token_id != exclude_session_token_id)
+
+    rows = db.execute(stmt).scalars().all()
+    for row in rows:
+        row.status = "forced_offline"
+        row.is_forced_offline = True
+        row.logout_time = now
+        row.last_active_at = now
+        forget_active_session_token(row.session_token_id)
+
     if rows:
         db.flush()
     return len(rows)

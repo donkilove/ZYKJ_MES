@@ -141,3 +141,18 @@ class UserPasswordResetResult(BaseModel):
     forced_offline_session_count: int
     must_change_password: bool
     cleared_online_status: bool
+
+
+class UserImportItemResult(BaseModel):
+    row_number: int
+    username: str
+    success: bool
+    error: str | None = None
+    user_id: int | None = None
+
+
+class UserImportResult(BaseModel):
+    total_rows: int
+    success_count: int
+    failure_count: int
+    items: list[UserImportItemResult]

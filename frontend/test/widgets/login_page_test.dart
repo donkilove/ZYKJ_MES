@@ -19,7 +19,7 @@ class _FakeAuthService extends AuthService {
   Object? loginError;
   Object? listAccountsError;
   List<String> accounts = ['tester', 'operator_a'];
-  Completer<({String token, bool mustChangePassword})>? loginCompleter;
+  Completer<({String token, bool mustChangePassword, int expiresIn})>? loginCompleter;
 
   @override
   Future<List<String>> listAccounts({required String baseUrl}) async {
@@ -32,7 +32,7 @@ class _FakeAuthService extends AuthService {
   }
 
   @override
-  Future<({String token, bool mustChangePassword})> login({
+  Future<({String token, bool mustChangePassword, int expiresIn})> login({
     required String baseUrl,
     required String username,
     required String password,
@@ -47,7 +47,7 @@ class _FakeAuthService extends AuthService {
     if (loginCompleter != null) {
       return loginCompleter!.future;
     }
-    return (token: 'token-123', mustChangePassword: true);
+    return (token: 'token-123', mustChangePassword: true, expiresIn: 7200);
   }
 }
 
@@ -192,7 +192,7 @@ void main() {
 
   testWidgets('登录进行中按钮会禁用并阻止重复提交', (tester) async {
     final authService = _FakeAuthService()
-      ..loginCompleter = Completer<({String token, bool mustChangePassword})>();
+      ..loginCompleter = Completer<({String token, bool mustChangePassword, int expiresIn})>();
 
     await _pumpLoginPage(tester, authService: authService);
 
@@ -209,6 +209,7 @@ void main() {
     authService.loginCompleter!.complete((
       token: 'token-123',
       mustChangePassword: false,
+      expiresIn: 7200,
     ));
     await tester.pumpAndSettle();
   });

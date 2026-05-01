@@ -261,6 +261,7 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
     ("user.users.disable", "停用用户", AUTHZ_MODULE_USER, "user_management"),
     ("user.users.reset_password", "重置用户密码", AUTHZ_MODULE_USER, "user_management"),
     ("user.users.export", "导出用户列表", AUTHZ_MODULE_USER, "user_management"),
+    ("user.users.import", "批量导入用户", AUTHZ_MODULE_USER, "user_management"),
     ("user.roles.list", "查看角色列表", AUTHZ_MODULE_USER, "user_management"),
     ("user.roles.detail", "查看角色详情", AUTHZ_MODULE_USER, "user_management"),
     ("user.roles.create", "新建角色", AUTHZ_MODULE_USER, "role_management"),

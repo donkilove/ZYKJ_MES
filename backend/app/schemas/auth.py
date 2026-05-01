@@ -81,3 +81,13 @@ class RegistrationActionResult(BaseModel):
 
 class RejectRegistrationRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
+
+
+class RenewTokenRequest(BaseModel):
+    password: str = Field(min_length=6, max_length=128)
+
+
+class RenewTokenResult(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int

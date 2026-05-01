@@ -669,3 +669,56 @@ class ForceOfflineResult {
     return ForceOfflineResult(affected: (json['affected'] as int?) ?? 0);
   }
 }
+
+class UserImportItemResult {
+  UserImportItemResult({
+    required this.rowNumber,
+    required this.username,
+    required this.success,
+    this.error,
+    this.userId,
+  });
+
+  final int rowNumber;
+  final String username;
+  final bool success;
+  final String? error;
+  final int? userId;
+
+  factory UserImportItemResult.fromJson(Map<String, dynamic> json) {
+    return UserImportItemResult(
+      rowNumber: (json['row_number'] as int?) ?? 0,
+      username: (json['username'] as String?) ?? '',
+      success: (json['success'] as bool?) ?? false,
+      error: json['error'] as String?,
+      userId: json['user_id'] as int?,
+    );
+  }
+}
+
+class UserImportResult {
+  UserImportResult({
+    required this.totalRows,
+    required this.successCount,
+    required this.failureCount,
+    required this.items,
+  });
+
+  final int totalRows;
+  final int successCount;
+  final int failureCount;
+  final List<UserImportItemResult> items;
+
+  factory UserImportResult.fromJson(Map<String, dynamic> json) {
+    return UserImportResult(
+      totalRows: (json['total_rows'] as int?) ?? 0,
+      successCount: (json['success_count'] as int?) ?? 0,
+      failureCount: (json['failure_count'] as int?) ?? 0,
+      items: (json['items'] as List<dynamic>? ?? const [])
+          .map(
+            (e) => UserImportItemResult.fromJson(e as Map<String, dynamic>),
+          )
+          .toList(),
+    );
+  }
+}

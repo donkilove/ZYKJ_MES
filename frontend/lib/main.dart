@@ -8,6 +8,7 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/config/runtime_endpoints.dart';
 import 'package:mes_client/core/services/effective_clock.dart';
 import 'package:mes_client/core/ui/foundation/mes_theme.dart';
+import 'package:mes_client/features/auth/presentation/token_renewal_dialog.dart';
 import 'package:mes_client/features/auth/services/auth_service.dart';
 import 'package:mes_client/features/misc/presentation/force_change_password_page.dart';
 import 'package:mes_client/features/misc/presentation/login_page.dart';
@@ -136,6 +137,7 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
   AppSession? _session;
   String? _loginNotice;
   String? _lastTimeSyncNotice;
+  Timer? _tokenMonitorTimer;
 
   @override
   void initState() {
@@ -146,6 +148,51 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
     );
   }
 
+  void _startTokenMonitor() {
+    _tokenMonitorTimer?.cancel();
+    _tokenMonitorTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      _checkTokenRenewal();
+    });
+  }
+
+  void _stopTokenMonitor() {
+    _tokenMonitorTimer?.cancel();
+    _tokenMonitorTimer = null;
+  }
+
+  Future<void> _checkTokenRenewal() async {
+    final session = _session;
+    if (session == null) return;
+    if (session.loginType == 'mobile_scan') return;
+    if (!session.isTokenNearExpiry || !session.canRenewToken) return;
+
+    _stopTokenMonitor();
+
+    if (!mounted) return;
+    final result = await showTokenRenewalDialog(
+      context: context,
+      baseUrl: session.baseUrl,
+      accessToken: session.accessToken,
+      authService: _authService,
+    );
+
+    if (!mounted) return;
+
+    if (result != null) {
+      setState(() {
+        _session = AppSession(
+          baseUrl: session.baseUrl,
+          accessToken: result.token,
+          mustChangePassword: session.mustChangePassword,
+          expiresIn: result.expiresIn,
+        );
+      });
+      _startTokenMonitor();
+    } else {
+      _handleLogout();
+    }
+  }
+
   void _handleLoginSuccess(AppSession session) {
     if (!mounted) {
       return;
@@ -154,6 +201,7 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
       _session = session;
       _loginNotice = null;
     });
+    _startTokenMonitor();
     unawaited(
       widget.timeSyncController.checkAtStartup(
         baseUrl: session.baseUrl,
@@ -172,7 +220,8 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
     });
   }
 
-  Future<void> _handleLogout() async {
+  Future<void> _handleLogout({String? reason}) async {
+    _stopTokenMonitor();
     final session = _session;
     if (session != null) {
       try {
@@ -189,11 +238,15 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
     }
     setState(() {
       _session = null;
+      if (reason != null) {
+        _loginNotice = reason;
+      }
     });
   }
 
   @override
   void dispose() {
+    _stopTokenMonitor();
     widget.timeSyncController.removeListener(_handleTimeSyncChanged);
     super.dispose();
   }

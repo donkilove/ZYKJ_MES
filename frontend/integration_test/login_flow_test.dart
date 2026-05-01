@@ -148,7 +148,7 @@ void main() {
         return Scaffold(
           body: UserManagementPage(
             session: session,
-            onLogout: () {},
+            onLogout: ({String? reason}) {},
             canCreateUser: true,
             canEditUser: true,
             canToggleUser: true,
@@ -232,7 +232,7 @@ void main() {
             return Scaffold(
               body: UserManagementPage(
                 session: session,
-                onLogout: () {
+                onLogout: ({String? reason}) {
                   setState(() {
                     loggedOut = true;
                   });
@@ -356,7 +356,7 @@ void main() {
         return Scaffold(
           body: ProductPage(
             session: session,
-            onLogout: () {},
+            onLogout: ({String? reason}) {},
             visibleTabCodes: const [
               productVersionManagementTabCode,
               productParameterQueryTabCode,
@@ -371,7 +371,7 @@ void main() {
               if (tabCode == productParameterQueryTabCode) {
                 return ProductParameterQueryPage(
                   session: session,
-                  onLogout: () {},
+                  onLogout: ({String? reason}) {},
                   tabCode: productParameterQueryTabCode,
                   jumpCommand: child is ProductParameterQueryPage
                       ? child.jumpCommand
@@ -433,7 +433,7 @@ void main() {
         return Scaffold(
           body: UserPage(
             session: session,
-            onLogout: () {},
+            onLogout: ({String? reason}) {},
             visibleTabCodes: const [
               'role_management',
               'audit_log',
@@ -534,7 +534,7 @@ void main() {
         return Scaffold(
           body: CraftPage(
             session: session,
-            onLogout: () {},
+            onLogout: ({String? reason}) {},
             visibleTabCodes: const [
               processManagementTabCode,
               productionProcessConfigTabCode,
@@ -643,7 +643,7 @@ void main() {
         return Scaffold(
           body: ProductionPage(
             session: session,
-            onLogout: () {},
+            onLogout: ({String? reason}) {},
             visibleTabCodes: const [
               productionOrderManagementTabCode,
               productionOrderQueryTabCode,
@@ -731,7 +731,7 @@ void main() {
       homeBuilder: (session) {
         return QualityPage(
           session: session,
-          onLogout: () {},
+          onLogout: ({String? reason}) {},
           visibleTabCodes: const [
             firstArticleManagementTabCode,
             qualitySupplierManagementTabCode,
@@ -800,7 +800,7 @@ void main() {
       homeBuilder: (session) {
         return EquipmentPage(
           session: session,
-          onLogout: () {},
+          onLogout: ({String? reason}) {},
           visibleTabCodes: const [
             equipmentLedgerTabCode,
             maintenanceExecutionTabCode,
@@ -934,7 +934,7 @@ void main() {
         return Scaffold(
           body: UserManagementPage(
             session: session,
-            onLogout: () {},
+            onLogout: ({String? reason}) {},
             canCreateUser: true,
             canEditUser: true,
             canToggleUser: true,
@@ -1964,7 +1964,7 @@ class _FakeAuthService extends AuthService {
   }
 
   @override
-  Future<({String token, bool mustChangePassword})> login({
+  Future<({String token, bool mustChangePassword, int expiresIn})> login({
     required String baseUrl,
     required String username,
     required String password,
@@ -1974,7 +1974,7 @@ class _FakeAuthService extends AuthService {
     if (loginError != null) {
       throw loginError!;
     }
-    return (token: 'token-123', mustChangePassword: mustChangePassword);
+    return (token: 'token-123', mustChangePassword: mustChangePassword, expiresIn: 7200);
   }
 
   @override
@@ -2369,7 +2369,7 @@ class _MessageCenterIntegrationHostState
     if (_pageCode == 'user' && _tabCode == 'account_settings') {
       return AccountSettingsPage(
         session: widget.session,
-        onLogout: () {},
+        onLogout: ({String? reason}) {},
         canChangePassword: true,
         canViewSession: true,
         routePayloadJson: _routePayloadJson,
@@ -2378,7 +2378,7 @@ class _MessageCenterIntegrationHostState
     }
     return MessageCenterPage(
       session: widget.session,
-      onLogout: () {},
+      onLogout: ({String? reason}) {},
       canViewDetail: true,
       canUseJump: true,
       service: widget.messageService,

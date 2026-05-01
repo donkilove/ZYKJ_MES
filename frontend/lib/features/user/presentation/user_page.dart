@@ -96,6 +96,9 @@ class _UserPageState extends State<UserPage> {
   bool get _canExportUsers =>
       _hasPermission(UserFeaturePermissionCodes.userManagementExport);
 
+  bool get _canImportUsers =>
+      _hasPermission(UserFeaturePermissionCodes.userManagementImport);
+
   bool get _canApproveRegistration =>
       _hasPermission(UserFeaturePermissionCodes.registrationApprovalApprove);
 
@@ -175,6 +178,7 @@ class _UserPageState extends State<UserPage> {
                   canDeleteUser: _canDeleteUser,
                   canRestoreUser: _canRestoreUser,
                   canExport: _canExportUsers,
+                  canImport: _canImportUsers,
                   onNavigateToRoleManagement: roleManagementIndex >= 0
                       ? () {
                           _tabController?.animateTo(roleManagementIndex);

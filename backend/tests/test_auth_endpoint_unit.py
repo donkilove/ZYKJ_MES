@@ -59,7 +59,7 @@ class AuthEndpointUnitTest(unittest.TestCase):
 
         create_token.assert_called_once_with(
             subject="21",
-            extra_claims={"sid": "sid-scan-mobile"},
+            extra_claims={"sid": "sid-scan-mobile", "login_type": "mobile_scan"},
             expires_minutes=10080,
         )
         self.assertEqual(result.data.access_token, "token-mobile")
