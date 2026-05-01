@@ -200,29 +200,20 @@ class _HomePageState extends State<HomePage> {
             refreshStatusText: widget.refreshStatusText,
           ),
           const SizedBox(height: 12),
-          SizedBox(
-            height: 420,
-            child: HomeDashboardTodoCard(
-              todoSummary: data.todoSummary,
-              todoItems: data.todoItems,
-              onNavigateToPage: widget.onNavigateToPage,
-            ),
+          HomeDashboardTodoCard(
+            todoSummary: data.todoSummary,
+            todoItems: data.todoItems,
+            onNavigateToPage: widget.onNavigateToPage,
           ),
           const SizedBox(height: 12),
-          SizedBox(
-            height: 260,
-            child: HomeDashboardRiskCard(
-              riskItems: data.riskItems,
-              onNavigateToPage: widget.onNavigateToPage,
-            ),
+          HomeDashboardRiskCard(
+            riskItems: data.riskItems,
+            onNavigateToPage: widget.onNavigateToPage,
           ),
           const SizedBox(height: 12),
-          SizedBox(
-            height: 260,
-            child: HomeDashboardKpiCard(
-              kpiItems: data.kpiItems,
-              onNavigateToPage: widget.onNavigateToPage,
-            ),
+          HomeDashboardKpiCard(
+            kpiItems: data.kpiItems,
+            onNavigateToPage: widget.onNavigateToPage,
           ),
           const SizedBox(height: 12),
         ],

@@ -4,6 +4,7 @@ import 'package:mes_client/core/models/current_user.dart';
 import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
 import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
+import 'package:mes_client/features/shell/models/home_dashboard_models.dart';
 import 'package:mes_client/features/shell/presentation/home_page.dart';
 import 'package:mes_client/features/shell/presentation/widgets/home_dashboard_header.dart';
 import 'package:mes_client/features/shell/presentation/widgets/home_dashboard_kpi_card.dart';
@@ -43,8 +44,10 @@ void main() {
     required Future<void> Function() onRefresh,
     bool refreshing = false,
     String? refreshStatusText,
+    HomeDashboardData? dashboardData,
+    Size viewportSize = const Size(1440, 1200),
   }) async {
-    tester.view.physicalSize = const Size(1440, 1200);
+    tester.view.physicalSize = viewportSize;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
       tester.view.resetPhysicalSize();
@@ -61,6 +64,7 @@ void main() {
             onRefresh: onRefresh,
             refreshing: refreshing,
             refreshStatusText: refreshStatusText,
+            dashboardData: dashboardData,
           ),
         ),
       ),
@@ -227,5 +231,66 @@ void main() {
 
     expect(refreshCalled, isFalse);
     expect(find.text('当前没有待处理事项'), findsOneWidget);
+  });
+
+  testWidgets('桌面首页默认高度下关键指标卡片不出现 overflow 异常', (tester) async {
+    await pumpHomePage(
+      tester,
+      currentUser: buildUser(),
+      shortcuts: const [],
+      onNavigateToPage: (_, {tabCode, routePayloadJson}) {},
+      onRefresh: () async {},
+      viewportSize: const Size(1216, 780),
+      dashboardData: const HomeDashboardData(
+        generatedAt: null,
+        noticeCount: 0,
+        todoSummary: HomeDashboardTodoSummary(
+          totalCount: 0,
+          pendingApprovalCount: 0,
+          highPriorityCount: 0,
+          exceptionCount: 0,
+          overdueCount: 0,
+        ),
+        todoItems: [],
+        riskItems: [
+          HomeDashboardMetricItem(
+            code: 'production_exception',
+            label: '生产异常',
+            value: '0',
+          ),
+          HomeDashboardMetricItem(
+            code: 'quality_warning',
+            label: '质量预警',
+            value: '0',
+          ),
+        ],
+        kpiItems: [
+          HomeDashboardMetricItem(
+            code: 'wip_orders',
+            label: '在制订单',
+            value: '0',
+          ),
+          HomeDashboardMetricItem(
+            code: 'today_output',
+            label: '今日产量',
+            value: '0',
+          ),
+          HomeDashboardMetricItem(
+            code: 'first_pass_rate',
+            label: '首件通过率',
+            value: '0%',
+          ),
+          HomeDashboardMetricItem(
+            code: 'scrap_count',
+            label: '报废数',
+            value: '0',
+          ),
+        ],
+        degradedBlocks: [],
+      ),
+    );
+
+    expect(find.textContaining('RenderFlex overflowed'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }
