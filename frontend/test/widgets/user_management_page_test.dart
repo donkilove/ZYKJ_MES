@@ -1108,7 +1108,7 @@ void main() {
     expect(find.text('导出任务'), findsOneWidget);
   });
 
-  testWidgets('桌面工具栏搜索框会吃满剩余宽度且与按钮保持同一行', (tester) async {
+  testWidgets('桌面筛选卡压缩为两行且搜索框更短', (tester) async {
     final userService = _FakeUserService(initialUsers: const []);
     final craftService = _FakeCraftService();
     await _pumpPage(
@@ -1120,8 +1120,12 @@ void main() {
     );
 
     final searchRect = _toolbarRect(tester, 'userToolbarKeywordField');
-    final roleRect = _toolbarRect(tester, 'userToolbarRoleFilter');
     final statusRect = _toolbarRect(tester, 'userToolbarStatusFilter');
+    final roleRect = _toolbarRect(tester, 'userToolbarRoleFilter');
+    final deletedScopeRect = _toolbarRect(
+      tester,
+      'userToolbarDeletedScopeFilter',
+    );
     final queryButtonRect = tester.getRect(
       find.widgetWithText(FilledButton, '查询用户'),
     );
@@ -1134,38 +1138,34 @@ void main() {
     final exportButtonRect = tester.getRect(
       find.widgetWithText(OutlinedButton, '导出当前筛选结果'),
     );
+    final exportTaskButtonRect = tester.getRect(
+      find.widgetWithText(OutlinedButton, '导出任务'),
+    );
 
-    expect(searchRect.width, greaterThan(roleRect.width));
-    expect(searchRect.width, greaterThan(statusRect.width));
-    expect(searchRect.left, lessThan(statusRect.left));
+    expect(searchRect.width, lessThan(300));
+    expect(searchRect.center.dy, closeTo(queryButtonRect.center.dy, 1));
+    expect(createButtonRect.center.dy, closeTo(queryButtonRect.center.dy, 1));
+    expect(
+      roleManageButtonRect.center.dy,
+      closeTo(queryButtonRect.center.dy, 1),
+    );
+    expect(exportButtonRect.center.dy, closeTo(queryButtonRect.center.dy, 1));
+    expect(
+      exportTaskButtonRect.center.dy,
+      closeTo(queryButtonRect.center.dy, 1),
+    );
+
+    expect(statusRect.center.dy, greaterThan(searchRect.center.dy));
+    expect(roleRect.center.dy, closeTo(statusRect.center.dy, 1));
+    expect(deletedScopeRect.center.dy, closeTo(statusRect.center.dy, 1));
     expect(statusRect.left, lessThan(roleRect.left));
-
-    expect(
-      (searchRect.center.dy - queryButtonRect.center.dy).abs(),
-      lessThan(1),
-    );
-    expect((roleRect.center.dy - queryButtonRect.center.dy).abs(), lessThan(1));
-    expect(
-      (statusRect.center.dy - queryButtonRect.center.dy).abs(),
-      lessThan(1),
-    );
-    expect(
-      (createButtonRect.center.dy - queryButtonRect.center.dy).abs(),
-      lessThan(1),
-    );
-    expect(
-      (roleManageButtonRect.center.dy - queryButtonRect.center.dy).abs(),
-      lessThan(1),
-    );
-    expect(
-      (exportButtonRect.center.dy - queryButtonRect.center.dy).abs(),
-      lessThan(1),
-    );
+    expect(roleRect.left, lessThan(deletedScopeRect.left));
+    expect(searchRect.top, lessThan(statusRect.top));
 
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('窄宽度工具栏仍按搜索账号状态角色范围顺序排列', (tester) async {
+  testWidgets('窄宽度工具栏仍按顺序折返', (tester) async {
     final userService = _FakeUserService(initialUsers: const []);
     final craftService = _FakeCraftService();
     await _pumpPage(
@@ -1185,7 +1185,7 @@ void main() {
 
     expect((searchRect.center.dy - statusRect.center.dy).abs(), lessThan(1));
     expect((statusRect.center.dy - roleRect.center.dy).abs(), lessThan(1));
-    expect(searchRect.left, lessThan(statusRect.left));
+    expect(searchRect.top, closeTo(statusRect.top, 1));
     expect(statusRect.left, lessThan(roleRect.left));
     expect(deletedScopeRect.top, greaterThanOrEqualTo(roleRect.top));
   });

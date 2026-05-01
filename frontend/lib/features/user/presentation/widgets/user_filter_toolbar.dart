@@ -36,6 +36,8 @@ class UserFilterToolbar extends StatelessWidget {
       decoration: const InputDecoration(
         labelText: '按账号搜索',
         border: OutlineInputBorder(),
+        isDense: true,
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       ),
       onSubmitted: (_) => onSearch(),
     );
@@ -48,7 +50,8 @@ class UserFilterToolbar extends StatelessWidget {
       decoration: const InputDecoration(
         labelText: '用户角色',
         border: OutlineInputBorder(),
-        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        isDense: true,
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       ),
       isExpanded: true,
       items: [
@@ -71,7 +74,8 @@ class UserFilterToolbar extends StatelessWidget {
       decoration: const InputDecoration(
         labelText: '账号状态',
         border: OutlineInputBorder(),
-        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        isDense: true,
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       ),
       isExpanded: true,
       items: const [
@@ -90,7 +94,8 @@ class UserFilterToolbar extends StatelessWidget {
       decoration: const InputDecoration(
         labelText: '数据范围',
         border: OutlineInputBorder(),
-        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        isDense: true,
+        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       ),
       isExpanded: true,
       items: const [
@@ -107,70 +112,81 @@ class UserFilterToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const spacing = 12.0;
+    const searchWidth = 240.0;
+    const statusWidth = 136.0;
     const roleWidth = 150.0;
-    const statusWidth = 130.0;
-    const deletedScopeWidth = 150.0;
-    const desktopSearchMinWidth = 320.0;
+    const deletedScopeWidth = 136.0;
+    const twoRowLayoutMinWidth = 1100.0;
+
+    final searchField = SizedBox(
+      width: searchWidth,
+      child: _buildKeywordField(),
+    );
+    final statusFilter = SizedBox(
+      width: statusWidth,
+      child: _buildStatusFilter(),
+    );
+    final roleFilter = SizedBox(width: roleWidth, child: _buildRoleFilter());
+    final deletedScopeFilter = SizedBox(
+      width: deletedScopeWidth,
+      child: _buildDeletedScopeFilter(),
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final roleFilter = SizedBox(
-          width: roleWidth,
-          child: _buildRoleFilter(),
-        );
-        final statusFilter = SizedBox(
-          width: statusWidth,
-          child: _buildStatusFilter(),
-        );
-        final deletedScopeFilter = SizedBox(
-          width: deletedScopeWidth,
-          child: _buildDeletedScopeFilter(),
-        );
-        final desktopToolbarMinWidth =
-            roleWidth +
-            statusWidth +
-            deletedScopeWidth +
-            desktopSearchMinWidth +
-            (actions.length * 120) +
-            ((actions.length + 4) * spacing);
-
-        if (constraints.maxWidth >= desktopToolbarMinWidth) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
+        if (constraints.maxWidth < twoRowLayoutMinWidth) {
+          return Wrap(
+            spacing: spacing,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Expanded(child: _buildKeywordField()),
-              const SizedBox(width: spacing),
+              searchField,
               statusFilter,
-              const SizedBox(width: spacing),
               roleFilter,
-              const SizedBox(width: spacing),
               deletedScopeFilter,
-              const SizedBox(width: spacing),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Wrap(
-                  spacing: spacing,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  alignment: WrapAlignment.end,
-                  children: actions,
-                ),
-              ),
+              ...actions,
             ],
           );
         }
 
-        return Wrap(
+        final topRowButtons = Wrap(
+          spacing: spacing,
+          runSpacing: 8,
+          alignment: WrapAlignment.end,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: actions,
+        );
+        final topRow = Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            searchField,
+            const SizedBox(width: spacing),
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: topRowButtons,
+              ),
+            ),
+          ],
+        );
+        final bottomRow = Wrap(
           spacing: spacing,
           runSpacing: 8,
           crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            SizedBox(width: 280, child: _buildKeywordField()),
-            statusFilter,
-            roleFilter,
-            deletedScopeFilter,
-            ...actions,
-          ],
+          children: [statusFilter, roleFilter, deletedScopeFilter],
+        );
+
+        return ConstrainedBox(
+          constraints: BoxConstraints(minWidth: constraints.maxWidth),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              topRow,
+              const SizedBox(height: spacing),
+              bottomRow,
+            ],
+          ),
         );
       },
     );
