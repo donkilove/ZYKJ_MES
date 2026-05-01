@@ -204,7 +204,7 @@ Future<void> _pumpApprovalPage(
 }
 
 void main() {
-  testWidgets('注册审批页工具栏已精简并接入公共表格', (tester) async {
+  testWidgets('注册审批页将申请状态筛选收入口右上角并移除筛选卡片', (tester) async {
     final userService = _FakeApprovalUserService();
     final craftService = _FakeApprovalCraftService();
     await _pumpApprovalPage(
@@ -216,11 +216,25 @@ void main() {
     expect(find.text('按用户名搜索'), findsNothing);
     expect(find.text('查询'), findsNothing);
     expect(find.textContaining('当前列表总数'), findsNothing);
-    expect(find.text('申请状态'), findsWidgets);
+    expect(
+      find.byKey(const ValueKey('registration-approval-filter-section')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('registration-approval-status-filter')),
+      findsOneWidget,
+    );
+    final filterLeft = tester.getTopLeft(
+      find.byKey(const ValueKey('registration-approval-status-filter')),
+    );
+    final refreshLeft = tester.getTopLeft(find.byTooltip('刷新'));
+    expect(filterLeft.dx, lessThan(refreshLeft.dx));
     expect(find.byType(CrudListTableSection), findsOneWidget);
     expect(userService.lastKeyword, isNull);
 
-    await tester.tap(find.byType(DropdownButtonFormField<String?>));
+    await tester.tap(
+      find.byKey(const ValueKey('registration-approval-status-filter')),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('已通过').last);
     await tester.pumpAndSettle();
@@ -286,7 +300,7 @@ void main() {
 
     expect(find.byType(MesCrudPageScaffold), findsOneWidget);
     expect(
-      find.byKey(const ValueKey('registration-approval-filter-section')),
+      find.byKey(const ValueKey('registration-approval-status-filter')),
       findsOneWidget,
     );
     expect(

@@ -13,7 +13,6 @@ import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/features/user/presentation/widgets/registration_approve_dialog.dart';
 import 'package:mes_client/features/user/presentation/widgets/registration_reject_dialog.dart';
 import 'package:mes_client/features/user/presentation/widgets/registration_approval_feedback_banner.dart';
-import 'package:mes_client/features/user/presentation/widgets/registration_approval_filter_section.dart';
 import 'package:mes_client/features/user/presentation/widgets/registration_approval_page_header.dart';
 import 'package:mes_client/features/user/presentation/widgets/registration_approval_table_section.dart';
 
@@ -502,11 +501,9 @@ class _RegistrationApprovalPageState extends State<RegistrationApprovalPage> {
     return MesCrudPageScaffold(
       header: RegistrationApprovalPageHeader(
         loading: _loading,
-        onRefresh: () => _loadInitialData(page: _requestPage),
-      ),
-      filters: RegistrationApprovalFilterSection(
         statusFilter: _statusFilter,
-        onChanged: _applyStatusFilterAndReload,
+        onStatusChanged: _applyStatusFilterAndReload,
+        onRefresh: () => _loadInitialData(page: _requestPage),
       ),
       banner: _message.isEmpty
           ? null
