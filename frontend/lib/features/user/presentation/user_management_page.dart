@@ -957,7 +957,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
     return buttons;
   }
 
-  List<Widget> _buildBottomToolbarButtons() {
+  List<Widget> _buildHeaderActionButtons() {
     final buttons = <Widget>[
       FilledButton.icon(
         onPressed: (_queryInFlight || !widget.canCreateUser)
@@ -991,16 +991,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
       );
     }
 
-    if (widget.onNavigateToRoleManagement != null) {
-      buttons.add(
-        OutlinedButton.icon(
-          onPressed: widget.onNavigateToRoleManagement,
-          icon: const Icon(Icons.admin_panel_settings),
-          label: const Text('角色管理'),
-        ),
-      );
-    }
-
     return buttons;
   }
 
@@ -1012,6 +1002,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
       header: UserManagementPageHeader(
         loading: _loading,
         onRefresh: _refreshUsersFromHeader,
+        actionsBeforeRefresh: _buildHeaderActionButtons(),
       ),
       filters: UserManagementFilterSection(
         keywordController: _keywordController,
@@ -1033,7 +1024,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
         },
         onSearch: _applyFiltersAndReload,
         topActions: _buildTopToolbarButtons(),
-        actions: _buildBottomToolbarButtons(),
+        actions: const [],
       ),
       banner: _message.isEmpty
           ? null

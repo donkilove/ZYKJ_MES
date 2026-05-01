@@ -114,16 +114,12 @@ class UserFilterToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const spacing = 12.0;
-    const searchWidth = 240.0;
     const statusWidth = 136.0;
     const roleWidth = 150.0;
     const deletedScopeWidth = 136.0;
-    const twoRowLayoutMinWidth = 1100.0;
+    const twoRowLayoutMinWidth = 1200.0;
 
-    final searchField = SizedBox(
-      width: searchWidth,
-      child: _buildKeywordField(),
-    );
+    final searchField = _buildKeywordField();
     final statusFilter = SizedBox(
       width: statusWidth,
       child: _buildStatusFilter(),
@@ -146,6 +142,7 @@ class UserFilterToolbar extends StatelessWidget {
               statusFilter,
               roleFilter,
               deletedScopeFilter,
+              ...topActions,
               ...actions,
             ],
           );
@@ -154,7 +151,7 @@ class UserFilterToolbar extends StatelessWidget {
         final topRow = Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            searchField,
+            Expanded(child: searchField),
             const SizedBox(width: spacing),
             statusFilter,
             const SizedBox(width: spacing),
@@ -163,26 +160,18 @@ class UserFilterToolbar extends StatelessWidget {
             deletedScopeFilter,
             if (topActions.isNotEmpty) ...[
               const SizedBox(width: spacing),
-              Expanded(
-                child: Wrap(
-                  spacing: spacing,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.end,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: topActions,
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var index = 0; index < topActions.length; index++) ...[
+                    if (index > 0) const SizedBox(width: spacing),
+                    topActions[index],
+                  ],
+                ],
               ),
             ],
           ],
         );
-        final bottomRow = Wrap(
-          spacing: spacing,
-          runSpacing: 8,
-          alignment: WrapAlignment.end,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: actions,
-        );
-
         return ConstrainedBox(
           constraints: BoxConstraints(minWidth: constraints.maxWidth),
           child: Column(
@@ -190,8 +179,16 @@ class UserFilterToolbar extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               topRow,
-              const SizedBox(height: spacing),
-              bottomRow,
+              if (actions.isNotEmpty) ...[
+                const SizedBox(height: spacing),
+                Wrap(
+                  spacing: spacing,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: actions,
+                ),
+              ],
             ],
           ),
         );

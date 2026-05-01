@@ -6,13 +6,19 @@ class UserManagementPageHeader extends StatelessWidget {
     super.key,
     required this.loading,
     required this.onRefresh,
+    this.actionsBeforeRefresh = const <Widget>[],
   });
 
   final bool loading;
   final VoidCallback onRefresh;
+  final List<Widget> actionsBeforeRefresh;
 
   @override
   Widget build(BuildContext context) {
-    return MesRefreshPageHeader(title: '用户管理', onRefresh: loading ? null : onRefresh);
+    return MesRefreshPageHeader(
+      title: '用户管理',
+      onRefresh: loading ? null : onRefresh,
+      actionsBeforeRefresh: actionsBeforeRefresh,
+    );
   }
 }
