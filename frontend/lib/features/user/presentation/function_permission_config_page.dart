@@ -647,94 +647,153 @@ class _FunctionPermissionConfigPageState
 
     return Card(
       margin: EdgeInsets.zero,
-      child: ListView(
-        padding: const EdgeInsets.all(12),
+      child: Column(
         children: [
-          if (_isSystemPermissionGuardRole(role.code))
-            const Padding(
-              padding: EdgeInsets.only(bottom: 8),
-              child: Text(
-                '系统管理员的功能权限配置入口与保存能力为系统保底能力，不允许关闭。',
-                style: TextStyle(fontSize: 12),
-              ),
-            ),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '能力包（${capabilityPacks.length}）',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              Switch(
-                value: draft.moduleEnabled,
-                onChanged: readonly || _saving
-                    ? null
-                    : (value) => _setRoleModuleEnabled(
-                        roleCode: role.code,
-                        draft: draft,
-                        value: value,
-                      ),
-              ),
-              Text(
-                draft.moduleEnabled ? '模块已开启' : '模块已关闭',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-          ),
-          if (readonly)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 8),
-              child: Text('当前角色为只读，权限项不可编辑。', style: TextStyle(fontSize: 12)),
-            ),
-          ...groupNames.map((groupName) {
-            final items = grouped[groupName] ?? const <CapabilityPackItem>[];
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: ExpansionTile(
-                initiallyExpanded: true,
-                shape: const Border(),
-                collapsedShape: const Border(),
-                title: Text('$groupName（${items.length}）'),
-                children: items.map((capability) {
-                  final checked = draft.capabilityCodes.contains(
-                    capability.capabilityCode,
-                  );
-                  final description = capability.description;
-                  final hasDescription =
-                      description != null && description.trim().isNotEmpty;
-                  final lockedCapability = _isLockedCapability(
-                    role.code,
-                    capability.capabilityCode,
-                  );
-                  return SwitchListTile(
-                    dense: true,
-                    title: Text(capability.capabilityName),
-                    subtitle: Text(
-                      hasDescription
-                          ? '入口：${capability.pageName}\n说明：$description'
-                          : '入口：${capability.pageName}',
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_isSystemPermissionGuardRole(role.code))
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      '系统管理员的功能权限配置入口与保存能力为系统保底能力，不允许关闭。',
+                      style: TextStyle(fontSize: 12),
                     ),
-                    value: checked,
-                    onChanged: readonly || _saving
-                        ? null
-                        : (value) => _setCapabilityChecked(
-                            roleCode: role.code,
-                            draft: draft,
-                            capabilityCode: capability.capabilityCode,
-                            value: value,
-                          ),
-                    secondary: lockedCapability
-                        ? const Icon(Icons.lock_outline, size: 18)
-                        : null,
-                  );
-                }).toList(),
-              ),
-            );
-          }),
+                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '能力包（${capabilityPacks.length}）',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    Switch(
+                      value: draft.moduleEnabled,
+                      onChanged: readonly || _saving
+                          ? null
+                          : (value) => _setRoleModuleEnabled(
+                              roleCode: role.code,
+                              draft: draft,
+                              value: value,
+                            ),
+                    ),
+                    Text(
+                      draft.moduleEnabled ? '模块已开启' : '模块已关闭',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+                if (readonly)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text(
+                      '当前角色为只读，权限项不可编辑。',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(12),
+              children: groupNames.map((groupName) {
+                final items = grouped[groupName] ?? const <CapabilityPackItem>[];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ExpansionTile(
+                    initiallyExpanded: true,
+                    shape: const Border(),
+                    collapsedShape: const Border(),
+                    title: Text('$groupName（${items.length}）'),
+                    children: items.map((capability) {
+                      final checked = draft.capabilityCodes.contains(
+                        capability.capabilityCode,
+                      );
+                      final description = capability.description;
+                      final hasDescription =
+                          description != null && description.trim().isNotEmpty;
+                      final lockedCapability = _isLockedCapability(
+                        role.code,
+                        capability.capabilityCode,
+                      );
+                      return SwitchListTile(
+                        dense: true,
+                        title: Text(capability.capabilityName),
+                        subtitle: Text(
+                          hasDescription
+                              ? '入口：${capability.pageName}\n说明：$description'
+                              : '入口：${capability.pageName}',
+                        ),
+                        value: checked,
+                        onChanged: readonly || _saving
+                            ? null
+                            : (value) => _setCapabilityChecked(
+                                roleCode: role.code,
+                                draft: draft,
+                                capabilityCode: capability.capabilityCode,
+                                value: value,
+                              ),
+                        secondary: lockedCapability
+                            ? const Icon(Icons.lock_outline, size: 18)
+                            : null,
+                      );
+                    }).toList(),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFilterCard() {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                initialValue: _selectedModuleCode,
+                decoration: const InputDecoration(
+                  labelText: '模块',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: _moduleCodes
+                    .map(
+                      (code) => DropdownMenuItem<String>(
+                        value: code,
+                        child: Text(_moduleLabel(code)),
+                      ),
+                    )
+                    .toList(),
+                onChanged: _saving ? null : _switchModule,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Semantics(
+              container: true,
+              label: '功能权限配置保存按钮',
+              button: true,
+              child: FilledButton.icon(
+                onPressed: _saving || !_hasDirty ? null : _save,
+                icon: const Icon(Icons.save),
+                label: Text(_saving ? '保存中...' : '保存'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -788,49 +847,7 @@ class _FunctionPermissionConfigPageState
               onRefresh: _refreshCurrentModule,
             ),
             const SizedBox(height: 12),
-            Card(
-              margin: EdgeInsets.zero,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    SizedBox(
-                      width: 260,
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _selectedModuleCode,
-                        decoration: const InputDecoration(
-                          labelText: '模块',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                        items: _moduleCodes
-                            .map(
-                              (code) => DropdownMenuItem<String>(
-                                value: code,
-                                child: Text(_moduleLabel(code)),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: _saving ? null : _switchModule,
-                      ),
-                    ),
-                    Semantics(
-                      container: true,
-                      label: '功能权限配置保存按钮',
-                      button: true,
-                      child: FilledButton.icon(
-                        onPressed: _saving || !_hasDirty ? null : _save,
-                        icon: const Icon(Icons.save),
-                        label: Text(_saving ? '保存中...' : '保存'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+            _buildFilterCard(),
             if (_message.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
@@ -864,7 +881,10 @@ class _FunctionPermissionConfigPageState
                   }
                   return Row(
                     children: [
-                      SizedBox(width: 340, child: _buildRoleSelectorCard(role)),
+                      SizedBox(
+                        width: 340,
+                        child: _buildRoleSelectorCard(role),
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: _buildCapabilityCard(
