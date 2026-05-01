@@ -28,4 +28,35 @@ void main() {
 
     expect(refreshCalls, 1);
   });
+
+  testWidgets('公共页头支持副标题与刷新前操作区', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MesRefreshPageHeader(
+            title: '测试页',
+            subtitle: '用于校验公共页头副标题',
+            onRefresh: () {},
+            actionsBeforeRefresh: const [
+              SizedBox(
+                width: 80,
+                child: TextField(
+                  decoration: InputDecoration(
+                    labelText: '筛选项',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('测试页'), findsOneWidget);
+    expect(find.text('用于校验公共页头副标题'), findsOneWidget);
+    expect(find.widgetWithText(TextField, '筛选项'), findsOneWidget);
+    expect(find.byTooltip('刷新'), findsOneWidget);
+  });
 }

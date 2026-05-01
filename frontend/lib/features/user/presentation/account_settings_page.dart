@@ -928,7 +928,10 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const AccountSettingsPageHeader(),
+                  AccountSettingsPageHeader(
+                    loading: _loading,
+                    onRefresh: _loadData,
+                  ),
                   const SizedBox(height: 12),
                   _buildOverviewCard(),
                   const SizedBox(height: 16),

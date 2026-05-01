@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/ui/foundation/mes_theme.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/product_management_page.dart';
@@ -234,6 +235,8 @@ void main() {
     );
 
     expect(find.text('产品管理'), findsOneWidget);
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.byTooltip('刷新'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('product-management-filter-section')),
       findsOneWidget,

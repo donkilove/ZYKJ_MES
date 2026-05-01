@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 
 class ProductVersionPageHeader extends StatelessWidget {
   const ProductVersionPageHeader({
@@ -15,16 +15,10 @@ class ProductVersionPageHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return KeyedSubtree(
       key: const ValueKey('product-version-page-header'),
-      child: MesPageHeader(
+      child: MesRefreshPageHeader(
         title: '版本管理',
         subtitle: '左侧选择产品，右侧查看版本工作区与参数动作。',
-        actions: [
-          FilledButton.tonalIcon(
-            onPressed: loading ? null : onRefresh,
-            icon: const Icon(Icons.refresh),
-            label: const Text('刷新页面'),
-          ),
-        ],
+        onRefresh: loading ? null : onRefresh,
       ),
     );
   }

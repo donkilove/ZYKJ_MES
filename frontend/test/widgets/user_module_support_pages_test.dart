@@ -10,7 +10,9 @@ import 'package:mes_client/features/user/presentation/login_session_page.dart';
 import 'package:mes_client/features/user/presentation/role_management_page.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/auth/services/authz_service.dart';
+import 'package:mes_client/features/auth/services/auth_service.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 
 Finder _findSemanticsLabel(String label) {
@@ -319,6 +321,57 @@ class _FakeSupportAuthzService extends AuthzService {
   }
 }
 
+class _FakeSupportAccountUserService extends UserService {
+  _FakeSupportAccountUserService() : super(_session);
+
+  int getMyProfileCalls = 0;
+  int getMySessionCalls = 0;
+
+  @override
+  Future<ProfileResult> getMyProfile() async {
+    getMyProfileCalls += 1;
+    return ProfileResult(
+      id: 1,
+      username: 'tester',
+      fullName: '测试用户',
+      roleCode: 'quality_admin',
+      roleName: '品质管理员',
+      stageId: null,
+      stageName: null,
+      isActive: true,
+      createdAt: DateTime.parse('2026-03-01T08:00:00Z'),
+      lastLoginAt: DateTime.parse('2026-03-20T08:00:00Z'),
+      lastLoginIp: '127.0.0.1',
+      passwordChangedAt: DateTime.parse('2026-03-18T08:00:00Z'),
+    );
+  }
+
+  @override
+  Future<CurrentSessionResult> getMySession() async {
+    getMySessionCalls += 1;
+    return CurrentSessionResult(
+      sessionTokenId: 'session-1',
+      loginTime: DateTime.parse('2026-03-20T08:00:00Z'),
+      lastActiveAt: DateTime.parse('2026-03-20T08:10:00Z'),
+      expiresAt: DateTime.parse('2026-03-20T09:00:00Z'),
+      remainingSeconds: 1200,
+      status: 'active',
+    );
+  }
+}
+
+class _FakeSupportAuthService extends AuthService {
+  int logoutCalls = 0;
+
+  @override
+  Future<void> logout({
+    required String baseUrl,
+    required String accessToken,
+  }) async {
+    logoutCalls += 1;
+  }
+}
+
 final RoleItem _maintenanceRole = RoleItem(
   id: 1,
   code: 'maintenance_staff',
@@ -360,6 +413,8 @@ Future<void> _pumpPage(WidgetTester tester, Widget child) async {
 void main() {
   final userService = _FakeSupportUserService();
   final authzService = _FakeSupportAuthzService();
+  final accountUserService = _FakeSupportAccountUserService();
+  final authService = _FakeSupportAuthService();
 
   testWidgets('role management page 接入统一页头和列表区锚点', (tester) async {
     await _pumpPage(
@@ -379,6 +434,8 @@ void main() {
       find.byKey(const ValueKey('role-management-page-header')),
       findsOneWidget,
     );
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.byTooltip('刷新'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('role-management-table-section')),
       findsOneWidget,
@@ -396,6 +453,8 @@ void main() {
     );
 
     expect(find.byKey(const ValueKey('audit-log-page-header')), findsOneWidget);
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.byTooltip('刷新'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('audit-log-filter-section')),
       findsOneWidget,
@@ -556,6 +615,7 @@ void main() {
   testWidgets('function permission config refresh keeps unsaved protection', (
     tester,
   ) async {
+    authzService.loadedCatalogModules.clear();
     await _pumpPage(
       tester,
       FunctionPermissionConfigPage(
@@ -574,7 +634,14 @@ void main() {
       find.byKey(const ValueKey('function-permission-config-page-header')),
       findsOneWidget,
     );
-    expect(find.text('刷新页面'), findsNothing);
+    expect(find.byTooltip('刷新'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('刷新'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('切换模块'), findsOneWidget);
+    expect(find.text('当前有未保存改动，是否放弃并切换？'), findsOneWidget);
+    expect(authzService.loadedCatalogModules, ['production', 'user']);
   });
 
   testWidgets('function permission config save success triggers callback', (
@@ -945,7 +1012,33 @@ void main() {
     expect(find.byType(CrudListTableSection), findsOneWidget);
     expect(find.text('登录日志'), findsNothing);
     expect(find.text('全选当前页'), findsOneWidget);
+    expect(find.byTooltip('刷新'), findsOneWidget);
     expect(userService.listOnlineSessionsCalls, 1);
+    expect(userService.lastOnlineSessionStatusFilter, 'active');
+  });
+
+  testWidgets('login session page refresh button reuses current page query', (
+    tester,
+  ) async {
+    userService.listOnlineSessionsCalls = 0;
+
+    await _pumpPage(
+      tester,
+      LoginSessionPage(
+        session: _session,
+        onLogout: () {},
+        canViewOnlineSessions: true,
+        canForceOffline: true,
+        userService: userService,
+      ),
+    );
+
+    expect(userService.listOnlineSessionsCalls, 1);
+
+    await tester.tap(find.byTooltip('刷新'));
+    await tester.pumpAndSettle();
+
+    expect(userService.listOnlineSessionsCalls, 2);
     expect(userService.lastOnlineSessionStatusFilter, 'active');
   });
 
@@ -1083,6 +1176,8 @@ void main() {
         onLogout: () {},
         canChangePassword: true,
         canViewSession: true,
+        userService: accountUserService,
+        authService: authService,
       ),
     );
 
@@ -1090,6 +1185,8 @@ void main() {
       find.byKey(const ValueKey('account-settings-page-header')),
       findsOneWidget,
     );
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.byTooltip('刷新'), findsOneWidget);
   });
 
   testWidgets('login session page 接入统一页头锚点', (tester) async {
@@ -1108,6 +1205,7 @@ void main() {
       find.byKey(const ValueKey('login-session-page-header')),
       findsOneWidget,
     );
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
   });
 
   testWidgets('function permission config page 接入统一页头锚点', (tester) async {
@@ -1125,5 +1223,7 @@ void main() {
       find.byKey(const ValueKey('function-permission-config-page-header')),
       findsOneWidget,
     );
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.byTooltip('刷新'), findsOneWidget);
   });
 }

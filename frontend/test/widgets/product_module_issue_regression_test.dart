@@ -1308,7 +1308,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('第 2 / 3 页'), findsOneWidget);
 
-      await tester.tap(find.widgetWithText(FilledButton, '刷新页面'));
+      await tester.tap(find.byTooltip('刷新'));
       await tester.pumpAndSettle();
       expect(find.text('第 2 / 3 页'), findsOneWidget, reason: '刷新应保留当前页。');
       expect(service.pageCalls.last, 2);
@@ -1319,7 +1319,7 @@ void main() {
       expect(find.text('产品101'), findsOneWidget);
 
       service.products.removeWhere((product) => product.id == 101);
-      await tester.tap(find.widgetWithText(FilledButton, '刷新页面'));
+      await tester.tap(find.byTooltip('刷新'));
       await tester.pumpAndSettle();
 
       expect(

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 
 class ProductManagementPageHeader extends StatelessWidget {
   const ProductManagementPageHeader({
@@ -15,16 +15,10 @@ class ProductManagementPageHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return KeyedSubtree(
       key: const ValueKey('product-management-page-header'),
-      child: MesPageHeader(
+      child: MesRefreshPageHeader(
         title: '产品管理',
         subtitle: '统一管理产品筛选、列表、详情和版本工作区入口。',
-        actions: [
-          FilledButton.tonalIcon(
-            onPressed: loading ? null : onRefresh,
-            icon: const Icon(Icons.refresh),
-            label: const Text('刷新页面'),
-          ),
-        ],
+        onRefresh: loading ? null : onRefresh,
       ),
     );
   }

@@ -278,7 +278,10 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const LoginSessionPageHeader(),
+            LoginSessionPageHeader(
+              loading: _loadingSessions,
+              onRefresh: () => _loadOnlineSessions(page: _sessionPage),
+            ),
             const SizedBox(height: 12),
             Semantics(
               container: true,

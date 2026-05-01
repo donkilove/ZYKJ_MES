@@ -7,11 +7,13 @@ class MesRefreshPageHeader extends StatelessWidget {
   const MesRefreshPageHeader({
     super.key,
     required this.title,
+    this.subtitle,
     this.onRefresh,
     this.actionsBeforeRefresh = const <Widget>[],
   });
 
   final String title;
+  final String? subtitle;
   final VoidCallback? onRefresh;
   final List<Widget> actionsBeforeRefresh;
 
@@ -19,6 +21,7 @@ class MesRefreshPageHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return MesPageHeader(
       title: title,
+      subtitle: subtitle,
       actions: [
         ...actionsBeforeRefresh,
         Tooltip(

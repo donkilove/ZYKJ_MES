@@ -410,6 +410,50 @@ class _FunctionPermissionConfigPageState
     }
   }
 
+  Future<void> _refreshCurrentModule() async {
+    final moduleCode = _selectedModuleCode;
+    if (moduleCode == null || _loading || _saving) {
+      return;
+    }
+    if (_hasDirty) {
+      final discard = await showFunctionPermissionDiscardDialog(
+        context: context,
+      );
+      if (!discard) {
+        return;
+      }
+    }
+
+    setState(() {
+      _loading = true;
+      _message = '';
+    });
+    try {
+      await _loadModuleData(
+        moduleCode,
+        roles: _roles,
+        moduleCodes: _moduleCodes,
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      setState(() {
+        _message = '刷新页面失败：${_errorMessage(error)}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
+    }
+  }
+
   Future<void> _save() async {
     final moduleCode = _selectedModuleCode;
     if (_saving || !_hasDirty || moduleCode == null) {
@@ -739,7 +783,10 @@ class _FunctionPermissionConfigPageState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const FunctionPermissionConfigPageHeader(),
+            FunctionPermissionConfigPageHeader(
+              loading: _loading,
+              onRefresh: _refreshCurrentModule,
+            ),
             const SizedBox(height: 12),
             Card(
               margin: EdgeInsets.zero,
