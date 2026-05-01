@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
@@ -165,6 +166,7 @@ Future<void> showProductFormDialog({
                                 maxLines: null,
                                 expands: true,
                                 maxLength: 500,
+                                maxLengthEnforcement: MaxLengthEnforcement.none,
                                 enabled: !submitting,
                                 textAlignVertical: TextAlignVertical.top,
                                 decoration: const InputDecoration(
