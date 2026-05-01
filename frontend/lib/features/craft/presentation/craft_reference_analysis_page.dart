@@ -328,7 +328,6 @@ class _CraftReferenceAnalysisPageState
   Widget _buildHeader() {
     return MesRefreshPageHeader(
       title: '引用分析',
-      subtitle: '按工段、工序、模板和产品追踪下游引用与跳转来源。',
       onRefresh: _loadingBase ? null : _loadBaseData,
     );
   }

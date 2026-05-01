@@ -17,7 +17,6 @@ class AccountSettingsPageHeader extends StatelessWidget {
       key: const ValueKey('account-settings-page-header'),
       child: MesRefreshPageHeader(
         title: '个人中心',
-        subtitle: '统一管理个人信息与密码修改入口。',
         onRefresh: loading ? null : onRefresh,
       ),
     );

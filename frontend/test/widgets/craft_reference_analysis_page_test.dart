@@ -199,6 +199,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.text('按工段、工序、模板和产品追踪下游引用与跳转来源。'), findsNothing);
     expect(find.byTooltip('刷新'), findsOneWidget);
 
     await tester.tap(find.text('切割段'));

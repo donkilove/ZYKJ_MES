@@ -17,7 +17,6 @@ class ProductVersionPageHeader extends StatelessWidget {
       key: const ValueKey('product-version-page-header'),
       child: MesRefreshPageHeader(
         title: '版本管理',
-        subtitle: '左侧选择产品，右侧查看版本工作区与参数动作。',
         onRefresh: loading ? null : onRefresh,
       ),
     );

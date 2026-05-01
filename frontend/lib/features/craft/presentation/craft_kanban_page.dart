@@ -254,7 +254,6 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
     final busy = _loadingProducts || _loadingMetrics || _exporting;
     return MesRefreshPageHeader(
       title: '工艺看板',
-      subtitle: '按产品、工段和工序观察工时与产能趋势。',
       onRefresh: busy ? null : _loadProducts,
       actionsBeforeRefresh: [
         if (busy)

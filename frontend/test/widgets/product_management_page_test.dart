@@ -236,6 +236,7 @@ void main() {
 
     expect(find.text('产品管理'), findsOneWidget);
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.text('统一管理产品筛选、列表、详情和版本工作区入口。'), findsNothing);
     expect(find.byTooltip('刷新'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('product-management-filter-section')),

@@ -608,6 +608,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('功能权限配置'), findsOneWidget);
+    expect(find.text('统一配置模块权限能力包。'), findsNothing);
     expect(find.text('系统管理'), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -1186,6 +1187,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.text('统一管理个人信息与密码修改入口。'), findsNothing);
     expect(find.byTooltip('刷新'), findsOneWidget);
   });
 
@@ -1206,6 +1208,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.text('统一查看在线会话和强制下线入口。'), findsNothing);
   });
 
   testWidgets('function permission config page 接入统一页头锚点', (tester) async {
@@ -1224,6 +1227,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.text('统一配置模块权限能力包。'), findsNothing);
     expect(find.byTooltip('刷新'), findsOneWidget);
   });
 }

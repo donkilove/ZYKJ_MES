@@ -216,6 +216,7 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.text('统一维护工段、小工序及 jump 定位工作台。'), findsNothing);
     expect(find.byTooltip('刷新'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('process-management-feedback-banner')),

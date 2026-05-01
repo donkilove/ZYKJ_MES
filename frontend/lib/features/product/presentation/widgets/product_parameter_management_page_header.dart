@@ -17,7 +17,6 @@ class ProductParameterManagementPageHeader extends StatelessWidget {
       key: const ValueKey('product-parameter-management-page-header'),
       child: MesRefreshPageHeader(
         title: '版本参数管理',
-        subtitle: '按版本查看、编辑和导出产品参数。',
         onRefresh: loading ? null : onRefresh,
       ),
     );

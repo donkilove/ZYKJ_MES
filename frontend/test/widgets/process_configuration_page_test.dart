@@ -318,6 +318,7 @@ void main() {
     );
 
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.text('统一管理系统母版、产品模板与版本工作区。'), findsNothing);
     expect(find.byTooltip('刷新'), findsOneWidget);
     expect(find.text('产品列表'), findsOneWidget);
     expect(find.text('模板工作区'), findsOneWidget);

@@ -17,7 +17,6 @@ class ProductManagementPageHeader extends StatelessWidget {
       key: const ValueKey('product-management-page-header'),
       child: MesRefreshPageHeader(
         title: '产品管理',
-        subtitle: '统一管理产品筛选、列表、详情和版本工作区入口。',
         onRefresh: loading ? null : onRefresh,
       ),
     );

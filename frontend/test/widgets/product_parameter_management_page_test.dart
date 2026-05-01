@@ -227,6 +227,7 @@ void main() {
 
     expect(find.text('版本参数管理'), findsOneWidget);
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.text('按版本查看、编辑和导出产品参数。'), findsNothing);
     expect(find.byTooltip('刷新'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('product-parameter-filter-section')),

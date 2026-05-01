@@ -22,7 +22,6 @@ class ProcessManagementPageHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return MesRefreshPageHeader(
       title: '工序管理',
-      subtitle: '统一维护工段、小工序及 jump 定位工作台。',
       onRefresh: loading ? null : onRefresh,
       actionsBeforeRefresh: [
         FilledButton.icon(

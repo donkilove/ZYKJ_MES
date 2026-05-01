@@ -180,6 +180,7 @@ void main() {
 
     expect(find.text('工段筛选'), findsOneWidget);
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.text('按产品、工段和工序观察工时与产能趋势。'), findsNothing);
     expect(find.byTooltip('刷新'), findsOneWidget);
     expect(find.text('工序趋势对比（平均工时/产能）'), findsOneWidget);
     expect(find.textContaining('CUT 切割段  /  CUT-01 激光切割'), findsOneWidget);

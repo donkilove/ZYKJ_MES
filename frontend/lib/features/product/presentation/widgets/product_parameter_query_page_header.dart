@@ -17,7 +17,6 @@ class ProductParameterQueryPageHeader extends StatelessWidget {
       key: const ValueKey('product-parameter-query-page-header'),
       child: MesRefreshPageHeader(
         title: '产品参数查询',
-        subtitle: '按启用且已有生效版本的产品查看当前生效参数。',
         onRefresh: loading ? null : onRefresh,
       ),
     );

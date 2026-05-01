@@ -17,7 +17,6 @@ class LoginSessionPageHeader extends StatelessWidget {
       key: const ValueKey('login-session-page-header'),
       child: MesRefreshPageHeader(
         title: '登录会话',
-        subtitle: '统一查看在线会话和强制下线入口。',
         onRefresh: loading ? null : onRefresh,
       ),
     );
