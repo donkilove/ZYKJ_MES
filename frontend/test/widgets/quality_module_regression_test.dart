@@ -6,6 +6,7 @@ import 'package:file_selector_platform_interface/file_selector_platform_interfac
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
 import 'package:mes_client/features/production/presentation/production_repair_orders_page.dart';
@@ -898,7 +899,7 @@ void main() {
     expect(find.text('维修订单'), findsWidgets);
   });
 
-  testWidgets('报废统计页接入统一页头锚点', (tester) async {
+  testWidgets('报废统计包装页不再额外嵌套页头', (tester) async {
     await tester.pumpWidget(
       _wrapBody(
         QualityScrapStatisticsPage(
@@ -911,10 +912,12 @@ void main() {
 
     await tester.pumpAndSettle();
 
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(
       find.byKey(const ValueKey('quality-scrap-statistics-page-header')),
-      findsOneWidget,
+      findsNothing,
     );
+    expect(find.text('报废统计'), findsOneWidget);
   });
 
   testWidgets('不良分析页接入统一页头锚点', (tester) async {
@@ -951,7 +954,7 @@ void main() {
     );
   });
 
-  testWidgets('质量维修订单页签接入统一页头锚点', (tester) async {
+  testWidgets('质量维修订单包装页不再额外嵌套页头', (tester) async {
     await tester.pumpWidget(
       _wrapBody(
         QualityRepairOrdersPage(
@@ -965,10 +968,12 @@ void main() {
 
     await tester.pumpAndSettle();
 
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(
       find.byKey(const ValueKey('quality-repair-orders-page-header')),
-      findsOneWidget,
+      findsNothing,
     );
+    expect(find.text('维修订单'), findsOneWidget);
   });
 
   testWidgets('质量数据页支持 route payload 进入预警过滤态', (tester) async {
