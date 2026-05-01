@@ -941,13 +941,15 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                       child: MesInlineBanner.error(message: _message),
                     ),
                   if (isWide)
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(flex: 5, child: _buildProfileCard()),
-                        const SizedBox(width: 16),
-                        Expanded(flex: 5, child: _buildPasswordCard()),
-                      ],
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(flex: 5, child: _buildProfileCard()),
+                          const SizedBox(width: 16),
+                          Expanded(flex: 5, child: _buildPasswordCard()),
+                        ],
+                      ),
                     )
                   else ...[
                     _buildProfileCard(),
