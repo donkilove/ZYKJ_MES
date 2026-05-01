@@ -1155,12 +1155,12 @@ void main() {
       closeTo(queryButtonRect.center.dy, 1),
     );
 
-    expect(statusRect.center.dy, greaterThan(searchRect.center.dy));
+    expect(statusRect.center.dy, lessThan(searchRect.center.dy));
     expect(roleRect.center.dy, closeTo(statusRect.center.dy, 1));
     expect(deletedScopeRect.center.dy, closeTo(statusRect.center.dy, 1));
     expect(statusRect.left, lessThan(roleRect.left));
     expect(roleRect.left, lessThan(deletedScopeRect.left));
-    expect(searchRect.top, lessThan(statusRect.top));
+    expect(statusRect.top, lessThan(searchRect.top));
 
     expect(tester.takeException(), isNull);
   });

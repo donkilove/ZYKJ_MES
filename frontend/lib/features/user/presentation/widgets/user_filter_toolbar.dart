@@ -156,7 +156,13 @@ class UserFilterToolbar extends StatelessWidget {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: actions,
         );
-        final topRow = Row(
+        final topRow = Wrap(
+          spacing: spacing,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [statusFilter, roleFilter, deletedScopeFilter],
+        );
+        final bottomRow = Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             searchField,
@@ -168,12 +174,6 @@ class UserFilterToolbar extends StatelessWidget {
               ),
             ),
           ],
-        );
-        final bottomRow = Wrap(
-          spacing: spacing,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [statusFilter, roleFilter, deletedScopeFilter],
         );
 
         return ConstrainedBox(
