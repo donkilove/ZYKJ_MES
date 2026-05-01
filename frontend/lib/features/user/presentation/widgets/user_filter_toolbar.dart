@@ -14,6 +14,7 @@ class UserFilterToolbar extends StatelessWidget {
   final VoidCallback onSearch;
 
   final List<Widget> actions;
+  final List<Widget> topActions;
 
   const UserFilterToolbar({
     super.key,
@@ -27,6 +28,7 @@ class UserFilterToolbar extends StatelessWidget {
     required this.onFilterDeletedScopeChanged,
     required this.onSearch,
     required this.actions,
+    this.topActions = const [],
   });
 
   Widget _buildKeywordField() {
@@ -159,6 +161,18 @@ class UserFilterToolbar extends StatelessWidget {
             roleFilter,
             const SizedBox(width: spacing),
             deletedScopeFilter,
+            if (topActions.isNotEmpty) ...[
+              const SizedBox(width: spacing),
+              Expanded(
+                child: Wrap(
+                  spacing: spacing,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: topActions,
+                ),
+              ),
+            ],
           ],
         );
         final bottomRow = Wrap(

@@ -891,36 +891,10 @@ class _UserManagementPageState extends State<UserManagementPage> {
     }
   }
 
-  List<Widget> _buildToolbarButtons() {
+  List<Widget> _buildTopToolbarButtons() {
     final theme = Theme.of(context);
     final isQuerying = _queryInFlight;
-    final buttons = <Widget>[
-      FilledButton.icon(
-        onPressed: (_loading || !widget.canCreateUser)
-            ? null
-            : () => showUserCreateDialog(
-                context: context,
-                userService: _userService,
-                assignableRoles: _assignableRoles(),
-                allRoles: _roles,
-                loadEnabledStages: _loadEnabledStagesForDialog,
-                onLogout: widget.onLogout,
-                onSuccess: _handleActionSuccess,
-              ),
-        icon: const Icon(Icons.person_add),
-        label: const Text('新建用户'),
-      ),
-    ];
-
-    if (widget.onNavigateToRoleManagement != null) {
-      buttons.add(
-        OutlinedButton.icon(
-          onPressed: widget.onNavigateToRoleManagement,
-          icon: const Icon(Icons.admin_panel_settings),
-          label: const Text('角色管理'),
-        ),
-      );
-    }
+    final buttons = <Widget>[];
 
     if (widget.canExport) {
       buttons.add(
@@ -951,21 +925,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
       );
     }
 
-    if (widget.canImport) {
-      buttons.add(
-        OutlinedButton.icon(
-          onPressed: _loading
-              ? null
-              : () => showUserImportDialog(
-                  context: context,
-                  userService: _userService,
-                ),
-          icon: const Icon(Icons.upload_file),
-          label: const Text('批量导入'),
-        ),
-      );
-    }
-
     buttons.add(
       FilledButton.icon(
         onPressed: _loading ? null : _applyFiltersAndReload,
@@ -988,6 +947,53 @@ class _UserManagementPageState extends State<UserManagementPage> {
         label: Text(isQuerying ? '查询中...' : '查询用户'),
       ),
     );
+
+    return buttons;
+  }
+
+  List<Widget> _buildBottomToolbarButtons() {
+    final buttons = <Widget>[
+      FilledButton.icon(
+        onPressed: (_loading || !widget.canCreateUser)
+            ? null
+            : () => showUserCreateDialog(
+                context: context,
+                userService: _userService,
+                assignableRoles: _assignableRoles(),
+                allRoles: _roles,
+                loadEnabledStages: _loadEnabledStagesForDialog,
+                onLogout: widget.onLogout,
+                onSuccess: _handleActionSuccess,
+              ),
+        icon: const Icon(Icons.person_add),
+        label: const Text('新建用户'),
+      ),
+    ];
+
+    if (widget.canImport) {
+      buttons.add(
+        OutlinedButton.icon(
+          onPressed: _loading
+              ? null
+              : () => showUserImportDialog(
+                  context: context,
+                  userService: _userService,
+                ),
+          icon: const Icon(Icons.upload_file),
+          label: const Text('批量导入'),
+        ),
+      );
+    }
+
+    if (widget.onNavigateToRoleManagement != null) {
+      buttons.add(
+        OutlinedButton.icon(
+          onPressed: widget.onNavigateToRoleManagement,
+          icon: const Icon(Icons.admin_panel_settings),
+          label: const Text('角色管理'),
+        ),
+      );
+    }
 
     return buttons;
   }
@@ -1020,7 +1026,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
           _applyFiltersAndReload();
         },
         onSearch: _applyFiltersAndReload,
-        actions: _buildToolbarButtons(),
+        topActions: _buildTopToolbarButtons(),
+        actions: _buildBottomToolbarButtons(),
       ),
       banner: _message.isEmpty
           ? null

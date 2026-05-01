@@ -16,6 +16,7 @@ class UserManagementFilterSection extends StatelessWidget {
     required this.onFilterDeletedScopeChanged,
     required this.onSearch,
     required this.actions,
+    this.topActions = const [],
   });
 
   final TextEditingController keywordController;
@@ -28,6 +29,7 @@ class UserManagementFilterSection extends StatelessWidget {
   final ValueChanged<String> onFilterDeletedScopeChanged;
   final VoidCallback onSearch;
   final List<Widget> actions;
+  final List<Widget> topActions;
 
   @override
   Widget build(BuildContext context) {
@@ -44,6 +46,7 @@ class UserManagementFilterSection extends StatelessWidget {
         onFilterDeletedScopeChanged: onFilterDeletedScopeChanged,
         onSearch: onSearch,
         actions: actions,
+        topActions: topActions,
       ),
     );
   }
