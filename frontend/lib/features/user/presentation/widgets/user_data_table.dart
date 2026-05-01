@@ -37,30 +37,51 @@ class UserDataTable extends StatelessWidget {
   bool _isCurrentLoginUser(UserItem user) =>
       myUserId != null && user.id == myUserId;
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+  static const _columnWidths = <int, TableColumnWidth>{
+    0: FlexColumnWidth(),
+    1: FlexColumnWidth(),
+    2: FlexColumnWidth(),
+    3: FlexColumnWidth(),
+    4: FlexColumnWidth(),
+    5: FlexColumnWidth(),
+    6: FlexColumnWidth(),
+  };
 
-    return CrudListTableSection(
-      key: const ValueKey('userListSection'),
-      cardKey: const ValueKey('userListCard'),
-      loading: loading,
-      isEmpty: users.isEmpty,
-      emptyText: emptyText,
-      enableUnifiedHeaderStyle: true,
-      child: DataTable(
-        columnSpacing: 16,
-        columns: [
-          UnifiedListTableHeaderStyle.column(context, '账号'),
-          UnifiedListTableHeaderStyle.column(context, '角色'),
-          UnifiedListTableHeaderStyle.column(context, '工段'),
-          UnifiedListTableHeaderStyle.column(context, '在线'),
-          UnifiedListTableHeaderStyle.column(context, '状态'),
-          UnifiedListTableHeaderStyle.column(context, '创建时间'),
-          UnifiedListTableHeaderStyle.column(context, '操作'),
+  static const _headerLabels = ['账号', '角色', '工段', '在线', '状态', '创建时间', '操作'];
+
+  Widget _buildHeader(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.65),
+      child: Table(
+        columnWidths: _columnWidths,
+        defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+        children: [
+          TableRow(
+            children: _headerLabels.map((label) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Text(
+                  label,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
         ],
-        rows: users.map((user) {
-          final statusLabel = user.isOnline ? '在线' : '离线';
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
+    final theme = Theme.of(context);
+    return SingleChildScrollView(
+      child: Table(
+        columnWidths: _columnWidths,
+        defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+        children: users.map((user) {
           final activeLabel = user.isDeleted
               ? '已删除'
               : user.isActive
@@ -69,51 +90,58 @@ class UserDataTable extends StatelessWidget {
           final createdAtStr = user.createdAt != null
               ? '${user.createdAt!.year}-${user.createdAt!.month.toString().padLeft(2, '0')}-${user.createdAt!.day.toString().padLeft(2, '0')}'
               : '-';
-          return DataRow(
-            color: user.isDeleted
-                ? WidgetStatePropertyAll<Color?>(
-                    theme.colorScheme.surfaceContainerHighest.withValues(
+          return TableRow(
+            decoration: user.isDeleted
+                ? BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest.withValues(
                       alpha: 0.35,
                     ),
                   )
                 : null,
-            cells: [
-              DataCell(Text(user.username)),
-              DataCell(
-                Text(
-                  user.roleName?.trim().isNotEmpty == true
-                      ? user.roleName!
-                      : '-',
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Text(user.username),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Text(
+                  user.roleName?.trim().isNotEmpty == true ? user.roleName! : '-',
                 ),
               ),
-              DataCell(
-                Text(
-                  user.stageName?.trim().isNotEmpty == true
-                      ? user.stageName!
-                      : '/',
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Text(
+                  user.stageName?.trim().isNotEmpty == true ? user.stageName! : '/',
                 ),
               ),
-              DataCell(
-                UserModuleStatusChip(
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: UserModuleStatusChip(
                   tone: user.isOnline
                       ? UserModuleStatusTone.online
                       : UserModuleStatusTone.offline,
-                  label: statusLabel,
+                  label: user.isOnline ? '在线' : '离线',
                 ),
               ),
-              DataCell(
-                UserModuleStatusChip(
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: UserModuleStatusChip(
                   tone: user.isDeleted
                       ? UserModuleStatusTone.deleted
                       : user.isActive
-                      ? UserModuleStatusTone.active
-                      : UserModuleStatusTone.inactive,
+                          ? UserModuleStatusTone.active
+                          : UserModuleStatusTone.inactive,
                   label: activeLabel,
                 ),
               ),
-              DataCell(Text(createdAtStr)),
-              DataCell(
-                UnifiedListTableHeaderStyle.actionMenuButton<UserTableAction>(
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Text(createdAtStr),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: UnifiedListTableHeaderStyle.actionMenuButton<UserTableAction>(
                   theme: theme,
                   onSelected: (action) => onAction(action, user),
                   itemBuilder: (context) => [
@@ -156,6 +184,21 @@ class UserDataTable extends StatelessWidget {
           );
         }).toList(),
       ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CrudListTableSection(
+      key: const ValueKey('userListSection'),
+      cardKey: const ValueKey('userListCard'),
+      loading: loading,
+      isEmpty: users.isEmpty,
+      emptyText: emptyText,
+      stickyHeader: true,
+      headerWidget: _buildHeader(context),
+      bodyWidget: _buildBody(context),
+      child: const SizedBox.shrink(),
     );
   }
 }
