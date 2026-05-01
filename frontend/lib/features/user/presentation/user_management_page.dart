@@ -112,6 +112,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
 
   bool _loading = false;
   bool _queryInFlight = false;
+  bool _paginationInFlight = false;
   String _message = '';
   List<UserItem> _users = const [];
   List<RoleItem> _roles = const [];
@@ -541,6 +542,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }
 
   Future<void> _loadUsersCore({required bool silent, int? page}) async {
+    if (silent && _paginationInFlight) {
+      return;
+    }
     final targetPage = page ?? _userPage;
     if (!silent) {
       setState(() {
@@ -548,6 +552,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
         _queryInFlight = true;
         _message = '';
       });
+    } else {
+      _paginationInFlight = true;
     }
 
     try {
@@ -591,6 +597,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
             _loading = false;
             _queryInFlight = false;
           });
+        } else {
+          _paginationInFlight = false;
         }
         _scheduleOnlineStatusRefresh();
       }
@@ -1048,8 +1056,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
         total: _total,
         loading: _loading,
         showTotal: false,
-        onPrevious: () => _loadUsers(page: _userPage - 1),
-        onNext: () => _loadUsers(page: _userPage + 1),
+        onPrevious: () => _loadUsers(silent: true, page: _userPage - 1),
+        onNext: () => _loadUsers(silent: true, page: _userPage + 1),
       ),
     );
   }
