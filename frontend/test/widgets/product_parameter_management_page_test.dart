@@ -282,6 +282,38 @@ void main() {
     expect(find.byType(ProductParameterManagementFeedbackBanner), findsNothing);
   });
 
+  testWidgets('ProductParameterManagementPage 列表态与统一页面骨架保持单层边距', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final service = _PageStructureService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildMesTheme(
+          brightness: Brightness.light,
+          visualDensity: VisualDensity.standard,
+        ),
+        home: Scaffold(
+          body: SizedBox(
+            width: 1440,
+            height: 900,
+            child: ProductParameterManagementPage(
+              session: AppSession(baseUrl: '', accessToken: 'token'),
+              onLogout: () {},
+              tabCode: 'product-parameter-management',
+              service: service,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MesCrudPageScaffold), findsOneWidget);
+    expect(tester.getTopLeft(find.text('版本参数管理')).dx, 16);
+  });
+
   testWidgets('产品参数编辑态展示头部 工具条 表格和底部动作区', (tester) async {
     final row = ProductParameterEditorRowModel.empty(rowId: 1);
     addTearDown(row.dispose);

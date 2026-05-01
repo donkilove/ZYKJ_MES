@@ -1159,11 +1159,12 @@ class _ProductParameterManagementPageState
 
   @override
   Widget build(BuildContext context) {
+    if (_editingTarget == null) {
+      return _buildListView();
+    }
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: _editingTarget == null
-          ? _buildListView()
-          : _buildEditorView(Theme.of(context)),
+      child: _buildEditorView(Theme.of(context)),
     );
   }
 }
