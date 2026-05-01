@@ -250,10 +250,7 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
       filters: _buildFilterBar(theme),
       banner: _message.isEmpty
           ? null
-          : Text(
-              _message,
-              style: TextStyle(color: theme.colorScheme.error),
-            ),
+          : Text(_message, style: TextStyle(color: theme.colorScheme.error)),
       content: _loading
           ? const MesLoadingState(label: '缺陷分析加载中...')
           : _result == null
@@ -339,11 +336,6 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
           tooltip: '查询',
           onPressed: _loading ? null : _load,
           icon: const Icon(Icons.search),
-        ),
-        IconButton(
-          tooltip: '刷新',
-          onPressed: _loading ? null : _load,
-          icon: const Icon(Icons.refresh),
         ),
       ],
     );

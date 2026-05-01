@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
 import 'package:mes_client/features/quality/presentation/quality_page.dart';
 import 'package:mes_client/features/quality/presentation/quality_supplier_management_page.dart';
@@ -73,6 +74,8 @@ void main() {
       find.byKey(const ValueKey('quality-supplier-management-page-header')),
       findsOneWidget,
     );
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.text('刷新页面'), findsNothing);
   });
 
   testWidgets('供应商管理页可完成新增编辑', (tester) async {

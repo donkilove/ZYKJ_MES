@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 
 class QualityTrendPageHeader extends StatelessWidget {
   const QualityTrendPageHeader({
@@ -21,15 +21,11 @@ class QualityTrendPageHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return KeyedSubtree(
       key: const ValueKey('quality-trend-page-header'),
-      child: MesPageHeader(
+      child: MesRefreshPageHeader(
         title: '质量趋势',
         subtitle: '统一查看趋势图与时间范围统计。',
-        actions: [
-          FilledButton.tonalIcon(
-            onPressed: loading ? null : onRefresh,
-            icon: const Icon(Icons.refresh),
-            label: const Text('刷新页面'),
-          ),
+        onRefresh: loading ? null : onRefresh,
+        actionsBeforeRefresh: [
           if (canExport)
             OutlinedButton.icon(
               onPressed: (loading || exporting) ? null : onExport,

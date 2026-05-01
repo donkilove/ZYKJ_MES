@@ -937,6 +937,8 @@ void main() {
       find.byKey(const ValueKey('quality-defect-analysis-page-header')),
       findsOneWidget,
     );
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.text('刷新页面'), findsNothing);
   });
 
   testWidgets('质量趋势页接入统一页头锚点', (tester) async {
@@ -952,6 +954,8 @@ void main() {
       find.byKey(const ValueKey('quality-trend-page-header')),
       findsOneWidget,
     );
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.text('刷新页面'), findsNothing);
   });
 
   testWidgets('质量维修订单包装页不再额外嵌套页头', (tester) async {
