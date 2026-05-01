@@ -99,8 +99,10 @@ class _AdaptiveTableContainerState extends State<AdaptiveTableContainer> {
         );
 
         return Scrollbar(
+          controller: _verticalController,
           thumbVisibility: true,
           child: CustomScrollView(
+            controller: _verticalController,
             slivers: [
               SliverPersistentHeader(
                 pinned: true,

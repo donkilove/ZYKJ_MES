@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/craft/presentation/craft_kanban_page.dart';
@@ -180,6 +181,7 @@ void main() {
     expect(find.text('工序趋势对比（平均工时/产能）'), findsOneWidget);
     expect(find.textContaining('CUT 切割段  /  CUT-01 激光切割'), findsOneWidget);
     expect(find.textContaining('样本 1'), findsOneWidget);
+    expect(find.byType(CrudListTableSection), findsOneWidget);
 
     await tester.tap(find.text('导出数据'));
     await tester.pump();

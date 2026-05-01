@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
+import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
@@ -304,7 +305,11 @@ class _ProductionOrderQueryDetailPageState
             child: TabBarView(
               children: [
                 Card(
-                  child: AdaptiveTableContainer(
+                  child: CrudListTableSection(
+                    loading: false,
+                    isEmpty: sortedProcesses.isEmpty,
+                    emptyText: '暂无工序数据',
+                    enableUnifiedHeaderStyle: true,
                     child: DataTable(
                       columns: const [
                         DataColumn(label: Text('顺序')),
@@ -332,7 +337,11 @@ class _ProductionOrderQueryDetailPageState
                   ),
                 ),
                 Card(
-                  child: AdaptiveTableContainer(
+                  child: CrudListTableSection(
+                    loading: false,
+                    isEmpty: sortedSubOrders.isEmpty,
+                    emptyText: '暂无子订单数据',
+                    enableUnifiedHeaderStyle: true,
                     child: DataTable(
                       columns: const [
                         DataColumn(label: Text('工序编码')),
@@ -362,7 +371,11 @@ class _ProductionOrderQueryDetailPageState
                   ),
                 ),
                 Card(
-                  child: AdaptiveTableContainer(
+                  child: CrudListTableSection(
+                    loading: false,
+                    isEmpty: sortedRecords.isEmpty,
+                    emptyText: '暂无生产记录',
+                    enableUnifiedHeaderStyle: true,
                     child: DataTable(
                       columns: const [
                         DataColumn(label: Text('时间')),

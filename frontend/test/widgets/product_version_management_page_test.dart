@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/ui/foundation/mes_theme.dart';
 import 'package:mes_client/core/ui/patterns/mes_list_detail_shell.dart';
+import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/product_page.dart';
 import 'package:mes_client/features/product/presentation/product_version_management_page.dart';
@@ -380,6 +381,7 @@ void main() {
       find.byKey(const ValueKey('product-version-table-section')),
       findsOneWidget,
     );
+    expect(find.byType(CrudListTableSection), findsOneWidget);
   });
 
   testWidgets('ProductVersionManagementPage 窄宽度下仍保留产品区与版本工作区', (tester) async {

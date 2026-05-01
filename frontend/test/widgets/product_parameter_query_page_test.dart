@@ -4,6 +4,7 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/foundation/mes_theme.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/product_page.dart';
 import 'package:mes_client/features/product/presentation/product_parameter_query_page.dart';
@@ -116,10 +117,7 @@ void main() {
         home: Scaffold(
           body: Column(
             children: [
-              ProductParameterQueryPageHeader(
-                loading: false,
-                onRefresh: () {},
-              ),
+              ProductParameterQueryPageHeader(loading: false, onRefresh: () {}),
               ProductParameterQueryFilterSection(
                 keywordController: keywordController,
                 categoryOptions: const ['贴片', 'DTU', '套件'],
@@ -130,9 +128,7 @@ void main() {
                 onSearch: () {},
                 onExport: () {},
               ),
-              const ProductParameterQueryFeedbackBanner(
-                message: '加载失败：网络错误',
-              ),
+              const ProductParameterQueryFeedbackBanner(message: '加载失败：网络错误'),
               Expanded(
                 child: ProductParameterQueryTableSection(
                   products: [
@@ -173,9 +169,7 @@ void main() {
     expect(find.widgetWithText(TextButton, '查看参数'), findsNWidgets(2));
   });
 
-  testWidgets('ProductParameterQueryPage 列表态接入统一查询骨架并展示锚点', (
-    tester,
-  ) async {
+  testWidgets('ProductParameterQueryPage 列表态接入统一查询骨架并展示锚点', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1440, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -258,14 +252,22 @@ void main() {
       ),
     );
 
-    expect(find.byKey(const ValueKey('product-parameter-query-dialog')), findsOneWidget);
-    expect(find.byKey(const ValueKey('product-parameter-summary-header')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('product-parameter-query-dialog')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('product-parameter-summary-header')),
+      findsOneWidget,
+    );
     expect(find.text('产品81'), findsOneWidget);
     expect(find.text('版本：V1.0'), findsOneWidget);
     expect(find.text('参数总数：2 项'), findsOneWidget);
     expect(find.text('仅展示当前生效版本参数'), findsOneWidget);
     expect(find.text('图纸链接'), findsOneWidget);
     expect(find.text('本地图纸'), findsOneWidget);
+    expect(find.byType(CrudListTableSection), findsOneWidget);
+    expect(find.byType(CustomScrollView), findsOneWidget);
   });
 
   testWidgets('参数查看弹窗空态时仍保留顶部摘要区', (tester) async {
@@ -286,7 +288,10 @@ void main() {
       ),
     );
 
-    expect(find.byKey(const ValueKey('product-parameter-summary-header')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('product-parameter-summary-header')),
+      findsOneWidget,
+    );
     expect(find.text('产品82'), findsOneWidget);
     expect(find.text('参数总数：0 项'), findsOneWidget);
     expect(find.text('该产品暂无参数'), findsOneWidget);

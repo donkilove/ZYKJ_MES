@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
+import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_history_timeline.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_related_info_section.dart';
@@ -59,8 +61,8 @@ class ProductDetailDrawer extends StatelessWidget {
                       Text(
                         '产品详情 - ${product.name}',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -91,17 +93,26 @@ class ProductDetailDrawer extends StatelessWidget {
                   ),
                   const Divider(),
                   _detailRow('产品名称', product.name),
-                  _detailRow('产品分类', product.category.isEmpty ? '-' : product.category),
+                  _detailRow(
+                    '产品分类',
+                    product.category.isEmpty ? '-' : product.category,
+                  ),
                   _detailRow('状态', lifecycleLabel(product.lifecycleStatus)),
                   _detailRow('当前版本', currentVersion),
                   _detailRow('生效版本', effectiveVersion),
-                  _detailRow('备注', product.remark.isEmpty ? '-' : product.remark),
+                  _detailRow(
+                    '备注',
+                    product.remark.isEmpty ? '-' : product.remark,
+                  ),
                   _detailRow('创建时间', formatTime(product.createdAt)),
                   _detailRow('更新时间', formatTime(product.updatedAt)),
                   const SizedBox(height: 16),
                   Text(
                     '${detail.detailParameters.parameterScope == 'effective' ? '当前生效参数快照' : '当前版本参数快照'}（${detail.detailParameters.versionLabel}）',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
                   ),
                   const Divider(),
                   if ((detail.detailParameterMessage ?? '').isNotEmpty) ...[
@@ -124,41 +135,50 @@ class ProductDetailDrawer extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: DataTable(
-                        columnSpacing: 16,
-                        headingRowHeight: 36,
-                        dataRowMinHeight: 32,
-                        dataRowMaxHeight: 40,
-                        columns: const [
-                          DataColumn(label: Text('参数名')),
-                          DataColumn(label: Text('分组')),
-                          DataColumn(label: Text('类型')),
-                          DataColumn(label: Text('值')),
-                          DataColumn(label: Text('说明')),
-                        ],
-                        rows: filteredParams.map((item) {
-                          return DataRow(
-                            cells: [
-                              DataCell(Text(item.name)),
-                              DataCell(Text(item.category)),
-                              DataCell(Text(item.type)),
-                              DataCell(
-                                Text(
-                                  item.value,
-                                  overflow: TextOverflow.ellipsis,
+                    SizedBox(
+                      height: 240,
+                      child: CrudListTableSection(
+                        loading: false,
+                        isEmpty: filteredParams.isEmpty,
+                        emptyText: '暂无参数',
+                        emptyWidget: const MesEmptyState(title: '暂无参数'),
+                        enableUnifiedHeaderStyle: true,
+                        child: DataTable(
+                          columnSpacing: 16,
+                          headingRowHeight: 36,
+                          dataRowMinHeight: 32,
+                          dataRowMaxHeight: 40,
+                          columns: const [
+                            DataColumn(label: Text('参数名')),
+                            DataColumn(label: Text('分组')),
+                            DataColumn(label: Text('类型')),
+                            DataColumn(label: Text('值')),
+                            DataColumn(label: Text('说明')),
+                          ],
+                          rows: filteredParams.map((item) {
+                            return DataRow(
+                              cells: [
+                                DataCell(Text(item.name)),
+                                DataCell(Text(item.category)),
+                                DataCell(Text(item.type)),
+                                DataCell(
+                                  Text(
+                                    item.value,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
-                              ),
-                              DataCell(
-                                Text(
-                                  item.description.isEmpty ? '-' : item.description,
-                                  overflow: TextOverflow.ellipsis,
+                                DataCell(
+                                  Text(
+                                    item.description.isEmpty
+                                        ? '-'
+                                        : item.description,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          );
-                        }).toList(),
+                              ],
+                            );
+                          }).toList(),
+                        ),
                       ),
                     ),
                   ],
@@ -172,7 +192,8 @@ class ProductDetailDrawer extends StatelessWidget {
                     const Text('暂无关联信息', style: TextStyle(color: Colors.grey))
                   else
                     ...detail.relatedInfoSections.map(
-                      (section) => ProductRelatedInfoSectionCard(section: section),
+                      (section) =>
+                          ProductRelatedInfoSectionCard(section: section),
                     ),
                   const SizedBox(height: 16),
                   ProductHistoryTimeline(

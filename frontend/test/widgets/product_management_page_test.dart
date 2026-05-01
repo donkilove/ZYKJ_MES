@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/ui/foundation/mes_theme.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/product_management_page.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_detail_drawer.dart';
@@ -182,10 +183,7 @@ void main() {
         home: Scaffold(
           body: Column(
             children: [
-              ProductManagementPageHeader(
-                loading: false,
-                onRefresh: () {},
-              ),
+              ProductManagementPageHeader(loading: false, onRefresh: () {}),
               ProductManagementFilterSection(
                 keywordController: keywordController,
                 categoryOptions: const ['贴片', 'DTU', '套件'],
@@ -202,9 +200,7 @@ void main() {
                 onCreate: () {},
                 onExport: () {},
               ),
-              const ProductManagementFeedbackBanner(
-                message: '加载失败：网络错误',
-              ),
+              const ProductManagementFeedbackBanner(message: '加载失败：网络错误'),
               Expanded(
                 child: ProductManagementTableSection(
                   products: [
@@ -288,7 +284,9 @@ void main() {
     expect(find.text('停用'), findsWidgets);
   });
 
-  testWidgets('ProductManagementPage 接入 MesCrudPageScaffold 并展示统一锚点', (tester) async {
+  testWidgets('ProductManagementPage 接入 MesCrudPageScaffold 并展示统一锚点', (
+    tester,
+  ) async {
     final service = _PageStructureService();
 
     await tester.pumpWidget(
@@ -360,7 +358,12 @@ void main() {
     expect(find.text('基本信息'), findsOneWidget);
     expect(find.text('当前版本参数快照（V1.1）'), findsOneWidget);
     expect(find.text('关联工艺路线'), findsOneWidget);
-    expect(find.byKey(const ValueKey('product-history-timeline')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('product-history-timeline')),
+      findsOneWidget,
+    );
+    expect(find.byType(CrudListTableSection), findsOneWidget);
+    expect(find.byType(CustomScrollView), findsOneWidget);
   });
 
   testWidgets('ProductVersionDialog 展示版本对比区和动作入口', (tester) async {
@@ -457,11 +460,17 @@ void main() {
       ),
     );
 
-    expect(find.byKey(const ValueKey('product-version-dialog')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('product-version-dialog')),
+      findsOneWidget,
+    );
     expect(find.textContaining('版本管理 - 产品41'), findsOneWidget);
     expect(find.text('新建版本'), findsOneWidget);
     expect(find.text('版本对比'), findsOneWidget);
-    expect(find.byKey(const ValueKey('product-version-compare-panel')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('product-version-compare-panel')),
+      findsOneWidget,
+    );
     expect(find.textContaining('对比结果：新增 1，移除 0，变更 1'), findsOneWidget);
     expect(find.text('激活'), findsWidgets);
   });

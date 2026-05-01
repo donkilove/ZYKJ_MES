@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 
+import 'package:mes_client/core/ui/primitives/mes_info_row.dart';
 import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 
 class ProductionAssistRecordDetailDialog extends StatelessWidget {
-  const ProductionAssistRecordDetailDialog({
-    super.key,
-    required this.item,
-  });
+  const ProductionAssistRecordDetailDialog({super.key, required this.item});
 
   final AssistAuthorizationItem item;
 
@@ -21,19 +19,8 @@ class ProductionAssistRecordDetailDialog extends StatelessWidget {
     return '${local.year}-$mm-$dd $hh:$min:$sec';
   }
 
-  TableRow _detailRow(String label, String value) {
-    return TableRow(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-          child: Text(label, style: const TextStyle(color: Colors.grey)),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-          child: Text(value),
-        ),
-      ],
-    );
+  Widget _detailRow(String label, String value) {
+    return MesInfoRow(label: label, value: SelectableText(value));
   }
 
   @override
@@ -44,11 +31,9 @@ class ProductionAssistRecordDetailDialog extends StatelessWidget {
       content: SizedBox(
         key: const ValueKey('production-assist-record-detail-dialog'),
         width: 520,
-        child: Table(
-          columnWidths: const {
-            0: IntrinsicColumnWidth(),
-            1: FlexColumnWidth(),
-          },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _detailRow('订单号', item.orderCode),
             _detailRow('工序', item.processName),

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import 'package:mes_client/core/widgets/adaptive_table_container.dart';
 import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
+import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 
 Future<void> showProductionFirstArticleParametersDialog({
@@ -44,30 +44,32 @@ class ProductionFirstArticleParametersDialog extends StatelessWidget {
             Text('生命周期：${result.lifecycleStatus}'),
             const SizedBox(height: 12),
             Flexible(
-              child: result.items.isEmpty
-                  ? const Center(child: Text('暂无参数'))
-                  : AdaptiveTableContainer(
-                      child: DataTable(
-                        columns: const [
-                          DataColumn(label: Text('名称')),
-                          DataColumn(label: Text('分类')),
-                          DataColumn(label: Text('类型')),
-                          DataColumn(label: Text('值')),
-                          DataColumn(label: Text('说明')),
-                        ],
-                        rows: result.items.map((item) {
-                          return DataRow(
-                            cells: [
-                              DataCell(Text(item.name)),
-                              DataCell(Text(item.category)),
-                              DataCell(Text(item.type)),
-                              DataCell(Text(item.value)),
-                              DataCell(Text(item.description)),
-                            ],
-                          );
-                        }).toList(),
-                      ),
-                    ),
+              child: CrudListTableSection(
+                loading: false,
+                isEmpty: result.items.isEmpty,
+                emptyText: '暂无参数',
+                enableUnifiedHeaderStyle: true,
+                child: DataTable(
+                  columns: const [
+                    DataColumn(label: Text('名称')),
+                    DataColumn(label: Text('分类')),
+                    DataColumn(label: Text('类型')),
+                    DataColumn(label: Text('值')),
+                    DataColumn(label: Text('说明')),
+                  ],
+                  rows: result.items.map((item) {
+                    return DataRow(
+                      cells: [
+                        DataCell(Text(item.name)),
+                        DataCell(Text(item.category)),
+                        DataCell(Text(item.type)),
+                        DataCell(Text(item.value)),
+                        DataCell(Text(item.description)),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
             ),
           ],
         ),

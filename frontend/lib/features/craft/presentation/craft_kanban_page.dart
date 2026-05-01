@@ -7,6 +7,7 @@ import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/craft/presentation/widgets/craft_kanban_action_dialogs.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
@@ -209,10 +210,7 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
       final text = contentBase64.isEmpty
           ? ''
           : utf8.decode(base64Decode(contentBase64));
-      await showCraftKanbanExportPreviewDialog(
-        context: context,
-        text: text,
-      );
+      await showCraftKanbanExportPreviewDialog(context: context, text: text);
     } catch (error) {
       if (!mounted) return;
       if (_isUnauthorized(error)) {
@@ -220,9 +218,9 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
         return;
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导出失败：${_errorMessage(error)}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('导出失败：${_errorMessage(error)}')));
       }
     } finally {
       if (mounted) {
@@ -256,9 +254,9 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
       children: [
         Text(
           '工艺看板',
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
         ),
         const Spacer(),
         if (_loadingProducts || _loadingMetrics || _exporting)
@@ -704,31 +702,37 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                columns: const [
-                  DataColumn(label: Text('工序')),
-                  DataColumn(label: Text('样本数')),
-                  DataColumn(label: Text('平均工时(分钟)')),
-                  DataColumn(label: Text('平均产能(件/小时)')),
-                ],
-                rows: rows
-                    .map(
-                      (row) => DataRow(
-                        cells: [
-                          DataCell(
-                            Text(
-                              '${row.process.processCode} ${row.process.processName}',
+            SizedBox(
+              height: 220,
+              child: CrudListTableSection(
+                loading: false,
+                isEmpty: rows.isEmpty,
+                emptyText: '暂无趋势对比数据',
+                enableUnifiedHeaderStyle: true,
+                child: DataTable(
+                  columns: const [
+                    DataColumn(label: Text('工序')),
+                    DataColumn(label: Text('样本数')),
+                    DataColumn(label: Text('平均工时(分钟)')),
+                    DataColumn(label: Text('平均产能(件/小时)')),
+                  ],
+                  rows: rows
+                      .map(
+                        (row) => DataRow(
+                          cells: [
+                            DataCell(
+                              Text(
+                                '${row.process.processCode} ${row.process.processName}',
+                              ),
                             ),
-                          ),
-                          DataCell(Text('${row.process.samples.length}')),
-                          DataCell(Text(row.avgMinutes.toStringAsFixed(1))),
-                          DataCell(Text(row.avgCapacity.toStringAsFixed(1))),
-                        ],
-                      ),
-                    )
-                    .toList(),
+                            DataCell(Text('${row.process.samples.length}')),
+                            DataCell(Text(row.avgMinutes.toStringAsFixed(1))),
+                            DataCell(Text(row.avgCapacity.toStringAsFixed(1))),
+                          ],
+                        ),
+                      )
+                      .toList(),
+                ),
               ),
             ),
           ],
@@ -741,13 +745,13 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
     return (_loadingProducts || _loadingMetrics)
         ? const MesLoadingState(label: '工艺看板加载中...')
         : (_metrics == null || _metrics!.items.isEmpty)
-            ? const Center(child: Text('暂无可统计数据'))
-            : ListView(
-                children: [
-                  _buildTrendComparison(_metrics!.items),
-                  ..._metrics!.items.map(_buildProcessCard),
-                ],
-              );
+        ? const Center(child: Text('暂无可统计数据'))
+        : ListView(
+            children: [
+              _buildTrendComparison(_metrics!.items),
+              ..._metrics!.items.map(_buildProcessCard),
+            ],
+          );
   }
 
   @override

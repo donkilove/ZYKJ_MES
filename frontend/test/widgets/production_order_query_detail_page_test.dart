@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/production_order_query_detail_page.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
@@ -273,6 +274,8 @@ void main() {
     expect(find.text('子订单'), findsOneWidget);
     expect(find.text('记录'), findsOneWidget);
     expect(find.text('事件'), findsOneWidget);
+    expect(find.byType(CrudListTableSection), findsOneWidget);
+    expect(find.byType(CustomScrollView), findsOneWidget);
     expect(find.text('订单号：PO-1'), findsOneWidget);
     expect(find.text('产品版本：3'), findsOneWidget);
     expect(find.text('模板名称/版本：标准模板 v5'), findsOneWidget);

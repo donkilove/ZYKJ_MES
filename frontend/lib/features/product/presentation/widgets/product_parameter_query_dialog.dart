@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
-import 'package:mes_client/core/widgets/adaptive_table_container.dart';
+import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_summary_header.dart';
 
@@ -35,43 +35,41 @@ class ProductParameterQueryDialog extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Expanded(
-                child: result.items.isEmpty
-                    ? const Center(child: Text('该产品暂无参数'))
-                    : AdaptiveTableContainer(
-                        child: DataTable(
-                          columns: const [
-                            DataColumn(label: Text('参数名称')),
-                            DataColumn(label: Text('参数分类')),
-                            DataColumn(label: Text('参数类型')),
-                            DataColumn(label: Text('参数值')),
-                            DataColumn(label: Text('参数说明')),
-                          ],
-                          rows: result.items.map((item) {
-                            return DataRow(
-                              cells: [
-                                DataCell(Text(item.name)),
-                                DataCell(Text(item.category)),
-                                DataCell(Text(item.type)),
-                                DataCell(buildParameterValueCell(item)),
-                                DataCell(
-                                  Text(
-                                    item.description.isEmpty
-                                        ? '-'
-                                        : item.description,
-                                  ),
-                                ),
-                              ],
-                            );
-                          }).toList(),
-                        ),
-                      ),
+                child: CrudListTableSection(
+                  loading: false,
+                  isEmpty: result.items.isEmpty,
+                  emptyText: '该产品暂无参数',
+                  enableUnifiedHeaderStyle: true,
+                  child: DataTable(
+                    columns: const [
+                      DataColumn(label: Text('参数名称')),
+                      DataColumn(label: Text('参数分类')),
+                      DataColumn(label: Text('参数类型')),
+                      DataColumn(label: Text('参数值')),
+                      DataColumn(label: Text('参数说明')),
+                    ],
+                    rows: result.items.map((item) {
+                      return DataRow(
+                        cells: [
+                          DataCell(Text(item.name)),
+                          DataCell(Text(item.category)),
+                          DataCell(Text(item.type)),
+                          DataCell(buildParameterValueCell(item)),
+                          DataCell(
+                            Text(
+                              item.description.isEmpty ? '-' : item.description,
+                            ),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                ),
               ),
             ],
           ),
         ),
-        actions: [
-          FilledButton(onPressed: onClose, child: const Text('关闭')),
-        ],
+        actions: [FilledButton(onPressed: onClose, child: const Text('关闭'))],
       ),
     );
   }

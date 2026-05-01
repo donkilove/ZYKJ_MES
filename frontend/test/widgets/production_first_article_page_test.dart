@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/production_first_article_page.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_first_article_parameters_dialog.dart';
@@ -363,6 +364,8 @@ void main() {
     );
     expect(find.text('首件参数查看'), findsOneWidget);
     expect(find.text('长度'), findsOneWidget);
+    expect(find.byType(CrudListTableSection), findsOneWidget);
+    expect(find.byType(CustomScrollView), findsOneWidget);
   });
 
   testWidgets('首件参与操作员弹窗展示统一骨架', (tester) async {
@@ -385,7 +388,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.byKey(const ValueKey('production-first-article-participants-dialog')),
+      find.byKey(
+        const ValueKey('production-first-article-participants-dialog'),
+      ),
       findsOneWidget,
     );
     expect(find.text('添加参与操作员'), findsOneWidget);
