@@ -896,26 +896,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
     final isQuerying = _queryInFlight;
     final buttons = <Widget>[
       FilledButton.icon(
-        onPressed: _loading ? null : _applyFiltersAndReload,
-        icon: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 150),
-          transitionBuilder: (child, animation) =>
-              FadeTransition(opacity: animation, child: child),
-          child: isQuerying
-              ? SizedBox(
-                  key: const ValueKey('queryBusy'),
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: theme.colorScheme.onPrimary,
-                  ),
-                )
-              : const Icon(Icons.search, key: ValueKey('queryIcon')),
-        ),
-        label: Text(isQuerying ? '查询中...' : '查询用户'),
-      ),
-      FilledButton.icon(
         onPressed: (_loading || !widget.canCreateUser)
             ? null
             : () => showUserCreateDialog(
@@ -985,6 +965,29 @@ class _UserManagementPageState extends State<UserManagementPage> {
         ),
       );
     }
+
+    buttons.add(
+      FilledButton.icon(
+        onPressed: _loading ? null : _applyFiltersAndReload,
+        icon: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 150),
+          transitionBuilder: (child, animation) =>
+              FadeTransition(opacity: animation, child: child),
+          child: isQuerying
+              ? SizedBox(
+                  key: const ValueKey('queryBusy'),
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: theme.colorScheme.onPrimary,
+                  ),
+                )
+              : const Icon(Icons.search, key: ValueKey('queryIcon')),
+        ),
+        label: Text(isQuerying ? '查询中...' : '查询用户'),
+      ),
+    );
 
     return buttons;
   }
