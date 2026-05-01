@@ -53,7 +53,6 @@ class MainShellViewState {
     this.manualRefreshing = false,
     this.homeDashboardLoading = false,
     this.homeDashboardRefreshPending = false,
-    this.lastManualRefreshAt,
     this.homeDashboardData,
   });
 
@@ -73,7 +72,6 @@ class MainShellViewState {
   final bool manualRefreshing;
   final bool homeDashboardLoading;
   final bool homeDashboardRefreshPending;
-  final DateTime? lastManualRefreshAt;
   final HomeDashboardData? homeDashboardData;
 
   MainShellViewState copyWith({
@@ -93,7 +91,6 @@ class MainShellViewState {
     bool? manualRefreshing,
     bool? homeDashboardLoading,
     bool? homeDashboardRefreshPending,
-    Object? lastManualRefreshAt = _mainShellUnset,
     Object? homeDashboardData = _mainShellUnset,
   }) {
     return MainShellViewState(
@@ -124,9 +121,6 @@ class MainShellViewState {
       homeDashboardLoading: homeDashboardLoading ?? this.homeDashboardLoading,
       homeDashboardRefreshPending:
           homeDashboardRefreshPending ?? this.homeDashboardRefreshPending,
-      lastManualRefreshAt: lastManualRefreshAt == _mainShellUnset
-          ? this.lastManualRefreshAt
-          : lastManualRefreshAt as DateTime?,
       homeDashboardData: homeDashboardData == _mainShellUnset
           ? this.homeDashboardData
           : homeDashboardData as HomeDashboardData?,

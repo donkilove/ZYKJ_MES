@@ -211,7 +211,6 @@ class _MainShellPageState extends State<MainShellPage>
       softwareSettingsController: widget.softwareSettingsController,
       timeSyncController: widget.timeSyncController,
       pluginHostController: _pluginHostController,
-      homeRefreshStatusText: _controller.homeRefreshStatusText(),
       userPageBuilder: widget.userPageBuilder,
       productPageBuilder: widget.productPageBuilder,
       equipmentPageBuilder: widget.equipmentPageBuilder,

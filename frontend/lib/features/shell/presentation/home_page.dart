@@ -32,7 +32,6 @@ class HomePage extends StatefulWidget {
     required this.onNavigateToPage,
     required this.onRefresh,
     required this.refreshing,
-    this.refreshStatusText,
     this.dashboardData,
   });
 
@@ -46,7 +45,6 @@ class HomePage extends StatefulWidget {
   onNavigateToPage;
   final Future<void> Function() onRefresh;
   final bool refreshing;
-  final String? refreshStatusText;
   final HomeDashboardData? dashboardData;
 
   @override
@@ -140,7 +138,6 @@ class _HomePageState extends State<HomePage> {
           noticeCount: data.noticeCount,
           refreshing: widget.refreshing,
           onRefresh: widget.onRefresh,
-          refreshStatusText: widget.refreshStatusText,
         ),
         const SizedBox(height: 12),
         Expanded(
@@ -197,7 +194,6 @@ class _HomePageState extends State<HomePage> {
             noticeCount: data.noticeCount,
             refreshing: widget.refreshing,
             onRefresh: widget.onRefresh,
-            refreshStatusText: widget.refreshStatusText,
           ),
           const SizedBox(height: 12),
           HomeDashboardTodoCard(

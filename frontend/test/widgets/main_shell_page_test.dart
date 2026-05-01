@@ -1181,7 +1181,7 @@ void main() {
     expect(authService.callCount, 2);
     expect(pageCatalogService.callCount, 1);
     expect(messageService.unreadCountCallCount, 1);
-    expect(find.textContaining('上次刷新：'), findsOneWidget);
+    expect(find.textContaining('上次刷新：'), findsNothing);
   });
 
   testWidgets('首页首次加载与消息事件后会刷新工作台数据', (tester) async {

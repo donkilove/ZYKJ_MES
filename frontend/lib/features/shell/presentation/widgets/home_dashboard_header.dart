@@ -10,14 +10,12 @@ class HomeDashboardHeader extends StatelessWidget {
     required this.noticeCount,
     required this.refreshing,
     required this.onRefresh,
-    this.refreshStatusText,
   });
 
   final CurrentUser currentUser;
   final int noticeCount;
   final bool refreshing;
   final Future<void> Function() onRefresh;
-  final String? refreshStatusText;
 
   @override
   Widget build(BuildContext context) {
@@ -46,15 +44,6 @@ class HomeDashboardHeader extends StatelessWidget {
             ),
           ],
         ),
-        if (refreshStatusText?.trim().isNotEmpty == true) ...[
-          const SizedBox(height: 8),
-          Text(
-            refreshStatusText!,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
         const SizedBox(height: 12),
         Wrap(
           spacing: 8,

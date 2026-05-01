@@ -308,7 +308,6 @@ class MainShellController extends ChangeNotifier {
         refreshUnreadFuture,
         refreshDashboardFuture,
       ]);
-      _setState(_state.copyWith(lastManualRefreshAt: DateTime.now()));
     } catch (error) {
       if (_isUnauthorized(error)) {
         onLogout(reason: '您的账号已在其他终端登录，或会话已失效');
@@ -378,20 +377,6 @@ class MainShellController extends ChangeNotifier {
       return;
     }
     _setState(_state.copyWith(activeUtilityCode: pluginHostUtilityCode));
-  }
-
-  String? homeRefreshStatusText() {
-    if (_state.manualRefreshing) {
-      return '正在刷新业务数据...';
-    }
-    final value = _state.lastManualRefreshAt;
-    if (value == null) {
-      return null;
-    }
-    final hour = value.hour.toString().padLeft(2, '0');
-    final minute = value.minute.toString().padLeft(2, '0');
-    final second = value.second.toString().padLeft(2, '0');
-    return '上次刷新：$hour:$minute:$second';
   }
 
   void updateUnreadCount(int count) {

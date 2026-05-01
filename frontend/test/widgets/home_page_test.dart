@@ -43,7 +43,6 @@ void main() {
     onNavigateToPage,
     required Future<void> Function() onRefresh,
     bool refreshing = false,
-    String? refreshStatusText,
     HomeDashboardData? dashboardData,
     Size viewportSize = const Size(1440, 1200),
   }) async {
@@ -63,7 +62,6 @@ void main() {
             onNavigateToPage: onNavigateToPage,
             onRefresh: onRefresh,
             refreshing: refreshing,
-            refreshStatusText: refreshStatusText,
             dashboardData: dashboardData,
           ),
         ),
@@ -94,7 +92,6 @@ void main() {
       ],
       onNavigateToPage: (_, {tabCode, routePayloadJson}) {},
       onRefresh: () async {},
-      refreshStatusText: '上次刷新：12:00:00',
     );
 
     expect(find.byKey(desktopHeaderKey), findsOneWidget);
@@ -146,7 +143,7 @@ void main() {
     expect(find.byType(MesMetricCard), findsAtLeastNWidgets(4));
 
     expect(find.text('查看全部待办'), findsOneWidget);
-    expect(find.text('上次刷新：12:00:00'), findsOneWidget);
+    expect(find.text('上次刷新：12:00:00'), findsNothing);
   });
 
   testWidgets('首页快速跳转会回调目标页面编码与页签参数', (tester) async {
@@ -222,10 +219,10 @@ void main() {
         refreshCalled = true;
       },
       refreshing: true,
-      refreshStatusText: '正在刷新业务数据...',
     );
 
     expect(find.byTooltip('刷新中'), findsOneWidget);
+    expect(find.text('正在刷新业务数据...'), findsNothing);
     await tester.tap(find.byTooltip('刷新中'));
     await tester.pumpAndSettle();
 

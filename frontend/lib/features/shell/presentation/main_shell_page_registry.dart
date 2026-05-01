@@ -62,7 +62,6 @@ class MainShellPageRegistry {
     required SoftwareSettingsController softwareSettingsController,
     required TimeSyncController timeSyncController,
     PluginHostController? pluginHostController,
-    String? homeRefreshStatusText,
     void Function(int count)? onUnreadCountChanged,
     MainShellUserPageBuilder? userPageBuilder,
     MainShellModulePageBuilder? productPageBuilder,
@@ -109,7 +108,6 @@ class MainShellPageRegistry {
           },
           onRefresh: () => onRefreshShellData(loadCatalog: false),
           refreshing: state.manualRefreshing,
-          refreshStatusText: homeRefreshStatusText,
         );
       case 'user':
         final builder = userPageBuilder;
