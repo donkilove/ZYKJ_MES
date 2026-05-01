@@ -1,8 +1,12 @@
 {
-  "raw_nodes": 7642,
-  "raw_links": 15125,
-  "curated_nodes": 6792,
-  "curated_links": 13594,
+  "raw": {
+    "node_count": 7642,
+    "edge_count": 15125
+  },
+  "curated": {
+    "node_count": 6792,
+    "edge_count": 13594
+  },
   "nodes_dropped": 850,
   "nodes_hidden_from_rank": 509,
   "nodes_downweighted": 46,
@@ -24,8 +28,8 @@
     "plugin": 30
   },
   "community_count": 170,
-  "community_name_coverage": 157,
+  "community_name_coverage": 159,
   "top20_business_ratio": 0.7,
-  "run_id": "20e9a93b-a615-45dd-a7e0-e7fcd5714ced",
-  "generated_at": "2026-05-01T16:31:03.767096+00:00"
+  "run_id": "a5f77bed-d5de-4b83-b5f1-d72d03f1d666",
+  "generated_at": "2026-05-01T16:50:54.015707+00:00"
 }

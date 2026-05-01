@@ -2,11 +2,11 @@
 """Graphify 图谱质量治理流水线入口。
 
 职责：
-1. 复制原始 Graphify 产物到 raw/
-2. 生成 run_id、manifest.json
+1. 生成 run_id 和 manifest.json
+2. 通过 staging 目录实现原子构建：本轮产物先进 staging/，成功后再替换正式目录
 3. 调用 curate 做降噪和语义治理
 4. 调用 navigation 生成导航视图
-5. 原子替换正式产物
+5. 失败不污染上一轮正式产物
 
 使用方式：
   python tools/graphify_pipeline.py
@@ -22,23 +22,42 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GRAPHIFY_OUT = REPO_ROOT / "graphify-out"
-RAW_DIR = GRAPHIFY_OUT / "raw"
-QUALITY_DIR = GRAPHIFY_OUT / "quality"
-NAV_DIR = GRAPHIFY_OUT / "navigation"
+STAGING_DIR = GRAPHIFY_OUT / "staging"
 RULES_PATH = REPO_ROOT / "tools" / "graphify_rules.json"
 
 CURATION_VERSION = "1.0.0"
 PIPELINE_VERSION = "1.0.0"
 
 
-def _ensure_dirs():
-    RAW_DIR.mkdir(parents=True, exist_ok=True)
-    QUALITY_DIR.mkdir(parents=True, exist_ok=True)
-    NAV_DIR.mkdir(parents=True, exist_ok=True)
+def _ensure_staging_dirs():
+    for d in [
+        STAGING_DIR / "raw",
+        STAGING_DIR / "quality",
+        STAGING_DIR / "navigation",
+    ]:
+        d.mkdir(parents=True, exist_ok=True)
+
+
+def _ensure_output_dirs():
+    for d in [
+        GRAPHIFY_OUT / "raw",
+        GRAPHIFY_OUT / "quality",
+        GRAPHIFY_OUT / "navigation",
+    ]:
+        d.mkdir(parents=True, exist_ok=True)
 
 
 def _get_source_commit():
     import subprocess
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True, text=True, cwd=str(REPO_ROOT), timeout=10
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],
@@ -81,50 +100,75 @@ def _hash_file(path):
 
 
 def _get_graphify_version():
+    """获取 Graphify 版本，返回结构化 dict。"""
     import subprocess
+    version = None
+    version_source = "unknown"
+    available = False
+
     try:
         result = subprocess.run(
             [sys.executable, "-m", "graphify", "--version"],
             capture_output=True, text=True, timeout=10
         )
-        out = result.stdout.strip() or result.stderr.strip()
-        if out:
-            return out
+        if result.returncode == 0 and result.stdout.strip():
+            version = result.stdout.strip()
+            version_source = "graphify --version"
+            available = True
     except Exception:
         pass
-    try:
-        import graphify
-        return getattr(graphify, "__version__", "unknown")
-    except ImportError:
-        return "unknown"
+
+    if not version:
+        try:
+            import graphify
+            version = getattr(graphify, "__version__", None)
+            if version:
+                version_source = "graphify.__version__"
+                available = True
+        except ImportError:
+            pass
+
+    return {
+        "version": version or "unknown",
+        "source": version_source,
+        "available": available,
+    }
 
 
-def step_copy_raw():
-    """将 Graphify 原始产物复制到 raw/，作为原始事实底座。
-    仅在 raw/ 不存在时执行首次复制，避免后续重跑覆盖原始数据。
-    """
-    raw_graph = RAW_DIR / "graph.raw.json"
-    raw_report = RAW_DIR / "GRAPH_REPORT.raw.md"
-    if raw_graph.exists() and raw_report.exists():
-        print("[P0] raw/ 已有原始产物，跳过复制（保护原始数据）")
-        return True
-
-    print("[P0] 复制原始产物到 raw/ ...")
+def step_copy_raw(manifest):
+    """将 Graphify 原始产物复制到 staging/raw/，注入 run_id。"""
+    print("[P0] 复制原始产物到 staging/raw/ ...")
     for src_name in ["graph.json", "GRAPH_REPORT.md"]:
         src = GRAPHIFY_OUT / src_name
-        if src.exists():
-            dst = RAW_DIR / src_name.replace(".json", ".raw.json").replace(".md", ".raw.md")
-            shutil.copy2(src, dst)
-            print(f"  {src_name} -> {dst.name}")
-        else:
+        if not src.exists():
             print(f"  [WARN] {src_name} 不存在，跳过")
+            continue
+
+        dst_name = src_name.replace(".json", ".raw.json").replace(".md", ".raw.md")
+        dst = STAGING_DIR / "raw" / dst_name
+        shutil.copy2(src, dst)
+        print(f"  {src_name} -> staging/raw/{dst_name}")
+
+        # 对 raw graph.json 注入 run_id
+        if src_name == "graph.json":
+            raw_data = json.loads(dst.read_text(encoding="utf-8"))
+            raw_data["run_id"] = manifest["run_id"]
+            raw_data["generated_at"] = manifest["generated_at"]
+            raw_data["source_commit"] = manifest["source_commit"]
+            raw_data["edge_count"] = len(raw_data.get("links", []))
+            if "graph" in raw_data:
+                raw_data["graph"]["run_id"] = manifest["run_id"]
+            dst.write_text(json.dumps(raw_data, indent=2, ensure_ascii=False), encoding="utf-8")
+            print(f"    run_id 已注入")
+
     return True
 
 
 def step_generate_manifest():
-    """生成 manifest.json，包含 run_id 等元数据。"""
+    """生成 manifest.json 到 staging/。"""
     print("[P0] 生成 manifest.json ...")
     corpus_hash, ignore_hash = _compute_corpus_hash()
+    gv = _get_graphify_version()
 
     manifest = {
         "run_id": str(uuid.uuid4()),
@@ -132,28 +176,32 @@ def step_generate_manifest():
         "source_commit": _get_source_commit(),
         "corpus_hash": corpus_hash,
         "ignore_hash": ignore_hash,
-        "graphify_version": _get_graphify_version(),
+        "graphify_version": gv["version"],
+        "graphify_version_source": gv["source"],
+        "graphify_available": gv["available"],
         "curation_version": CURATION_VERSION,
         "pipeline_version": PIPELINE_VERSION,
         "repo_root": str(REPO_ROOT),
     }
 
-    with open(GRAPHIFY_OUT / "manifest.json", "w", encoding="utf-8") as f:
+    with open(STAGING_DIR / "manifest.json", "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
     print(f"  run_id: {manifest['run_id']}")
+    print(f"  source_commit: {manifest['source_commit']}")
+    print(f"  graphify: {manifest['graphify_version']} (available={manifest['graphify_available']})")
     return manifest
 
 
 def step_curate(manifest):
-    """调用治理模块，产出 curated graph.json 和 GRAPH_REPORT.md。"""
+    """调用治理模块，产出 curated graph.json 到 staging/。"""
     print("[P1/P2] 执行图谱治理 ...")
     try:
         from graphify_curate import curate_graph
-        raw_graph_path = RAW_DIR / "graph.raw.json"
-        raw_report_path = RAW_DIR / "GRAPH_REPORT.raw.md"
+        raw_graph_path = STAGING_DIR / "raw" / "graph.raw.json"
+        raw_report_path = STAGING_DIR / "raw" / "GRAPH_REPORT.raw.md"
 
         if not raw_graph_path.exists():
-            print("  [ERROR] raw/graph.raw.json 不存在，无法治理")
+            print("  [ERROR] staging/raw/graph.raw.json 不存在，无法治理")
             return False
 
         result = curate_graph(
@@ -161,8 +209,8 @@ def step_curate(manifest):
             raw_report_path=str(raw_report_path),
             rules_path=str(RULES_PATH),
             manifest=manifest,
-            output_dir=str(GRAPHIFY_OUT),
-            quality_dir=str(QUALITY_DIR),
+            output_dir=str(STAGING_DIR),
+            quality_dir=str(STAGING_DIR / "quality"),
         )
         print(f"  curated nodes: {result['curated_nodes']}, links: {result['curated_links']}")
         print(f"  noise applied: {result['noise_applied']}")
@@ -175,21 +223,21 @@ def step_curate(manifest):
 
 
 def step_navigation(manifest):
-    """生成导航视图。"""
+    """生成导航视图到 staging/。"""
     print("[P3] 生成导航视图 ...")
     try:
         from graphify_navigation import generate_navigation
 
-        curated_graph_path = GRAPHIFY_OUT / "graph.json"
+        curated_graph_path = STAGING_DIR / "graph.json"
         if not curated_graph_path.exists():
-            print("  [ERROR] 治理后 graph.json 不存在，无法生成导航视图")
+            print("  [ERROR] staging/graph.json 不存在，无法生成导航视图")
             return False
 
         result = generate_navigation(
             graph_path=str(curated_graph_path),
             rules_path=str(RULES_PATH),
             manifest=manifest,
-            output_dir=str(NAV_DIR),
+            output_dir=str(STAGING_DIR / "navigation"),
         )
         print(f"  entrypoints: {'OK' if result.get('entrypoints') else 'FAIL'}")
         print(f"  contract_chains: {'OK' if result.get('contract_chains') else 'FAIL'}")
@@ -202,6 +250,32 @@ def step_navigation(manifest):
         return None
 
 
+def step_atomic_replace():
+    """将 staging 产物原子替换到正式 graphify-out 目录。"""
+    print("[P0] 原子替换正式产物 ...")
+
+    # 删除旧正式产物（已确保 staging 成功才进入此步骤）
+    for sub in ["raw", "quality", "navigation"]:
+        target = GRAPHIFY_OUT / sub
+        if target.exists():
+            shutil.rmtree(target, ignore_errors=True)
+
+    # 移动 staging 产物到正式目录
+    for entry in STAGING_DIR.iterdir():
+        dst = GRAPHIFY_OUT / entry.name
+        if dst.exists():
+            if dst.is_dir():
+                shutil.rmtree(dst, ignore_errors=True)
+            else:
+                dst.unlink()
+        shutil.move(str(entry), str(dst))
+
+    # 清理 staging 目录
+    shutil.rmtree(STAGING_DIR, ignore_errors=True)
+    print("  原子替换完成")
+    return True
+
+
 def main():
     print("=" * 60)
     print("Graphify 图谱质量治理流水线")
@@ -209,23 +283,38 @@ def main():
     print(f"治理版本: {CURATION_VERSION}")
     print("=" * 60)
 
-    _ensure_dirs()
+    # 确保正式输出目录存在
+    _ensure_output_dirs()
 
-    if not step_copy_raw():
+    # 清理旧 staging
+    if STAGING_DIR.exists():
+        shutil.rmtree(STAGING_DIR, ignore_errors=True)
+
+    # 创建 staging 目录
+    _ensure_staging_dirs()
+
+    # Step 1: 生成 manifest
+    manifest = step_generate_manifest()
+
+    # Step 2: 复制原始产物到 staging/raw
+    if not step_copy_raw(manifest):
         print("[失败] 原始产物复制失败，终止")
         sys.exit(1)
 
-    manifest = step_generate_manifest()
-
+    # Step 3: 治理
     result = step_curate(manifest)
     if result is None:
-        print("[失败] 图谱治理失败，raw/ 已保留，正式产物未被覆盖")
+        print("[失败] 图谱治理失败，staging 已保留，正式产物未被覆盖")
         sys.exit(1)
 
+    # Step 4: 导航视图
     nav_result = step_navigation(manifest)
     if nav_result is None:
-        print("[失败] 导航视图生成失败（metadata 和 curated 已生成）")
+        print("[失败] 导航视图生成失败，staging 已保留，正式产物未被覆盖")
         sys.exit(1)
+
+    # Step 5: 原子替换
+    step_atomic_replace()
 
     print("\n" + "=" * 60)
     print("流水线执行完成")

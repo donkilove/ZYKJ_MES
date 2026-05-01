@@ -1,10 +1,12 @@
 {
-  "run_id": "20e9a93b-a615-45dd-a7e0-e7fcd5714ced",
-  "generated_at": "2026-05-01T16:31:03.767096+00:00",
-  "source_commit": "2b2988f",
-  "corpus_hash": "56a73f4d310f89b1",
+  "run_id": "a5f77bed-d5de-4b83-b5f1-d72d03f1d666",
+  "generated_at": "2026-05-01T16:50:54.015707+00:00",
+  "source_commit": "5ffdf8fdeb8c7bee611f4c524a179f97df528e5d",
+  "corpus_hash": "a238b13d0ea8ded8",
   "ignore_hash": "d074ca6739866203",
-  "graphify_version": "C:\\Program Files\\Python312\\python.exe: No module named graphify",
+  "graphify_version": "unknown",
+  "graphify_version_source": "unknown",
+  "graphify_available": false,
   "curation_version": "1.0.0",
   "pipeline_version": "1.0.0",
   "repo_root": "C:\\Users\\Donki\\Desktop\\ZYKJ_MES"
