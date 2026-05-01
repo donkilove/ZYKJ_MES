@@ -1143,7 +1143,14 @@ void main() {
     );
 
     expect(searchRect.width, lessThan(300));
-    expect(searchRect.center.dy, closeTo(queryButtonRect.center.dy, 1));
+    expect(searchRect.center.dy, closeTo(statusRect.center.dy, 1));
+    expect(roleRect.center.dy, closeTo(statusRect.center.dy, 1));
+    expect(deletedScopeRect.center.dy, closeTo(statusRect.center.dy, 1));
+    expect(searchRect.left, lessThan(statusRect.left));
+    expect(statusRect.left, lessThan(roleRect.left));
+    expect(roleRect.left, lessThan(deletedScopeRect.left));
+
+    expect(queryButtonRect.center.dy, greaterThan(searchRect.center.dy));
     expect(createButtonRect.center.dy, closeTo(queryButtonRect.center.dy, 1));
     expect(
       roleManageButtonRect.center.dy,
@@ -1154,13 +1161,6 @@ void main() {
       exportTaskButtonRect.center.dy,
       closeTo(queryButtonRect.center.dy, 1),
     );
-
-    expect(statusRect.center.dy, lessThan(searchRect.center.dy));
-    expect(roleRect.center.dy, closeTo(statusRect.center.dy, 1));
-    expect(deletedScopeRect.center.dy, closeTo(statusRect.center.dy, 1));
-    expect(statusRect.left, lessThan(roleRect.left));
-    expect(roleRect.left, lessThan(deletedScopeRect.left));
-    expect(statusRect.top, lessThan(searchRect.top));
 
     expect(tester.takeException(), isNull);
   });

@@ -149,31 +149,24 @@ class UserFilterToolbar extends StatelessWidget {
           );
         }
 
-        final topRowButtons = Wrap(
+        final topRow = Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            searchField,
+            const SizedBox(width: spacing),
+            statusFilter,
+            const SizedBox(width: spacing),
+            roleFilter,
+            const SizedBox(width: spacing),
+            deletedScopeFilter,
+          ],
+        );
+        final bottomRow = Wrap(
           spacing: spacing,
           runSpacing: 8,
           alignment: WrapAlignment.end,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: actions,
-        );
-        final topRow = Wrap(
-          spacing: spacing,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [statusFilter, roleFilter, deletedScopeFilter],
-        );
-        final bottomRow = Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            searchField,
-            const SizedBox(width: spacing),
-            Expanded(
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: topRowButtons,
-              ),
-            ),
-          ],
         );
 
         return ConstrainedBox(
