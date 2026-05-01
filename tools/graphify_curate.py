@@ -180,13 +180,27 @@ _COMMUNITY_NOISE_PATTERNS = [
     re.compile(r"^Card$"),
     re.compile(r"^Text$"),
     re.compile(r"^fileExists$"),
+    re.compile(r"^dirExists$"),
     re.compile(r"^Base$"),
+    re.compile(r"^TimestampMixin$"),
+    re.compile(r"^ListTile$"),
+    re.compile(r"^jsonDecode$"),
+    re.compile(r"^ClipRect$"),
+    re.compile(r"^Divider$"),
+    re.compile(r"^Material$"),
+    re.compile(r"^Color$"),
+    re.compile(r"^Icon$"),
+    re.compile(r"^ServerTimeSnapshot$"),
     re.compile(r"^setUp", re.IGNORECASE),
     re.compile(r"^tearDown", re.IGNORECASE),
     re.compile(r"^test_", re.IGNORECASE),
     re.compile(r"^test[A-Z]", re.IGNORECASE),
     re.compile(r"_test\.(dart|py)$", re.IGNORECASE),
     re.compile(r"^(e7b9|e8a|e9|fa|a1|b2|c3|d4)[a-f0-9]{3,}_", re.IGNORECASE),
+    re.compile(r"Revision ID", re.IGNORECASE),
+    re.compile(r"Revises:", re.IGNORECASE),
+    re.compile(r"^Create Date:", re.IGNORECASE),
+    re.compile(r"recode process codes by stage", re.IGNORECASE),
     re.compile(r"^\d+_", re.IGNORECASE),
     re.compile(r"_page_test\.dart$", re.IGNORECASE),
     re.compile(r"_flow_test\.dart$", re.IGNORECASE),
@@ -198,7 +212,11 @@ _COMMUNITY_NOISE_PATTERNS = [
     re.compile(r"^didUpdateWidget$"),
     re.compile(r"^TimeSyncController$"),
     re.compile(r"^BackendCapacityGateUnitTest$"),
+    re.compile(r".*(UnitTest|IntegrationTest)$", re.IGNORECASE),
     re.compile(r"^(ApiException|ApiError|HttpException|SocketException)", re.IGNORECASE),
+    re.compile(r"^decode_access_token\(\)$"),
+    re.compile(r"^load_perf_sample_context\(\)$"),
+    re.compile(r"^module$", re.IGNORECASE),
 ]
 
 
@@ -228,15 +246,27 @@ def _name_communities(communities, comm_domain, comm_entities, rules):
 
         # 选择最合适的业务实体
         primary_entity = "unknown"
-        for entity, cnt in entities.most_common(30):
+        for entity, cnt in entities.most_common(50):
             if entity and entity != "unknown" and not _is_community_noise_entity(entity):
                 primary_entity = entity
                 break
 
+        # 如果主域是 tests，优先映射到被测业务域
+        if primary_domain == "tests":
+            # 从域名分布中找第二主要域
+            second_domains = [d for d, c in domains.most_common(5) if d != "tests"]
+            if second_domains:
+                mapped_domain = second_domains[0]
+                mapped_cn = domain_labels.get(mapped_domain, mapped_domain)
+                primary_entity_display = primary_entity if primary_entity != "unknown" else mapped_cn
+                name = f"测试支撑 - {mapped_cn} ({primary_entity_display})"
+                community_canonical[cid] = primary_domain
+                community_name_map[cid] = name
+                continue
+
         if primary_entity == "unknown":
-            # 用域中文名回退
             primary_entity = f"{domain_cn}模块"
-            name = f"{domain_cn} - 模块"
+            name = f"{domain_cn} - {primary_entity}"
         elif primary_domain == "unknown":
             name = fallback.format(community_id=cid)
         else:

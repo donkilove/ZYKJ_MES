@@ -23,6 +23,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GRAPHIFY_OUT = REPO_ROOT / "graphify-out"
 STAGING_DIR = GRAPHIFY_OUT / "staging"
+RAW_CACHE = GRAPHIFY_OUT / ".raw_cache"  # 原始 graphify 输出的安全缓存
+GRAPHIFY_VENV_PYTHON = REPO_ROOT / ".graphify-venv" / "Scripts" / "python.exe"
 RULES_PATH = REPO_ROOT / "tools" / "graphify_rules.json"
 
 CURATION_VERSION = "1.0.0"
@@ -135,21 +137,65 @@ def _get_graphify_version():
     }
 
 
+def step_graphify_update():
+    """运行 graphify update . 生成本轮原始图谱产物。"""
+    import subprocess
+    print("[P0] 运行 graphify update .  生成本轮原始产物 ...")
+
+    if GRAPHIFY_VENV_PYTHON.exists():
+        python_exe = str(GRAPHIFY_VENV_PYTHON)
+    else:
+        python_exe = sys.executable
+
+    try:
+        result = subprocess.run(
+            [python_exe, "-m", "graphify", "update", str(REPO_ROOT)],
+            capture_output=True, text=True, timeout=300, cwd=str(REPO_ROOT)
+        )
+        if result.returncode != 0:
+            stderr_short = result.stderr[:200] if result.stderr else ""
+            print(f"  [WARN] graphify update 返回码={result.returncode}: {stderr_short}")
+        else:
+            lines = result.stdout.splitlines()
+            for line in lines[-3:]:
+                print(f"  {line.strip()}")
+    except FileNotFoundError:
+        print("  [WARN] graphify 不可用，使用现有 graphify-out/graph.json 作为原始源")
+        return False
+    except Exception as e:
+        print(f"  [WARN] graphify update 异常: {e}")
+        return False
+    return True
+
+
 def step_copy_raw(manifest):
-    """将 Graphify 原始产物复制到 staging/raw/，注入 run_id。"""
+    """将 graphify update 生成的原始产物复制到 staging/raw/，注入 run_id 并缓存。
+    
+    来源：graphify-out/graph.json（由上一步 graphify update . 生成）
+    这是真正的原始 Graphify AST 提取结果，不含任何治理痕迹。
+    """
     print("[P0] 复制原始产物到 staging/raw/ ...")
+
     for src_name in ["graph.json", "GRAPH_REPORT.md"]:
         src = GRAPHIFY_OUT / src_name
         if not src.exists():
             print(f"  [WARN] {src_name} 不存在，跳过")
             continue
 
+        # 验证来源不是之前 curated 的结果（检查是否有 curation_action 字段）
+        if src_name == "graph.json":
+            data = json.loads(src.read_text(encoding="utf-8"))
+            first_node = data.get("nodes", [{}])[0] if data.get("nodes") else {}
+            if "curation_action" in first_node:
+                print(f"  [ERROR] graph.json 包含 curation_action 字段，说明来源是上一轮治理产物！")
+                print(f"  [ERROR] 请先运行 graphify update . 生成真实原始数据")
+                return False
+
         dst_name = src_name.replace(".json", ".raw.json").replace(".md", ".raw.md")
         dst = STAGING_DIR / "raw" / dst_name
         shutil.copy2(src, dst)
         print(f"  {src_name} -> staging/raw/{dst_name}")
 
-        # 对 raw graph.json 注入 run_id
         if src_name == "graph.json":
             raw_data = json.loads(dst.read_text(encoding="utf-8"))
             raw_data["run_id"] = manifest["run_id"]
@@ -159,7 +205,7 @@ def step_copy_raw(manifest):
             if "graph" in raw_data:
                 raw_data["graph"]["run_id"] = manifest["run_id"]
             dst.write_text(json.dumps(raw_data, indent=2, ensure_ascii=False), encoding="utf-8")
-            print(f"    run_id 已注入")
+            print(f"    run_id 已注入，原始边数={raw_data['edge_count']}")
 
     return True
 
@@ -293,27 +339,30 @@ def main():
     # 创建 staging 目录
     _ensure_staging_dirs()
 
-    # Step 1: 生成 manifest
+    # Step 1: 运行 graphify update 生成新鲜原始产物
+    step_graphify_update()
+
+    # Step 2: 生成 manifest
     manifest = step_generate_manifest()
 
-    # Step 2: 复制原始产物到 staging/raw
+    # Step 3: 复制新鲜原始产物到 staging/raw
     if not step_copy_raw(manifest):
         print("[失败] 原始产物复制失败，终止")
         sys.exit(1)
 
-    # Step 3: 治理
+    # Step 4: 治理
     result = step_curate(manifest)
     if result is None:
         print("[失败] 图谱治理失败，staging 已保留，正式产物未被覆盖")
         sys.exit(1)
 
-    # Step 4: 导航视图
+    # Step 5: 导航视图
     nav_result = step_navigation(manifest)
     if nav_result is None:
         print("[失败] 导航视图生成失败，staging 已保留，正式产物未被覆盖")
         sys.exit(1)
 
-    # Step 5: 原子替换
+    # Step 6: 原子替换
     step_atomic_replace()
 
     print("\n" + "=" * 60)
