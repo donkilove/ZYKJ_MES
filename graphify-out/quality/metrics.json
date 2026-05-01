@@ -1,0 +1,31 @@
+{
+  "raw_nodes": 7642,
+  "raw_links": 15125,
+  "curated_nodes": 6792,
+  "curated_links": 13594,
+  "nodes_dropped": 850,
+  "nodes_hidden_from_rank": 509,
+  "nodes_downweighted": 46,
+  "nodes_kept": 6237,
+  "domain_distribution": {
+    "tests": 1862,
+    "production": 734,
+    "authz": 722,
+    "craft": 596,
+    "frontend-core": 519,
+    "product": 505,
+    "equipment": 421,
+    "backend-core": 334,
+    "quality": 280,
+    "migrations": 269,
+    "message": 219,
+    "infrastructure": 179,
+    "unknown": 122,
+    "plugin": 30
+  },
+  "community_count": 170,
+  "community_name_coverage": 157,
+  "top20_business_ratio": 0.7,
+  "run_id": "20e9a93b-a615-45dd-a7e0-e7fcd5714ced",
+  "generated_at": "2026-05-01T16:31:03.767096+00:00"
+}
