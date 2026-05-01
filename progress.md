@@ -231,3 +231,23 @@
 - 已验证图谱查询：`.graphify-venv\Scripts\graphify.exe query "message service todo dashboard" --budget 1200` 可返回消息中心/待办相关测试和 schema 节点；中文业务词直接查询未命中，说明当前图谱主要是代码结构图，后续文档语义抽取需按子目录或明确范围分批执行。
 - 留痕文件：`evidence/2026-04-30_Graphify项目结构记忆接入.md`。
 - 提交前复核：`git diff --check` 退出码 0，仅 Git 行尾转换提示；`git status --short --untracked-files=all` 确认待提交范围为规则、Graphify 忽略配置、图谱报告/JSON、evidence 与计划/进度文件；`.graphify-venv/` 与 `graphify-out/cache/` 已忽略。
+
+## 2026-04-30 Graphify 项目记忆回写规则补强
+
+- 用户要求以后有关项目的记忆及时更新进 Graphify，并写入规则。
+- 已新增 `docs/project-memory/README.md`，作为 Graphify 可摄取的稳定项目记忆入口；稳定架构决策、模块关系、运行约定、工具约定和已验证业务流程事实写入此目录，任务流水继续留在 `evidence/`/`progress.md`。
+- 已更新根 `AGENTS.md` 与 `docs/AGENTS/10/30/40/50`：形成稳定项目记忆时必须写入 `docs/project-memory/`，并记录 Graphify 刷新或待语义更新状态；禁止把敏感信息、未验证猜测和一次性调试噪音写入项目记忆。
+
+## 2026-05-01 规则轻量化与指挥官模式移除
+
+- 用户确认规则可以明显减重，并明确要求彻底移除指挥官模式。
+- 已更新根 `AGENTS.md`、`docs/AGENTS/00/10/20/30/40/50` 与 `docs/project-memory/README.md`。
+- 当前规则口径已改为：
+  - 小任务不强制 `evidence/`、`update_plan`、`Sequential Thinking`。
+  - 复杂、跨模块、高风险、规则变更、排障超过 15 分钟或提交前，才要求更完整计划、留痕与验证。
+  - 指挥官模式彻底废止，`20-指挥官模式与工作流.md` 仅保留原路径，正文改为轻量工作流。
+  - `30` 分册由“门禁”改为“工具参考与验证建议”。
+  - `40` 分册改为触发式留痕。
+  - `50` 分册改为轻量模板，历史“指挥官模板”仅保留追溯用途。
+  - Graphify 项目记忆改为“有长期复用价值时写入”，不再要求每次任务都回写。
+- 本轮仅调整规则与文档，不修改业务代码，也不执行 Graphify 文档语义重抽取。
