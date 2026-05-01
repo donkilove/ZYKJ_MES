@@ -1423,7 +1423,7 @@ void main() {
     );
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -1474,9 +1474,9 @@ void main() {
       craftService: craftService,
     );
 
-    expect(find.byType(Table), findsNWidgets(2));
+    expect(find.byType(DataTable), findsNWidgets(2));
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -1522,7 +1522,7 @@ void main() {
     );
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -1556,7 +1556,7 @@ void main() {
     );
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -1600,7 +1600,7 @@ void main() {
     );
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -1643,7 +1643,7 @@ void main() {
     );
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -1700,7 +1700,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -1761,7 +1761,7 @@ void main() {
     );
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -1811,7 +1811,7 @@ void main() {
     expect(craftService.listStagesCalls, 1);
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -1841,9 +1841,9 @@ void main() {
       craftService: craftService,
     );
 
-    expect(find.byType(Table), findsNWidgets(2));
+    expect(find.byType(DataTable), findsNWidgets(2));
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -1873,7 +1873,7 @@ void main() {
     );
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -1903,7 +1903,7 @@ void main() {
     );
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -1937,7 +1937,7 @@ void main() {
     );
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -1974,7 +1974,7 @@ void main() {
     );
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -2014,7 +2014,7 @@ void main() {
     );
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -2050,7 +2050,7 @@ void main() {
     );
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -2088,7 +2088,7 @@ void main() {
     );
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -2148,7 +2148,7 @@ void main() {
     expect(find.text('已删除'), findsWidgets);
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -2190,7 +2190,7 @@ void main() {
     );
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -2227,7 +2227,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -2271,7 +2271,7 @@ void main() {
     expect(find.text('新建用户'), findsOneWidget);
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -2315,7 +2315,7 @@ void main() {
     expect(find.text('在线'), findsWidgets);
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -2351,7 +2351,7 @@ void main() {
     );
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -2390,7 +2390,7 @@ void main() {
     );
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -2424,7 +2424,7 @@ void main() {
     );
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -2462,7 +2462,7 @@ void main() {
     );
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);
@@ -2501,7 +2501,7 @@ void main() {
     );
 
     final rowActionMenu = find.descendant(
-      of: find.byType(Table),
+      of: find.byType(DataTable),
       matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
     );
     await tester.tap(rowActionMenu.first);

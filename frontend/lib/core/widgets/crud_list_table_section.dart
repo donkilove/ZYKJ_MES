@@ -18,9 +18,6 @@ class CrudListTableSection extends StatelessWidget {
     this.enableUnifiedHeaderStyle = false,
     this.shape = const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
     this.clipBehavior = Clip.hardEdge,
-    this.stickyHeader = false,
-    this.headerWidget,
-    this.bodyWidget,
   });
 
   final bool loading;
@@ -34,38 +31,20 @@ class CrudListTableSection extends StatelessWidget {
   final bool enableUnifiedHeaderStyle;
   final ShapeBorder shape;
   final Clip clipBehavior;
-  final bool stickyHeader;
-  final Widget? headerWidget;
-  final Widget? bodyWidget;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final Widget body;
 
     if (loading) {
       body = loadingWidget ?? const MesLoadingState();
     } else if (isEmpty) {
       body = emptyWidget ?? MesEmptyState(title: emptyText);
-    } else if (stickyHeader && headerWidget != null && bodyWidget != null) {
-      body = Column(
-        children: [
-          headerWidget!,
-          Expanded(
-            child: Scrollbar(
-              thumbVisibility: true,
-              child: bodyWidget!,
-            ),
-          ),
-        ],
-      );
     } else {
-      final content = enableUnifiedHeaderStyle
-          ? UnifiedListTableHeaderStyle.wrap(theme: theme, child: child)
-          : child;
       body = AdaptiveTableContainer(
         padding: contentPadding,
-        child: content,
+        enableUnifiedHeaderStyle: enableUnifiedHeaderStyle,
+        child: child,
       );
     }
 
