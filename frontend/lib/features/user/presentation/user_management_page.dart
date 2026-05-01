@@ -896,7 +896,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
     final isQuerying = _queryInFlight;
     final buttons = <Widget>[
       FilledButton.icon(
-        onPressed: _loading ? null : _applyFiltersAndReload,
+        onPressed: isQuerying ? null : _applyFiltersAndReload,
         icon: AnimatedSwitcher(
           duration: const Duration(milliseconds: 150),
           transitionBuilder: (child, animation) =>
@@ -920,8 +920,8 @@ class _UserManagementPageState extends State<UserManagementPage> {
     if (widget.canExport) {
       buttons.add(
         PopupMenuButton<String>(
-          enabled: !_loading,
-          onSelected: _loading
+          enabled: !_queryInFlight,
+          onSelected: _queryInFlight
               ? null
               : (value) => _showCreateExportTaskDialog(format: value),
           itemBuilder: (context) => const [
@@ -930,7 +930,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
           ],
           child: IgnorePointer(
             child: OutlinedButton.icon(
-              onPressed: _loading ? null : () {},
+              onPressed: _queryInFlight ? null : () {},
               icon: const Icon(Icons.download),
               label: const Text('导出当前筛选结果'),
             ),
@@ -939,7 +939,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
       );
       buttons.add(
         OutlinedButton.icon(
-          onPressed: _loading ? null : _showExportTaskDialog,
+          onPressed: _queryInFlight ? null : _showExportTaskDialog,
           icon: const Icon(Icons.history),
           label: const Text('导出任务'),
         ),
@@ -952,7 +952,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
   List<Widget> _buildBottomToolbarButtons() {
     final buttons = <Widget>[
       FilledButton.icon(
-        onPressed: (_loading || !widget.canCreateUser)
+        onPressed: (_queryInFlight || !widget.canCreateUser)
             ? null
             : () => showUserCreateDialog(
                 context: context,
@@ -971,7 +971,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
     if (widget.canImport) {
       buttons.add(
         OutlinedButton.icon(
-          onPressed: _loading
+          onPressed: _queryInFlight
               ? null
               : () => showUserImportDialog(
                   context: context,
