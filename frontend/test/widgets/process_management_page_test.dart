@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
-import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/craft/presentation/process_management_page.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
@@ -215,7 +215,8 @@ void main() {
     await _pumpProcessManagementPage(tester, size: const Size(1400, 1200));
 
     expect(tester.takeException(), isNull);
-    expect(find.byType(MesPageHeader), findsOneWidget);
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.byTooltip('刷新'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('process-management-feedback-banner')),
       findsOneWidget,

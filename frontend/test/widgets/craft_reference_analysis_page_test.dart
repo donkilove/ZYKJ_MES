@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/craft/presentation/craft_reference_analysis_page.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
@@ -196,6 +197,9 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.byTooltip('刷新'), findsOneWidget);
 
     await tester.tap(find.text('切割段'));
     await tester.pump();

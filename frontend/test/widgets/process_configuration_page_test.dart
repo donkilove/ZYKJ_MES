@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/craft/presentation/process_configuration_page.dart';
@@ -316,6 +317,8 @@ void main() {
       ],
     );
 
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.byTooltip('刷新'), findsOneWidget);
     expect(find.text('产品列表'), findsOneWidget);
     expect(find.text('模板工作区'), findsOneWidget);
     expect(find.text('未选择产品，当前不展示模板列表。'), findsOneWidget);

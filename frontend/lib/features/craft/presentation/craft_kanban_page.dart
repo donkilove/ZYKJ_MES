@@ -7,6 +7,7 @@ import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/craft/presentation/widgets/craft_kanban_action_dialogs.dart';
@@ -250,23 +251,17 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
   }
 
   Widget _buildHeader() {
-    return Row(
-      children: [
-        Text(
-          '工艺看板',
-          style: Theme.of(
-            context,
-          ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
-        ),
-        const Spacer(),
-        if (_loadingProducts || _loadingMetrics || _exporting)
+    final busy = _loadingProducts || _loadingMetrics || _exporting;
+    return MesRefreshPageHeader(
+      title: '工艺看板',
+      subtitle: '按产品、工段和工序观察工时与产能趋势。',
+      onRefresh: busy ? null : _loadProducts,
+      actionsBeforeRefresh: [
+        if (busy)
           const SizedBox(
             width: 20,
             height: 20,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: Colors.white,
-            ),
+            child: CircularProgressIndicator(strokeWidth: 2),
           ),
       ],
     );
@@ -377,11 +372,6 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
                           await _loadMetrics();
                         },
                 ),
-              ),
-              FilledButton.icon(
-                onPressed: busy ? null : _loadMetrics,
-                icon: const Icon(Icons.refresh),
-                label: const Text('刷新'),
               ),
               OutlinedButton.icon(
                 onPressed: busy ? null : _exportMetricsCsv,

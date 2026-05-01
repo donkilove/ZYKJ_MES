@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 
 class ProcessManagementPageHeader extends StatelessWidget {
   const ProcessManagementPageHeader({
@@ -20,16 +20,11 @@ class ProcessManagementPageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MesPageHeader(
+    return MesRefreshPageHeader(
       title: '工序管理',
       subtitle: '统一维护工段、小工序及 jump 定位工作台。',
-      actions: [
-        OutlinedButton.icon(
-          key: const ValueKey('process-management-refresh-button'),
-          onPressed: loading ? null : onRefresh,
-          icon: const Icon(Icons.refresh),
-          label: const Text('刷新'),
-        ),
+      onRefresh: loading ? null : onRefresh,
+      actionsBeforeRefresh: [
         FilledButton.icon(
           key: const ValueKey('process-management-create-stage-button'),
           onPressed: loading || !canWrite ? null : onCreateStage,

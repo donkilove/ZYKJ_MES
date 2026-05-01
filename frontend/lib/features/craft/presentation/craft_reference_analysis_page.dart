@@ -4,6 +4,7 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 
@@ -325,21 +326,10 @@ class _CraftReferenceAnalysisPageState
   }
 
   Widget _buildHeader() {
-    return Row(
-      children: [
-        Text(
-          '工艺引用分析',
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-        ),
-        const Spacer(),
-        IconButton(
-          tooltip: '刷新',
-          onPressed: _loadingBase ? null : _loadBaseData,
-          icon: const Icon(Icons.refresh),
-        ),
-      ],
+    return MesRefreshPageHeader(
+      title: '引用分析',
+      subtitle: '按工段、工序、模板和产品追踪下游引用与跳转来源。',
+      onRefresh: _loadingBase ? null : _loadBaseData,
     );
   }
 

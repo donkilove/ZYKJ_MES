@@ -1554,6 +1554,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     return MesCrudPageScaffold(
       header: MesRefreshPageHeader(
         title: '生产工序配置',
+        subtitle: '统一管理系统母版、产品模板与版本工作区。',
         onRefresh: _loading ? null : _loadData,
       ),
       content: LayoutBuilder(
