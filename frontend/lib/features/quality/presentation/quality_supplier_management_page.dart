@@ -187,7 +187,6 @@ class _QualitySupplierManagementPageState
         children: [
           Expanded(
             child: QualitySupplierManagementPageHeader(
-              total: _total,
               loading: _loading,
               onRefresh: _loadSuppliers,
               onCreate: () => _showEditDialog(),

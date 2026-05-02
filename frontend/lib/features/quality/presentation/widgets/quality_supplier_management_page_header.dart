@@ -4,13 +4,11 @@ import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 class QualitySupplierManagementPageHeader extends StatelessWidget {
   const QualitySupplierManagementPageHeader({
     super.key,
-    required this.total,
     required this.loading,
     required this.onRefresh,
     required this.onCreate,
   });
 
-  final int total;
   final bool loading;
   final VoidCallback onRefresh;
   final VoidCallback onCreate;
@@ -21,7 +19,6 @@ class QualitySupplierManagementPageHeader extends StatelessWidget {
       key: const ValueKey('quality-supplier-management-page-header'),
       child: MesRefreshPageHeader(
         title: '供应商管理',
-        subtitle: '统一管理质量供应商与状态。当前共 $total 条。',
         onRefresh: loading ? null : onRefresh,
         actionsBeforeRefresh: [
           FilledButton.icon(

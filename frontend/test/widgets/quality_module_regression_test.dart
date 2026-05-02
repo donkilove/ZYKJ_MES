@@ -940,6 +940,7 @@ void main() {
     );
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(find.text('刷新页面'), findsNothing);
+    expect(find.text('统一查看缺陷分布与分析结果。'), findsNothing);
   });
 
   testWidgets('质量趋势页接入统一页头锚点', (tester) async {
@@ -957,6 +958,7 @@ void main() {
     );
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(find.text('刷新页面'), findsNothing);
+    expect(find.text('统一查看趋势图与时间范围统计。'), findsNothing);
   });
 
   testWidgets('质量维修订单包装页不再额外嵌套页头', (tester) async {

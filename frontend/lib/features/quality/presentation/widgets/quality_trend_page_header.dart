@@ -23,7 +23,6 @@ class QualityTrendPageHeader extends StatelessWidget {
       key: const ValueKey('quality-trend-page-header'),
       child: MesRefreshPageHeader(
         title: '质量趋势',
-        subtitle: '统一查看趋势图与时间范围统计。',
         onRefresh: loading ? null : onRefresh,
         actionsBeforeRefresh: [
           if (canExport)

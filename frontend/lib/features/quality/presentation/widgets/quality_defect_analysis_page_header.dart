@@ -23,7 +23,6 @@ class QualityDefectAnalysisPageHeader extends StatelessWidget {
       key: const ValueKey('quality-defect-analysis-page-header'),
       child: MesRefreshPageHeader(
         title: '不良分析',
-        subtitle: '统一查看缺陷分布与分析结果。',
         onRefresh: loading ? null : onRefresh,
         actionsBeforeRefresh: [
           if (canExport)

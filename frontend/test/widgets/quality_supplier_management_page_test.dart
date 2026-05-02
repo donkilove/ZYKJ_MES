@@ -76,6 +76,7 @@ void main() {
     );
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(find.text('刷新页面'), findsNothing);
+    expect(find.textContaining('统一管理质量供应商与状态'), findsNothing);
   });
 
   testWidgets('供应商管理页可完成新增编辑', (tester) async {
