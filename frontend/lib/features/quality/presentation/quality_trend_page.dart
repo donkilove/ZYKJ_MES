@@ -8,10 +8,14 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/services/export_file_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
-import 'package:mes_client/core/widgets/crud_list_table_section.dart';
+import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
+import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
 import 'package:mes_client/features/quality/presentation/widgets/quality_trend_page_header.dart';
+import 'package:mes_client/features/quality/presentation/widgets/quality_workbench_filter_panel.dart';
+import 'package:mes_client/features/quality/presentation/widgets/quality_workbench_summary_grid.dart';
 import 'package:mes_client/features/quality/services/quality_service.dart';
 
 class QualityTrendPage extends StatefulWidget {
@@ -233,90 +237,111 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
   }
 
   Widget _buildFilterBar() {
-    return Wrap(
-      spacing: 12,
-      runSpacing: 8,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        OutlinedButton.icon(
-          onPressed: _loading
-              ? null
-              : () => _pickDate(
-                    current: _startDate,
-                    helpText: '选择开始日期',
-                    onChanged: (v) => setState(() => _startDate = v),
+    return QualityWorkbenchFilterPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _loading
+                    ? null
+                    : () => _pickDate(
+                        current: _startDate,
+                        helpText: '选择开始日期',
+                        onChanged: (v) => setState(() => _startDate = v),
+                      ),
+                icon: const Icon(Icons.event),
+                label: Text('开始：${_formatDate(_startDate)}'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _loading
+                    ? null
+                    : () => _pickDate(
+                        current: _endDate,
+                        helpText: '选择结束日期',
+                        onChanged: (v) => setState(() => _endDate = v),
+                      ),
+                icon: const Icon(Icons.event_available),
+                label: Text('结束：${_formatDate(_endDate)}'),
+              ),
+              FilledButton.icon(
+                onPressed: _loading ? null : _loadTrend,
+                icon: const Icon(Icons.search),
+                label: const Text('查询'),
+              ),
+              if (widget.canExport)
+                OutlinedButton.icon(
+                  onPressed: (_loading || _exporting) ? null : _exportTrend,
+                  icon: const Icon(Icons.download),
+                  label: const Text('导出'),
+                ),
+              DropdownButton<String?>(
+                value: _resultFilter,
+                hint: const Text('全部结果'),
+                items: const [
+                  DropdownMenuItem(value: null, child: Text('全部结果')),
+                  DropdownMenuItem(value: 'passed', child: Text('合格')),
+                  DropdownMenuItem(value: 'failed', child: Text('不合格')),
+                ],
+                onChanged: _loading
+                    ? null
+                    : (v) => setState(() => _resultFilter = v),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              SizedBox(
+                width: 220,
+                child: TextField(
+                  controller: _productController,
+                  decoration: const InputDecoration(
+                    labelText: '产品名称',
+                    border: OutlineInputBorder(),
+                    isDense: true,
                   ),
-          icon: const Icon(Icons.event),
-          label: Text('开始：${_formatDate(_startDate)}'),
-        ),
-        OutlinedButton.icon(
-          onPressed: _loading
-              ? null
-              : () => _pickDate(
-                    current: _endDate,
-                    helpText: '选择结束日期',
-                    onChanged: (v) => setState(() => _endDate = v),
+                  onSubmitted: (_) => _loadTrend(),
+                ),
+              ),
+              SizedBox(
+                width: 220,
+                child: TextField(
+                  controller: _processController,
+                  decoration: const InputDecoration(
+                    labelText: '工序编码',
+                    border: OutlineInputBorder(),
+                    isDense: true,
                   ),
-          icon: const Icon(Icons.event_available),
-          label: Text('结束：${_formatDate(_endDate)}'),
-        ),
-        SizedBox(
-          width: 130,
-          child: TextField(
-            controller: _productController,
-            decoration: const InputDecoration(
-              labelText: '产品名称',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            onSubmitted: (_) => _loadTrend(),
+                  onSubmitted: (_) => _loadTrend(),
+                ),
+              ),
+              SizedBox(
+                width: 220,
+                child: TextField(
+                  controller: _operatorController,
+                  decoration: const InputDecoration(
+                    labelText: '操作员',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onSubmitted: (_) => _loadTrend(),
+                ),
+              ),
+            ],
           ),
-        ),
-        SizedBox(
-          width: 120,
-          child: TextField(
-            controller: _processController,
-            decoration: const InputDecoration(
-              labelText: '工序编码',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            onSubmitted: (_) => _loadTrend(),
-          ),
-        ),
-        SizedBox(
-          width: 120,
-          child: TextField(
-            controller: _operatorController,
-            decoration: const InputDecoration(
-              labelText: '操作员',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            onSubmitted: (_) => _loadTrend(),
-          ),
-        ),
-        DropdownButton<String?>(
-          value: _resultFilter,
-          hint: const Text('全部结果'),
-          items: const [
-            DropdownMenuItem(value: null, child: Text('全部结果')),
-            DropdownMenuItem(value: 'passed', child: Text('合格')),
-            DropdownMenuItem(value: 'failed', child: Text('不合格')),
-          ],
-          onChanged: _loading ? null : (v) => setState(() => _resultFilter = v),
-        ),
-        FilledButton.icon(
-          onPressed: _loading ? null : _loadTrend,
-          icon: const Icon(Icons.search),
-          label: const Text('查询'),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _buildSummaryCards(BuildContext context) {
-    final theme = Theme.of(context);
+  Widget _buildSummaryCards() {
     final overallPassRate =
         _overview?.passRatePercent ??
         _ratioPercent(_totalPassedCount, _totalFirstArticleCount);
@@ -328,41 +353,57 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
       ('报废率', _formatMetricPercent(scrapRate), '报废占首件总数'),
       ('维修占比', _formatMetricPercent(repairShare), '维修占首件总数'),
     ];
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      children: cards
-          .map(
-            (card) => SizedBox(
-              width: 220,
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        card.$1,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        card.$2,
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(card.$3, style: theme.textTheme.bodySmall),
-                    ],
-                  ),
+    return MesSectionCard(
+      title: '质量总览',
+      child: QualityWorkbenchSummaryGrid(
+        children: cards
+            .map(
+              (card) => SizedBox(
+                width: 220,
+                child: MesMetricCard(
+                  label: card.$1,
+                  value: card.$2,
+                  hint: card.$3,
                 ),
               ),
+            )
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _buildTrendOverviewSection() {
+    return MesSectionCard(
+      title: '趋势概览',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_items.length >= 2) ...[
+            _buildChart(),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 16,
+              runSpacing: 8,
+              children: [
+                _legendDot(Colors.green, '通过'),
+                _legendDot(Colors.red, '不通过'),
+                _legendDot(Colors.deepOrange, '不良'),
+                _legendDot(Colors.orange, '报废'),
+                _legendDot(Colors.purple, '维修'),
+              ],
             ),
-          )
-          .toList(),
+            const SizedBox(height: 12),
+            _buildPassRateChart(),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 16,
+              children: [_legendDot(Colors.blue, '通过率趋势')],
+            ),
+            const SizedBox(height: 12),
+          ],
+          _buildTrendTable(),
+        ],
+      ),
     );
   }
 
@@ -645,14 +686,6 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '维度观察',
-          style: Theme.of(context)
-              .textTheme
-              .titleMedium
-              ?.copyWith(fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 12),
         _buildProductStatsCard(),
         const SizedBox(height: 12),
         _buildProcessStatsCard(),
@@ -672,38 +705,34 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
     required ValueChanged<int> onPageChanged,
     required String emptyText,
   }) {
-    return SizedBox(
-      height: 320,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: Theme.of(context)
-                .textTheme
-                .titleSmall
-                ?.copyWith(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: CrudListTableSection(
-              cardKey: cardKey,
-              loading: _loading,
-              isEmpty: rows.isEmpty,
-              emptyText: emptyText,
-              child: DataTable(columns: columns, rows: rows),
+    return MesSectionCard(
+      title: title,
+      child: SizedBox(
+        height: 320,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: CrudListTableSection(
+                cardKey: cardKey,
+                loading: _loading,
+                isEmpty: rows.isEmpty,
+                emptyText: emptyText,
+                enableUnifiedHeaderStyle: true,
+                child: DataTable(columns: columns, rows: rows),
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          MesPaginationBar(
-            page: page,
-            totalPages: _totalPagesFor(total),
-            total: total,
-            loading: _loading,
-            onPrevious: () => onPageChanged(page - 1),
-            onNext: () => onPageChanged(page + 1),
-          ),
-        ],
+            const SizedBox(height: 12),
+            MesPaginationBar(
+              page: page,
+              totalPages: _totalPagesFor(total),
+              total: total,
+              loading: _loading,
+              onPrevious: () => onPageChanged(page - 1),
+              onNext: () => onPageChanged(page + 1),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -888,32 +917,9 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
   Widget _buildMainContent() {
     return ListView(
       children: [
-        if (_items.length >= 2) ...[
-          _buildChart(),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 16,
-            runSpacing: 8,
-            children: [
-              _legendDot(Colors.green, '通过'),
-              _legendDot(Colors.red, '不通过'),
-              _legendDot(Colors.deepOrange, '不良'),
-              _legendDot(Colors.orange, '报废'),
-              _legendDot(Colors.purple, '维修'),
-            ],
-          ),
-          const SizedBox(height: 12),
-          _buildPassRateChart(),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 16,
-            children: [_legendDot(Colors.blue, '通过率趋势')],
-          ),
-          const SizedBox(height: 12),
-        ],
-        _buildDimensionSection(),
+        _buildTrendOverviewSection(),
         const SizedBox(height: 12),
-        _buildTrendTable(),
+        _buildDimensionSection(),
       ],
     );
   }
@@ -944,7 +950,7 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
         onExport: _exportTrend,
       ),
       filters: _buildFilterBar(),
-      banner: _buildSummaryCards(context),
+      banner: _buildSummaryCards(),
       content: _loading
           ? const MesLoadingState(label: '质量趋势加载中...')
           : _buildMainContent(),

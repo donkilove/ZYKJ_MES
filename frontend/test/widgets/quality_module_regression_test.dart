@@ -6,6 +6,7 @@ import 'package:file_selector_platform_interface/file_selector_platform_interfac
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/ui/patterns/mes_filter_bar.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
@@ -944,6 +945,10 @@ void main() {
   });
 
   testWidgets('质量趋势页接入统一页头锚点', (tester) async {
+    _setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(
       _wrapBody(
         QualityTrendPage(session: session, onLogout: () {}, canExport: true),
@@ -959,6 +964,49 @@ void main() {
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(find.text('刷新页面'), findsNothing);
     expect(find.text('统一查看趋势图与时间范围统计。'), findsNothing);
+  });
+
+  testWidgets('质量数据页第一页批改版后仍接入统一页头和工作台骨架', (tester) async {
+    _setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _wrapBody(
+        QualityDataPage(
+          session: session,
+          onLogout: () {},
+          service: _FakeQualityService(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.byType(MesFilterBar), findsOneWidget);
+  });
+
+  testWidgets('质量趋势页第一页批改版后仍接入统一页头和工作台骨架', (tester) async {
+    _setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _wrapBody(
+        QualityTrendPage(
+          session: session,
+          onLogout: () {},
+          service: _FakeQualityService(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('quality-trend-page-header')),
+      findsOneWidget,
+    );
+    expect(find.byType(MesFilterBar), findsOneWidget);
   });
 
   testWidgets('质量维修订单包装页不再额外嵌套页头', (tester) async {

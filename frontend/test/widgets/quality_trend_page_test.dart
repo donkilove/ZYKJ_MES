@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/ui/patterns/mes_filter_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
 import 'package:mes_client/features/quality/presentation/quality_trend_page.dart';
 import 'package:mes_client/features/quality/services/quality_service.dart';
@@ -207,5 +210,33 @@ void main() {
     expect(find.text('按人员对比'), findsOneWidget);
     expect(find.text('张三'), findsOneWidget);
     expect(find.text('维修'), findsOneWidget);
+  });
+
+  testWidgets('质量趋势页首屏使用统一工作台骨架并突出趋势主体', (tester) async {
+    final service = _FakeQualityTrendService();
+
+    await pumpPage(tester, service);
+
+    expect(find.byType(MesFilterBar), findsOneWidget);
+    expect(find.byType(MesMetricCard), findsAtLeastNWidgets(4));
+    expect(find.text('筛选控制台'), findsOneWidget);
+    expect(find.text('质量总览'), findsOneWidget);
+    expect(find.text('趋势概览'), findsOneWidget);
+    expect(find.byType(MesSectionCard), findsAtLeastNWidgets(4));
+  });
+
+  testWidgets('质量趋势页首屏先展示趋势主体再展示维度对比', (tester) async {
+    final service = _FakeQualityTrendService();
+
+    await pumpPage(tester, service);
+
+    final trendTitle = find.text('趋势概览');
+    final productTitle = find.text('按产品对比');
+    expect(trendTitle, findsOneWidget);
+    expect(productTitle, findsOneWidget);
+    expect(
+      tester.getTopLeft(trendTitle).dy,
+      lessThan(tester.getTopLeft(productTitle).dy),
+    );
   });
 }
