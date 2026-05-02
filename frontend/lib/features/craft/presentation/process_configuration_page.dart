@@ -83,7 +83,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
   List<CraftProcessItem> _processes = const [];
   List<CraftTemplateItem> _templates = const [];
   CraftSystemMasterTemplateItem? _systemMasterTemplate;
-  bool _systemMasterExpanded = true;
+  bool _systemMasterExpanded = false;
   final Map<int, CraftTemplateDetail> _detailCache = {};
   int? _focusedTemplateId;
   String _jumpNotice = '';
@@ -166,8 +166,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       if (!mounted) {
         return;
       }
-      final hadSystemMaster = _systemMasterTemplate != null;
-      final hasSystemMaster = systemMasterTemplate != null;
       setState(() {
         _products = [...products]..sort((a, b) => a.name.compareTo(b.name));
         _stages = [...stageResult.items]
@@ -183,11 +181,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         _templates = [...templateResult.items]
           ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
         _systemMasterTemplate = systemMasterTemplate;
-        if (!hasSystemMaster) {
-          _systemMasterExpanded = true;
-        } else if (!hadSystemMaster) {
-          _systemMasterExpanded = false;
-        }
         if (_productFilterId != null &&
             !_products.any((item) => item.id == _productFilterId)) {
           _productFilterId = null;

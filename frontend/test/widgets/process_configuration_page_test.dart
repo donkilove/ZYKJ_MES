@@ -392,6 +392,17 @@ void main() {
     expect(find.text('未配置默认模板'), findsOneWidget);
   });
 
+  testWidgets('系统母版管理首次渲染时默认折叠', (tester) async {
+    await pumpPage(tester);
+
+    final tile = tester.widget<ExpansionTile>(
+      find.byKey(const PageStorageKey<String>('system-master-management-tile')),
+    );
+
+    expect(tile.initiallyExpanded, isFalse);
+    expect(find.byKey(const Key('system-master-summary-section')), findsNothing);
+  });
+
   testWidgets('产品列表为可滚动区域且仍可切换到后续产品', (tester) async {
     final products = List.generate(
       10,
