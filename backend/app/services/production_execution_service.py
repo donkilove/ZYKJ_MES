@@ -399,6 +399,8 @@ def _is_start_gate_allowed(
     )
     if previous_process is None:
         return True
+    if not order.pipeline_enabled:
+        return True
     if is_pipeline_parallel_edge_for_processes(
         order=order,
         previous_process_code=previous_process.process_code,
@@ -424,6 +426,8 @@ def _is_end_gate_allowed(
         process_order=process_row.process_order,
     )
     if previous_process is None:
+        return True
+    if not order.pipeline_enabled:
         return True
     if is_pipeline_parallel_edge_for_processes(
         order=order,

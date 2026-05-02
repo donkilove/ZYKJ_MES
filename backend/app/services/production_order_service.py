@@ -351,6 +351,8 @@ def is_pipeline_start_allowed_for_process(
     previous_process = _find_previous_process_row(order=order, process_row=process_row)
     if previous_process is None:
         return True
+    if not order.pipeline_enabled:
+        return True
     if _is_parallel_edge_enabled(
         order=order,
         previous_process_code=previous_process.process_code,
@@ -367,6 +369,8 @@ def is_pipeline_end_allowed_for_process(
 ) -> bool:
     previous_process = _find_previous_process_row(order=order, process_row=process_row)
     if previous_process is None:
+        return True
+    if not order.pipeline_enabled:
         return True
     if _is_parallel_edge_enabled(
         order=order,
