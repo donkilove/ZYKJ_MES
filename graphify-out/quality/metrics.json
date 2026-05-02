@@ -1,18 +1,18 @@
 {
   "raw": {
-    "node_count": 7715,
-    "edge_count": 15629
+    "node_count": 7732,
+    "edge_count": 15644
   },
   "curated": {
-    "node_count": 6864,
-    "edge_count": 14091
+    "node_count": 6881,
+    "edge_count": 14105
   },
   "nodes_dropped": 851,
-  "nodes_hidden_from_rank": 511,
+  "nodes_hidden_from_rank": 513,
   "nodes_downweighted": 46,
-  "nodes_kept": 6307,
+  "nodes_kept": 6322,
   "domain_distribution": {
-    "tests": 1862,
+    "tests": 1869,
     "production": 734,
     "authz": 723,
     "craft": 596,
@@ -22,14 +22,14 @@
     "backend-core": 334,
     "quality": 280,
     "migrations": 269,
-    "infrastructure": 250,
+    "infrastructure": 260,
     "message": 219,
     "unknown": 122,
     "plugin": 30
   },
-  "community_count": 174,
-  "community_name_coverage": 163,
+  "community_count": 183,
+  "community_name_coverage": 174,
   "top20_business_ratio": 0.7,
-  "run_id": "cf3bd2be-8c51-425f-ac1c-2ea076a11592",
-  "generated_at": "2026-05-01T17:09:17.643654+00:00"
+  "run_id": "e92e75ea-78e5-4617-bee2-594af9014a12",
+  "generated_at": "2026-05-02T01:50:25.228903+00:00"
 }

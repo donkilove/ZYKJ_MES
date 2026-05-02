@@ -231,6 +231,68 @@
       "EquipmentLedgerItem", "MaintenanceItemEntry", "ProductionOrder",
       "Role", "Product", "Process", "QualityInspection", "AppSession", "User"
     ],
+    "contract_supplements": {
+      "EquipmentLedgerItem": {
+        "schemas": ["backend/app/schemas/equipment.py"],
+        "frontend_services": [
+          "frontend/lib/features/equipment/services/equipment_service.dart"
+        ],
+        "endpoints": [
+          "backend/app/api/v1/endpoints/equipment.py"
+        ],
+        "frontend_models": [
+          "frontend/lib/features/equipment/models/equipment_models.dart"
+        ],
+        "frontend_pages": [
+          "frontend/lib/features/equipment/presentation/equipment_ledger_page.dart",
+          "frontend/lib/features/equipment/presentation/equipment_page.dart"
+        ],
+        "tests": [
+          "frontend/test/widgets/equipment_module_pages_test.dart",
+          "frontend/test/services/equipment_service_test.dart",
+          "frontend/integration_test/login_flow_test.dart"
+        ]
+      },
+      "MaintenanceItemEntry": {
+        "schemas": ["backend/app/schemas/equipment.py"],
+        "frontend_services": [
+          "frontend/lib/features/equipment/services/equipment_service.dart"
+        ],
+        "endpoints": [
+          "backend/app/api/v1/endpoints/equipment.py"
+        ],
+        "frontend_models": [
+          "frontend/lib/features/equipment/models/equipment_models.dart"
+        ],
+        "frontend_pages": [
+          "frontend/lib/features/equipment/presentation/maintenance_item_page.dart",
+          "frontend/lib/features/equipment/presentation/maintenance_plan_page.dart"
+        ],
+        "tests": [
+          "frontend/test/widgets/equipment_module_pages_test.dart",
+          "frontend/test/models/equipment_models_test.dart",
+          "frontend/test/services/equipment_service_test.dart"
+        ]
+      },
+      "AppSession": {
+        "frontend_services": [
+          "frontend/lib/features/auth/services/auth_service.dart",
+          "frontend/lib/core/services/page_catalog_service.dart"
+        ],
+        "frontend_models": [
+          "frontend/lib/core/models/app_session.dart"
+        ],
+        "frontend_pages": [
+          "frontend/lib/main.dart",
+          "frontend/lib/features/misc/presentation/login_page.dart"
+        ],
+        "tests": [
+          "frontend/test/models/app_session_test.dart",
+          "frontend/test/widgets/main_shell_page_test.dart",
+          "frontend/integration_test/login_flow_test.dart"
+        ]
+      }
+    },
     "impact_objects": [
       "ProductionOrder", "Equipment", "Role", "AppSession", "Product",
       "Process", "QualityInspection", "User"

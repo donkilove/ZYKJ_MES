@@ -162,25 +162,88 @@ def _search_layer_nodes(graph, label_substr, layer):
     return results
 
 
-def _build_supplementary_chain(graph, obj_name, main_node, node_map):
+def _find_nodes_by_path_patterns(graph, patterns):
+    results = []
+    seen = set()
+    for pattern in patterns:
+        for n in graph.get("nodes", []):
+            sf = _normalize_path(n.get("source_file", ""))
+            if pattern.lower() not in sf.lower():
+                continue
+            lbl = n.get("label", "") or ""
+            if _is_text_noise(lbl):
+                continue
+            key = (sf, lbl)
+            if key in seen:
+                continue
+            seen.add(key)
+            results.append(n)
+    return results
+
+
+def _camel_tokens(name):
+    if not name:
+        return []
+    parts = re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)", name)
+    return [p.lower() for p in parts if p]
+
+
+def _sort_nodes_by_relevance(nodes, obj_name):
+    tokens = _camel_tokens(obj_name)
+
+    def _score(node):
+        label = (node.get("label", "") or "").lower()
+        source_file = _normalize_path(node.get("source_file", "")).lower()
+        score = 0
+        if label == obj_name.lower():
+            score += 100
+        for token in tokens:
+            if token in label:
+                score += 10
+            if token in source_file:
+                score += 3
+        return (-score, source_file, label)
+
+    return sorted(nodes, key=_score)
+
+
+def _build_supplementary_chain(graph, obj_name, main_node, node_map, rules):
     """对边不足的对象，构建导航层补充链路（按文件名/域匹配而非图的边）。"""
     lines = []
     lines.append("")
     lines.append("### 导航补充链路 [导航推断，非原始图边]")
     lines.append("")
 
+    supplement_rules = rules.get("navigation_rules", {}).get("contract_supplements", {})
+    object_rules = supplement_rules.get(obj_name, {})
+
     layers_report = []
-    for layer_name, layer_label in [
+    layer_specs = [
         ("models", "后端数据模型"),
         ("schemas", "后端 Schema/DTO"),
         ("services", "后端 Service"),
+        ("frontend_services", "前端 Service"),
         ("endpoints", "后端 API 端点"),
         ("api", "后端 API 汇聚"),
         ("frontend_models", "前端 Model"),
         ("frontend_pages", "前端页面/Widget"),
         ("tests", "测试覆盖"),
-    ]:
-        nodes = _search_layer_nodes(graph, obj_name, layer_name)
+    ]
+    use_explicit_only = bool(object_rules)
+    for layer_name, layer_label in layer_specs:
+        path_patterns = object_rules.get(layer_name, [])
+        if path_patterns:
+            nodes = _sort_nodes_by_relevance(
+                _find_nodes_by_path_patterns(graph, path_patterns),
+                obj_name,
+            )
+        elif use_explicit_only:
+            continue
+        else:
+            nodes = _sort_nodes_by_relevance(
+                _search_layer_nodes(graph, obj_name, layer_name),
+                obj_name,
+            )
         if nodes:
             dedup_files = set()
             for n in nodes[:5]:
@@ -233,7 +296,7 @@ def _generate_entrypoints(graph, rules, node_map):
                 seen_files.add(sf)
                 if shown < 20:
                     dom = n.get("domain_tag", "?")
-                    lines.append(f"- `{lbl}` — `sf` — 域:`{dom}`")
+                    lines.append(f"- `{lbl}` — `{sf}` — 域:`{dom}`")
                     shown += 1
         if shown == 0:
             lines.append("_（未匹配到入口节点）_")
@@ -303,7 +366,7 @@ def _generate_contract_chains(graph, rules, node_map):
 
         # 补充导航推断链
         if total <= 3:
-            supp = _build_supplementary_chain(graph, obj_name, main_node, node_map)
+            supp = _build_supplementary_chain(graph, obj_name, main_node, node_map, rules)
             lines.append(supp)
 
         lines.append("")

@@ -109,8 +109,9 @@ def _get_graphify_version():
     available = False
 
     try:
+        python_exe = str(GRAPHIFY_VENV_PYTHON) if GRAPHIFY_VENV_PYTHON.exists() else sys.executable
         result = subprocess.run(
-            [sys.executable, "-m", "graphify", "--version"],
+            [python_exe, "-m", "graphify", "--version"],
             capture_output=True, text=True, timeout=10
         )
         if result.returncode == 0 and result.stdout.strip():

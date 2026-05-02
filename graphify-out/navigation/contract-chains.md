@@ -14,10 +14,14 @@
 
 ### 导航补充链路 [导航推断，非原始图边]
 
-- [后端数据模型] `EquipmentLedgerItem` — `frontend/lib/features/equipment/models/equipment_models.dart`
 - [后端 Schema/DTO] `EquipmentLedgerItem` — `backend/app/schemas/equipment.py`
+- [前端 Service] `EquipmentLedgerListResult` — `frontend/lib/features/equipment/services/equipment_service.dart`
+- [后端 API 端点] `create_equipment_ledger()` — `backend/app/api/v1/endpoints/equipment.py`
 - [前端 Model] `EquipmentLedgerItem` — `frontend/lib/features/equipment/models/equipment_models.dart`
-- [测试覆盖] `_buildEquipmentLedgerItem` — `frontend/test/widgets/equipment_module_pages_test.dart`
+- [前端页面/Widget] `_EquipmentLedgerPageState` — `frontend/lib/features/equipment/presentation/equipment_ledger_page.dart`
+- [前端页面/Widget] `_EquipmentPageState` — `frontend/lib/features/equipment/presentation/equipment_page.dart`
+- [测试覆盖] `EquipmentLedgerItem` — `frontend/test/widgets/equipment_module_pages_test.dart`
+- [测试覆盖] `EquipmentLedgerListResult` — `frontend/integration_test/login_flow_test.dart`
 
 
 ## MaintenanceItemEntry
@@ -31,10 +35,13 @@
 
 ### 导航补充链路 [导航推断，非原始图边]
 
-- [后端数据模型] `MaintenanceItemEntry` — `frontend/lib/features/equipment/models/equipment_models.dart`
 - [后端 Schema/DTO] `MaintenanceItemEntry` — `backend/app/schemas/equipment.py`
+- [前端 Service] `MaintenanceItemListResult` — `frontend/lib/features/equipment/services/equipment_service.dart`
+- [后端 API 端点] `create_maintenance_item_api()` — `backend/app/api/v1/endpoints/equipment.py`
 - [前端 Model] `MaintenanceItemEntry` — `frontend/lib/features/equipment/models/equipment_models.dart`
-- [测试覆盖] `_buildMaintenanceItemEntry` — `frontend/test/widgets/equipment_module_pages_test.dart`
+- [前端页面/Widget] `_MaintenanceItemPageState` — `frontend/lib/features/equipment/presentation/maintenance_item_page.dart`
+- [前端页面/Widget] `_MaintenancePlanPageState` — `frontend/lib/features/equipment/presentation/maintenance_plan_page.dart`
+- [测试覆盖] `MaintenanceItemEntry` — `frontend/test/widgets/equipment_module_pages_test.dart`
 
 
 ## ProductionOrder
@@ -292,11 +299,12 @@
 
 ### 导航补充链路 [导航推断，非原始图边]
 
-- [后端数据模型] `AppSession` — `frontend/lib/core/models/app_session.dart`
+- [前端 Service] `_extractErrorMessage` — `frontend/lib/core/services/page_catalog_service.dart`
+- [前端 Service] `_extractErrorMessage` — `frontend/lib/features/auth/services/auth_service.dart`
 - [前端 Model] `AppSession` — `frontend/lib/core/models/app_session.dart`
-- [测试覆盖] `AppSession` — `frontend/test/widgets/product_module_issue_regression_test.dart`
-- [测试覆盖] `AppSession` — `frontend/test/widgets/product_module_second_wave_guard_test.dart`
-- [测试覆盖] `AppSession` — `frontend/test/widgets/product_page_test.dart`
+- [前端页面/Widget] `_AppBootstrapPageState` — `frontend/lib/main.dart`
+- [前端页面/Widget] `_accountText` — `frontend/lib/features/misc/presentation/login_page.dart`
+- [测试覆盖] `_IntegrationTestApp` — `frontend/integration_test/login_flow_test.dart`
 
 
 ## User

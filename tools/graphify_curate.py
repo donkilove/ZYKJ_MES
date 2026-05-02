@@ -184,10 +184,29 @@ _COMMUNITY_NOISE_PATTERNS = [
     re.compile(r"^Base$"),
     re.compile(r"^TimestampMixin$"),
     re.compile(r"^ListTile$"),
+    re.compile(r"^Spacer$"),
+    re.compile(r"^LayoutBuilder$"),
+    re.compile(r"^StatefulBuilder$"),
+    re.compile(r"^CustomPaint$"),
+    re.compile(r"^PopupMenuItem$"),
     re.compile(r"^jsonDecode$"),
     re.compile(r"^ClipRect$"),
     re.compile(r"^Divider$"),
     re.compile(r"^Material$"),
+    re.compile(r"^expectLater$"),
+    re.compile(r"^NoOpSampleHandler$"),
+    re.compile(r"^HomeDashboardTodoSummary$"),
+    re.compile(r"^HomeDashboardMetricItem$"),
+    re.compile(r"^BarChartGroupData$"),
+    re.compile(r"^connect$"),
+    re.compile(r"^onSuccess$"),
+    re.compile(r"^paint$", re.IGNORECASE),
+    re.compile(r"^showDatePicker$", re.IGNORECASE),
+    re.compile(r"^Scrollbar$", re.IGNORECASE),
+    re.compile(r"^shouldRepaint$", re.IGNORECASE),
+    re.compile(r"^shouldRebuild$", re.IGNORECASE),
+    re.compile(r"^build[A-Z].*", re.IGNORECASE),
+    re.compile(r"^dart:", re.IGNORECASE),
     re.compile(r"^Color$"),
     re.compile(r"^Icon$"),
     re.compile(r"^ServerTimeSnapshot$"),
@@ -217,6 +236,20 @@ _COMMUNITY_NOISE_PATTERNS = [
     re.compile(r"^decode_access_token\(\)$"),
     re.compile(r"^load_perf_sample_context\(\)$"),
     re.compile(r"^module$", re.IGNORECASE),
+    re.compile(r"\(\)$"),
+    re.compile(r"\.(py|dart)$", re.IGNORECASE),
+    re.compile(r".*Handler$", re.IGNORECASE),
+    re.compile(r".*Builder$", re.IGNORECASE),
+    re.compile(r".*Widget$", re.IGNORECASE),
+    re.compile(r".*Container$", re.IGNORECASE),
+    re.compile(r".*Section$", re.IGNORECASE),
+    re.compile(r".*Header$", re.IGNORECASE),
+    re.compile(r".*Shell$", re.IGNORECASE),
+    re.compile(r".*Toolbar$", re.IGNORECASE),
+    re.compile(r".*Chip$", re.IGNORECASE),
+    re.compile(r".*TabController$", re.IGNORECASE),
+    re.compile(r".*PageState$", re.IGNORECASE),
+    re.compile(r"^RegExp$", re.IGNORECASE),
 ]
 
 
@@ -258,15 +291,19 @@ def _name_communities(communities, comm_domain, comm_entities, rules):
             if second_domains:
                 mapped_domain = second_domains[0]
                 mapped_cn = domain_labels.get(mapped_domain, mapped_domain)
-                primary_entity_display = primary_entity if primary_entity != "unknown" else mapped_cn
-                name = f"测试支撑 - {mapped_cn} ({primary_entity_display})"
+                if primary_entity != "unknown" and not _is_community_noise_entity(primary_entity):
+                    name = f"测试支撑 - {mapped_cn} ({primary_entity})"
+                else:
+                    name = f"测试支撑 - {mapped_cn}"
                 community_canonical[cid] = primary_domain
                 community_name_map[cid] = name
                 continue
+            community_canonical[cid] = primary_domain
+            community_name_map[cid] = "测试支撑 - 通用验证"
+            continue
 
         if primary_entity == "unknown":
-            primary_entity = f"{domain_cn}模块"
-            name = f"{domain_cn} - {primary_entity}"
+            name = f"{domain_cn} - 核心流程"
         elif primary_domain == "unknown":
             name = fallback.format(community_id=cid)
         else:

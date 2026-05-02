@@ -158,13 +158,22 @@ report = (root / "GRAPH_REPORT.md").read_text(encoding="utf-8")
 community_block = report.split("## 社区导航（治理后）")[1].split("## ")[0] if "## 社区导航" in report else ""
 
 TOP_COMMUNITY_NOISE = [
-    "ListTile", "jsonDecode", "ClipRect", "Divider", "Material",
+    "ListTile", "Spacer", "LayoutBuilder", "StatefulBuilder", "jsonDecode", "ClipRect", "Divider", "Material",
+    "expectLater", "NoOpSampleHandler", "HomeDashboardTodoSummary",
+    "HomeDashboardMetricItem", "BarChartGroupData", "ChoiceChip", "DefaultTabController",
+    "RegExp", "CrudListTableSection", "AdaptiveTableContainer", "CustomPaint", "paint",
+    "showDatePicker", "Scrollbar", "shouldRepaint",
+    "shouldRebuild", "buildMesTheme", "dart:ui",
     "Revision ID", "Revises:", "Create Date:",
     "Function$", "KeyedSubtree$", "Card$", "Text$",
     "TimestampMixin", "dirExists", "fileExists",
     r"UnitTest\)", r"IntegrationTest\)",
     "decode_access_token", "load_perf_sample_context",
     "ServerTimeSnapshot",
+    r"\.(py|dart)\s*$", r".*Handler$", r".*\(\)$",
+    r".*Builder$", r".*Widget$", r".*Container$", r".*Section$",
+    r".*Header$", r".*Shell$", r".*Toolbar$", r".*Chip$",
+    r".*TabController$", r".*PageState$",
 ]
 
 community_lines = [l for l in community_block.split("\n") if l.startswith("| ") and "|" in l[2:]]
@@ -235,11 +244,57 @@ for obj in cc_objects:
     check(f"{obj} 链路深度足够 (层次={layers_found}, 补充链={has_supplement})",
           sufficient, f"仅找到层次: {layers_found}")
 
+# 对关键补链对象做语义质量检查
+supplement_expectations = {
+    "EquipmentLedgerItem": [
+        "后端 Schema/DTO",
+        "前端 Service",
+        "前端页面/Widget",
+        "测试覆盖",
+        "backend/app/schemas/equipment.py",
+    ],
+    "MaintenanceItemEntry": [
+        "后端 Schema/DTO",
+        "前端 Service",
+        "前端页面/Widget",
+        "测试覆盖",
+        "backend/app/schemas/equipment.py",
+    ],
+    "AppSession": [
+        "前端 Service",
+        "前端页面/Widget",
+        "测试覆盖",
+    ],
+}
+
+for obj, expected_tokens in supplement_expectations.items():
+    obj_section = ""
+    if obj in cc:
+        sections = cc.split(f"## {obj}")
+        if len(sections) > 1:
+            obj_section = sections[1].split("\n## ")[0]
+    missing = [token for token in expected_tokens if token not in obj_section]
+    check(f"{obj} 补充链覆盖关键层次", not missing, f"缺失: {missing}")
+
+# 防止错误层级标签
+wrong_layer_checks = {
+    "EquipmentLedgerItem": "后端数据模型] `EquipmentLedgerItem` — `frontend/",
+    "MaintenanceItemEntry": "后端数据模型] `MaintenanceItemEntry` — `frontend/",
+}
+for obj, bad_token in wrong_layer_checks.items():
+    obj_section = ""
+    if obj in cc:
+        sections = cc.split(f"## {obj}")
+        if len(sections) > 1:
+            obj_section = sections[1].split("\n## ")[0]
+    check(f"{obj} 不把前端文件误标为后端数据模型", bad_token not in obj_section)
+
 # 导航视图文本噪音检查
 TEXT_NOISE_PATTERNS = [
     "Attempt to repair text that was produced",
     "mark single message read",
     "标记单条消息已读",
+    "全部标记已读",
 ]
 nav_noise_count = 0
 for pat in TEXT_NOISE_PATTERNS:
