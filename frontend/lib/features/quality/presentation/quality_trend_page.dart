@@ -8,7 +8,6 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/services/export_file_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
-import 'package:mes_client/core/widgets/adaptive_table_container.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
@@ -692,9 +691,7 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
               loading: _loading,
               isEmpty: rows.isEmpty,
               emptyText: emptyText,
-              child: AdaptiveTableContainer(
-                child: DataTable(columns: columns, rows: rows),
-              ),
+              child: DataTable(columns: columns, rows: rows),
             ),
           ),
           const SizedBox(height: 12),
@@ -832,39 +829,37 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
               loading: _loading,
               isEmpty: _items.isEmpty,
               emptyText: '暂无趋势数据',
-              child: AdaptiveTableContainer(
-                child: DataTable(
-                  columns: const [
-                    DataColumn(label: Text('日期')),
-                    DataColumn(label: Text('首件总数')),
-                    DataColumn(label: Text('通过数')),
-                    DataColumn(label: Text('不通过数')),
-                    DataColumn(label: Text('通过率')),
-                    DataColumn(label: Text('不良数')),
-                    DataColumn(label: Text('报废数')),
-                    DataColumn(label: Text('维修数')),
-                  ],
-                  rows: _slicePage(_items, _trendPage)
-                      .map(
-                        (item) => DataRow(
-                          cells: [
-                            DataCell(Text(item.date)),
-                            DataCell(Text('${item.firstArticleTotal}')),
-                            DataCell(Text('${item.passedTotal}')),
-                            DataCell(Text('${item.failedTotal}')),
-                            DataCell(
-                              Text(
-                                '${item.passRatePercent.toStringAsFixed(1)}%',
-                              ),
+              child: DataTable(
+                columns: const [
+                  DataColumn(label: Text('日期')),
+                  DataColumn(label: Text('首件总数')),
+                  DataColumn(label: Text('通过数')),
+                  DataColumn(label: Text('不通过数')),
+                  DataColumn(label: Text('通过率')),
+                  DataColumn(label: Text('不良数')),
+                  DataColumn(label: Text('报废数')),
+                  DataColumn(label: Text('维修数')),
+                ],
+                rows: _slicePage(_items, _trendPage)
+                    .map(
+                      (item) => DataRow(
+                        cells: [
+                          DataCell(Text(item.date)),
+                          DataCell(Text('${item.firstArticleTotal}')),
+                          DataCell(Text('${item.passedTotal}')),
+                          DataCell(Text('${item.failedTotal}')),
+                          DataCell(
+                            Text(
+                              '${item.passRatePercent.toStringAsFixed(1)}%',
                             ),
-                            DataCell(Text('${item.defectTotal}')),
-                            DataCell(Text('${item.scrapTotal}')),
-                            DataCell(Text('${item.repairTotal}')),
-                          ],
-                        ),
-                      )
-                      .toList(),
-                ),
+                          ),
+                          DataCell(Text('${item.defectTotal}')),
+                          DataCell(Text('${item.scrapTotal}')),
+                          DataCell(Text('${item.repairTotal}')),
+                        ],
+                      ),
+                    )
+                    .toList(),
               ),
             ),
           ),

@@ -7,7 +7,6 @@ import 'package:mes_client/features/quality/models/quality_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/services/export_file_service.dart';
 import 'package:mes_client/features/quality/services/quality_service.dart';
-import 'package:mes_client/core/widgets/adaptive_table_container.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
@@ -411,9 +410,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
             loading: _loading,
             isEmpty: rows.isEmpty,
             emptyText: emptyText,
-            child: AdaptiveTableContainer(
-              child: DataTable(columns: columns, rows: rows),
-            ),
+            child: DataTable(columns: columns, rows: rows),
           ),
         ),
         const SizedBox(height: 12),
