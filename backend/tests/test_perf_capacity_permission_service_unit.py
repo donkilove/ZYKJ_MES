@@ -215,6 +215,11 @@ class PerfCapacityPermissionServiceUnitTest(unittest.TestCase):
                 return_value=plan,
             ),
             patch.object(
+                perf_capacity_permission_service,
+                "_grant_quality_admin_production_scrap_permissions",
+                return_value=0,
+            ),
+            patch.object(
                 perf_capacity_permission_service.authz_service,
                 "replace_role_permissions_for_module",
                 side_effect=[
@@ -246,6 +251,11 @@ class PerfCapacityPermissionServiceUnitTest(unittest.TestCase):
                 perf_capacity_permission_service,
                 "build_perf_capacity_permission_rollout_plan",
                 return_value=plan,
+            ),
+            patch.object(
+                perf_capacity_permission_service,
+                "_grant_quality_admin_production_scrap_permissions",
+                return_value=0,
             ),
             patch.object(
                 perf_capacity_permission_service.authz_service,
@@ -284,6 +294,11 @@ class PerfCapacityPermissionServiceUnitTest(unittest.TestCase):
                 perf_capacity_permission_service,
                 "build_perf_capacity_permission_rollout_plan",
                 return_value=plan,
+            ),
+            patch.object(
+                perf_capacity_permission_service,
+                "_grant_quality_admin_production_scrap_permissions",
+                return_value=0,
             ),
             patch.object(
                 perf_capacity_permission_service.authz_service,
@@ -338,6 +353,11 @@ class PerfCapacityPermissionServiceUnitTest(unittest.TestCase):
                 perf_capacity_permission_service,
                 "build_perf_capacity_permission_rollout_plan",
                 return_value=plan,
+            ),
+            patch.object(
+                perf_capacity_permission_service,
+                "_grant_quality_admin_production_scrap_permissions",
+                return_value=0,
             ),
             patch.object(
                 perf_capacity_permission_service.authz_service,

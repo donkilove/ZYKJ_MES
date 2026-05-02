@@ -3,8 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.authz_catalog import (
+    PERM_PROD_SCRAP_STATISTICS_DETAIL,
+    PERM_PROD_SCRAP_STATISTICS_EXPORT,
+    PERM_PROD_SCRAP_STATISTICS_LIST,
+)
 from app.core.rbac import (
     ROLE_MAINTENANCE_STAFF,
     ROLE_OPERATOR,
@@ -12,6 +18,7 @@ from app.core.rbac import (
     ROLE_QUALITY_ADMIN,
     ROLE_SYSTEM_ADMIN,
 )
+from app.models.role import Role
 from app.models.user import User
 from app.services import authz_service
 
@@ -44,6 +51,14 @@ OPERATOR_PRODUCTION_PERMISSION_CODES = frozenset(
         "production.assist_authorizations.create",
         "production.assist_user_options.list",
         "production.repair_orders.create_manual",
+    }
+)
+
+QUALITY_ADMIN_PRODUCTION_SCRAP_PERMISSION_CODES = frozenset(
+    {
+        PERM_PROD_SCRAP_STATISTICS_LIST,
+        PERM_PROD_SCRAP_STATISTICS_EXPORT,
+        PERM_PROD_SCRAP_STATISTICS_DETAIL,
     }
 )
 
@@ -144,6 +159,28 @@ def build_perf_capacity_permission_rollout_plan(
     return plan
 
 
+def _grant_quality_admin_production_scrap_permissions(
+    db: Session,
+    *,
+    operator: User | None = None,
+    remark: str | None = None,
+) -> int:
+    quality_admin_role = db.execute(
+        select(Role).where(Role.code == ROLE_QUALITY_ADMIN)
+    ).scalar_one_or_none()
+    if quality_admin_role is None:
+        return 0
+    updated_count, _before, _after = authz_service.replace_role_permissions_for_module(
+        db,
+        role_code=ROLE_QUALITY_ADMIN,
+        module_code="production",
+        granted_permission_codes=sorted(QUALITY_ADMIN_PRODUCTION_SCRAP_PERMISSION_CODES),
+        operator=operator,
+        remark=remark or "对品质管理员开放生产报废统计权限",
+    )
+    return int(updated_count)
+
+
 def apply_perf_capacity_permission_rollout(
     db: Session,
     *,
@@ -185,6 +222,7 @@ def apply_perf_capacity_permission_rollout(
                 }
             )
     if not dry_run:
+        _grant_quality_admin_production_scrap_permissions(db, operator=operator, remark=remark)
         authz_service.invalidate_permission_cache()
     return PerfCapacityPermissionApplyResult(
         updated_count=updated_count,
