@@ -1010,6 +1010,10 @@ void main() {
   });
 
   testWidgets('质量维修订单包装页不再额外嵌套页头', (tester) async {
+    _setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(
       _wrapBody(
         QualityRepairOrdersPage(

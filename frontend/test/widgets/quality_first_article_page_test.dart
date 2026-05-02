@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/ui/patterns/mes_filter_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
 import 'package:mes_client/features/misc/presentation/daily_first_article_page.dart';
 import 'package:mes_client/features/quality/presentation/quality_page.dart';
@@ -170,6 +173,18 @@ void main() {
     expect(find.text('提交处置'), findsNothing);
   });
 
+  testWidgets('每日首件页首屏使用任务工作台骨架', (tester) async {
+    final service = _FakeQualityService();
+    await pumpPage(tester, service);
+
+    expect(find.byType(MesFilterBar), findsOneWidget);
+    expect(find.byType(MesMetricCard), findsAtLeastNWidgets(4));
+    expect(find.text('筛选控制台'), findsOneWidget);
+    expect(find.text('任务总览'), findsOneWidget);
+    expect(find.text('首件记录'), findsOneWidget);
+    expect(find.byType(MesSectionCard), findsAtLeastNWidgets(2));
+  });
+
   testWidgets('提交处置后返回列表并刷新', (tester) async {
     final service = _FakeQualityService();
     await pumpPage(tester, service);
@@ -195,6 +210,13 @@ void main() {
   });
 
   testWidgets('质量页透传消息 payload 后自动打开首件详情页', (tester) async {
+    tester.view.physicalSize = const Size(1920, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
     final service = _FakeQualityService();
 
     await tester.pumpWidget(

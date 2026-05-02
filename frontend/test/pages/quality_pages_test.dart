@@ -23,6 +23,11 @@ void main() {
   }
 
   testWidgets('每日首件仅对不通过记录展示处置入口', (tester) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(
       wrapBody(
         DailyFirstArticlePage(

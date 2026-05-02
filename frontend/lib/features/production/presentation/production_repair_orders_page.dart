@@ -9,13 +9,17 @@ import 'package:mes_client/features/production/presentation/production_repair_or
 import 'package:mes_client/features/production/presentation/widgets/production_repair_complete_dialog.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_repair_phenomena_summary_dialog.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 import 'package:mes_client/features/quality/services/repair_scrap_service.dart';
-import 'package:mes_client/core/widgets/crud_list_table_section.dart';
-import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
+import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
+import 'package:mes_client/features/quality/presentation/widgets/quality_workbench_filter_panel.dart';
+import 'package:mes_client/features/quality/presentation/widgets/quality_workbench_summary_grid.dart';
 
 enum _RepairOrderAction { detail, summary, complete }
 
@@ -444,154 +448,208 @@ class _ProductionRepairOrdersPageState
     }
   }
 
+  int get _inRepairCount =>
+      _items.where((item) => item.status == 'in_repair').length;
+
+  int get _completedCount =>
+      _items.where((item) => item.status == 'completed').length;
+
+  int get _pendingCompleteCount =>
+      _items.where((item) => item.status == 'in_repair').length;
+
+  Widget _buildSummarySection() {
+    return MesSectionCard(
+      title: '任务总览',
+      child: QualityWorkbenchSummaryGrid(
+        children: [
+          SizedBox(
+            width: 190,
+            child: MesMetricCard(label: '当前页工单', value: '${_items.length}'),
+          ),
+          SizedBox(
+            width: 190,
+            child: MesMetricCard(label: '维修中', value: '$_inRepairCount'),
+          ),
+          SizedBox(
+            width: 190,
+            child: MesMetricCard(label: '已完成', value: '$_completedCount'),
+          ),
+          SizedBox(
+            width: 190,
+            child: MesMetricCard(label: '待完成', value: '$_pendingCompleteCount'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterPanel() {
+    return QualityWorkbenchFilterPanel(
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: [
+          SizedBox(
+            width: 240,
+            child: TextField(
+              controller: _keywordController,
+              decoration: const InputDecoration(
+                labelText: '关键词（维修单/订单/产品）',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              onSubmitted: (_) => _loadItems(page: 1),
+            ),
+          ),
+          SizedBox(
+            width: 160,
+            child: DropdownButtonFormField<String>(
+              initialValue: _status,
+              decoration: const InputDecoration(
+                labelText: '状态',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              items: const [
+                DropdownMenuItem(value: 'all', child: Text('全部')),
+                DropdownMenuItem(value: 'in_repair', child: Text('维修中')),
+                DropdownMenuItem(value: 'completed', child: Text('已完成')),
+              ],
+              onChanged: (value) {
+                if (value == null) return;
+                setState(() {
+                  _status = value;
+                  _page = 1;
+                });
+              },
+            ),
+          ),
+          OutlinedButton(
+            onPressed: _loading ? null : () => _pickDate(isStart: true),
+            child: Text(_startDate == null ? '开始日期' : _formatDate(_startDate!)),
+          ),
+          OutlinedButton(
+            onPressed: _loading ? null : () => _pickDate(isStart: false),
+            child: Text(_endDate == null ? '结束日期' : _formatDate(_endDate!)),
+          ),
+          FilledButton.icon(
+            onPressed: _loading ? null : () => _loadItems(page: 1),
+            icon: const Icon(Icons.search),
+            label: const Text('查询'),
+          ),
+          OutlinedButton.icon(
+            onPressed: (!widget.canExport || _exporting) ? null : _export,
+            icon: const Icon(Icons.download),
+            label: const Text('导出'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final filtersToolbar = Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        SizedBox(
-          width: 240,
-          child: TextField(
-            controller: _keywordController,
-            decoration: const InputDecoration(
-              labelText: '关键词（维修单/订单/产品）',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            onSubmitted: (_) => _loadItems(page: 1),
-          ),
-        ),
-        SizedBox(
-          width: 140,
-          child: DropdownButtonFormField<String>(
-            initialValue: _status,
-            decoration: const InputDecoration(
-              labelText: '状态',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            items: const [
-              DropdownMenuItem(value: 'all', child: Text('全部')),
-              DropdownMenuItem(value: 'in_repair', child: Text('维修中')),
-              DropdownMenuItem(value: 'completed', child: Text('已完成')),
-            ],
-            onChanged: (value) {
-              if (value == null) return;
-              setState(() {
-                _status = value;
-                _page = 1;
-              });
-            },
-          ),
-        ),
-        OutlinedButton(
-          onPressed: _loading ? null : () => _pickDate(isStart: true),
-          child: Text(_startDate == null ? '开始日期' : _formatDate(_startDate!)),
-        ),
-        OutlinedButton(
-          onPressed: _loading ? null : () => _pickDate(isStart: false),
-          child: Text(_endDate == null ? '结束日期' : _formatDate(_endDate!)),
-        ),
-        FilledButton.icon(
-          onPressed: _loading ? null : () => _loadItems(page: 1),
-          icon: const Icon(Icons.search),
-          label: const Text('查询'),
-        ),
-        FilledButton.tonalIcon(
-          onPressed: (!widget.canExport || _exporting) ? null : _export,
-          icon: const Icon(Icons.download),
-          label: const Text('导出CSV'),
-        ),
-      ],
-    );
 
     return MesCrudPageScaffold(
       header: MesRefreshPageHeader(
         title: '维修订单',
         onRefresh: _loading ? null : _loadItems,
       ),
-      filters: filtersToolbar,
+      filters: _buildFilterPanel(),
       banner: _message.isEmpty
-          ? null
-          : Text(_message, style: TextStyle(color: theme.colorScheme.error)),
-      content: CrudListTableSection(
-        cardKey: const ValueKey('productionRepairOrdersListCard'),
-        loading: _loading,
-        isEmpty: _items.isEmpty,
-        emptyText: '暂无维修订单',
-        enableUnifiedHeaderStyle: true,
-        child: DataTable(
-          columns: [
-            UnifiedListTableHeaderStyle.column(context, '维修单号'),
-            UnifiedListTableHeaderStyle.column(context, '订单号'),
-            UnifiedListTableHeaderStyle.column(context, '产品'),
-            UnifiedListTableHeaderStyle.column(context, '工序'),
-            UnifiedListTableHeaderStyle.column(context, '送修量'),
-            UnifiedListTableHeaderStyle.column(context, '已修复量'),
-            UnifiedListTableHeaderStyle.column(context, '补投产'),
-            UnifiedListTableHeaderStyle.column(context, '报废量'),
-            UnifiedListTableHeaderStyle.column(context, '状态'),
-            UnifiedListTableHeaderStyle.column(context, '送修时间'),
-            UnifiedListTableHeaderStyle.column(context, '操作'),
-          ],
-          rows: _items
-              .map(
-                (item) => DataRow(
-                  cells: [
-                    DataCell(Text(item.repairOrderCode)),
-                    DataCell(Text(item.sourceOrderCode ?? '-')),
-                    DataCell(Text(item.productName ?? '-')),
-                    DataCell(Text(item.sourceProcessName)),
-                    DataCell(Text('${item.repairQuantity}')),
-                    DataCell(Text('${item.repairedQuantity}')),
-                    DataCell(Text(item.scrapReplenished ? '是' : '否')),
-                    DataCell(Text('${item.scrapQuantity}')),
-                    DataCell(Text(repairOrderStatusLabel(item.status))),
-                    DataCell(Text(_formatDateTime(item.repairTime))),
-                    DataCell(
-                      UnifiedListTableHeaderStyle.actionMenuButton<
-                        _RepairOrderAction
-                      >(
-                        theme: theme,
-                        onSelected: (action) {
-                          switch (action) {
-                            case _RepairOrderAction.detail:
-                              _showRepairDetail(item);
-                              break;
-                            case _RepairOrderAction.summary:
-                              _showPhenomenaSummary(item);
-                              break;
-                            case _RepairOrderAction.complete:
-                              _showCompleteDialog(item);
-                              break;
-                          }
-                        },
-                        itemBuilder: (_) => [
-                          const PopupMenuItem(
-                            value: _RepairOrderAction.detail,
-                            child: Text('查看详情'),
-                          ),
-                          const PopupMenuItem(
-                            value: _RepairOrderAction.summary,
-                            child: Text('现象汇总'),
-                          ),
-                          PopupMenuItem(
-                            value: _RepairOrderAction.complete,
-                            enabled:
-                                widget.canComplete &&
-                                item.status == 'in_repair' &&
-                                !_acting,
-                            child: const Text('完成维修'),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+          ? _buildSummarySection()
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _message,
+                  style: TextStyle(color: theme.colorScheme.error),
                 ),
-              )
-              .toList(),
+                const SizedBox(height: 12),
+                _buildSummarySection(),
+              ],
+            ),
+      content: MesSectionCard(
+        title: '维修工单',
+        expandChild: true,
+        child: CrudListTableSection(
+          cardKey: const ValueKey('productionRepairOrdersListCard'),
+          loading: _loading,
+          isEmpty: _items.isEmpty,
+          emptyText: '暂无维修订单',
+          enableUnifiedHeaderStyle: true,
+          child: DataTable(
+            columns: [
+              UnifiedListTableHeaderStyle.column(context, '维修单号'),
+              UnifiedListTableHeaderStyle.column(context, '订单号'),
+              UnifiedListTableHeaderStyle.column(context, '产品'),
+              UnifiedListTableHeaderStyle.column(context, '工序'),
+              UnifiedListTableHeaderStyle.column(context, '送修量'),
+              UnifiedListTableHeaderStyle.column(context, '已修复量'),
+              UnifiedListTableHeaderStyle.column(context, '补投产'),
+              UnifiedListTableHeaderStyle.column(context, '报废量'),
+              UnifiedListTableHeaderStyle.column(context, '状态'),
+              UnifiedListTableHeaderStyle.column(context, '送修时间'),
+              UnifiedListTableHeaderStyle.column(context, '操作'),
+            ],
+            rows: _items
+                .map(
+                  (item) => DataRow(
+                    cells: [
+                      DataCell(Text(item.repairOrderCode)),
+                      DataCell(Text(item.sourceOrderCode ?? '-')),
+                      DataCell(Text(item.productName ?? '-')),
+                      DataCell(Text(item.sourceProcessName)),
+                      DataCell(Text('${item.repairQuantity}')),
+                      DataCell(Text('${item.repairedQuantity}')),
+                      DataCell(Text(item.scrapReplenished ? '是' : '否')),
+                      DataCell(Text('${item.scrapQuantity}')),
+                      DataCell(Text(repairOrderStatusLabel(item.status))),
+                      DataCell(Text(_formatDateTime(item.repairTime))),
+                      DataCell(
+                        UnifiedListTableHeaderStyle.actionMenuButton<
+                          _RepairOrderAction
+                        >(
+                          theme: theme,
+                          onSelected: (action) {
+                            switch (action) {
+                              case _RepairOrderAction.detail:
+                                _showRepairDetail(item);
+                                break;
+                              case _RepairOrderAction.summary:
+                                _showPhenomenaSummary(item);
+                                break;
+                              case _RepairOrderAction.complete:
+                                _showCompleteDialog(item);
+                                break;
+                            }
+                          },
+                          itemBuilder: (_) => [
+                            const PopupMenuItem(
+                              value: _RepairOrderAction.detail,
+                              child: Text('查看详情'),
+                            ),
+                            const PopupMenuItem(
+                              value: _RepairOrderAction.summary,
+                              child: Text('现象汇总'),
+                            ),
+                            PopupMenuItem(
+                              value: _RepairOrderAction.complete,
+                              enabled:
+                                  widget.canComplete &&
+                                  item.status == 'in_repair' &&
+                                  !_acting,
+                              child: const Text('完成维修'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+                .toList(),
+          ),
         ),
       ),
       pagination: MesPaginationBar(

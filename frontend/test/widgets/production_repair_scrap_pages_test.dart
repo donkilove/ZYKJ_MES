@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/ui/patterns/mes_filter_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/production_repair_order_detail_page.dart';
 import 'package:mes_client/features/production/presentation/production_repair_orders_page.dart';
@@ -231,9 +234,18 @@ class _FakeRepairAndScrapService extends ProductionService {
 }
 
 void main() {
+  void setDesktopViewport(WidgetTester tester) {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+  }
+
   testWidgets('production scrap statistics page renders list content', (
     tester,
   ) async {
+    setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final service = _FakeRepairAndScrapService();
     await tester.pumpWidget(
       MaterialApp(
@@ -276,6 +288,10 @@ void main() {
   testWidgets('production scrap statistics pagination updates request page', (
     tester,
   ) async {
+    setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final service = _FakeRepairAndScrapService();
     await tester.pumpWidget(
       MaterialApp(
@@ -317,6 +333,10 @@ void main() {
   testWidgets('production repair orders page renders list content', (
     tester,
   ) async {
+    setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final service = _FakeRepairAndScrapService();
     await tester.pumpWidget(
       MaterialApp(
@@ -361,6 +381,39 @@ void main() {
     expect(service.lastRepairStatus, 'completed');
     expect(service.lastRepairPage, 1);
     expect(find.text('第 1 / 3 页'), findsOneWidget);
+  });
+
+  testWidgets('production repair orders page uses task workbench skeleton', (
+    tester,
+  ) async {
+    setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = _FakeRepairAndScrapService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionRepairOrdersPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canComplete: true,
+            canExport: true,
+            service: service,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.byType(MesFilterBar), findsOneWidget);
+    expect(find.byType(MesMetricCard), findsAtLeastNWidgets(4));
+    expect(find.text('筛选控制台'), findsOneWidget);
+    expect(find.text('任务总览'), findsOneWidget);
+    expect(find.text('维修工单'), findsOneWidget);
+    expect(find.byType(MesSectionCard), findsAtLeastNWidgets(2));
   });
 
   testWidgets(
