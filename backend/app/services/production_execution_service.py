@@ -26,6 +26,9 @@ from app.models.first_article_record import FirstArticleRecord
 from app.models.first_article_template import FirstArticleTemplate
 from app.models.order_sub_order_pipeline_instance import ProcessPipelineInstance
 from app.models.process import Process
+from app.models.production_assist_authorization import (
+    ProductionAssistAuthorization,
+)
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_record import ProductionRecord
@@ -34,6 +37,7 @@ from app.models.user import User
 from app.services.assist_authorization_service import (
     ASSIST_OP_END_PRODUCTION,
     ASSIST_OP_FIRST_ARTICLE,
+    ASSIST_STATUS_APPROVED,
     get_usable_assist_authorization_for_operation,
     mark_assist_authorization_used,
 )
@@ -592,6 +596,11 @@ def submit_first_article(
     }:
         raise ValueError("Current process does not allow first-article operation")
 
+    if assist_authorization_id and not effective_operator_user_id:
+        _assist = db.get(ProductionAssistAuthorization, assist_authorization_id)
+        if _assist is not None and _assist.status == ASSIST_STATUS_APPROVED:
+            effective_operator_user_id = _assist.target_operator_user_id
+
     effective_user_id = effective_operator_user_id or operator.id
     assist_row = None
     if effective_user_id != operator.id:
@@ -816,6 +825,11 @@ def end_production(
         raise ValueError("Order already completed")
     if process_row.status not in {PROCESS_STATUS_IN_PROGRESS, PROCESS_STATUS_PARTIAL}:
         raise ValueError("Current process is not in progress")
+
+    if assist_authorization_id and not effective_operator_user_id:
+        _assist = db.get(ProductionAssistAuthorization, assist_authorization_id)
+        if _assist is not None and _assist.status == ASSIST_STATUS_APPROVED:
+            effective_operator_user_id = _assist.target_operator_user_id
 
     effective_user_id = effective_operator_user_id or operator.id
     assist_row = None

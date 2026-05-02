@@ -1734,6 +1734,7 @@ def _build_my_order_item(
     is_operator_context: bool,
     work_view: str = "own",
     assist_authorization_id: int | None = None,
+    target_operator_user_id: int | None = None,
     can_first_article_override: bool | None = None,
     can_end_production_override: bool | None = None,
 ) -> dict[str, object]:
@@ -1869,7 +1870,9 @@ def _build_my_order_item(
         "user_sub_order_id": sub_order.id if sub_order else None,
         "user_assigned_quantity": None,
         "user_completed_quantity": sub_order.completed_quantity if sub_order else None,
-        "operator_user_id": sub_order.operator_user_id if sub_order else None,
+        "operator_user_id": sub_order.operator_user_id
+        if sub_order
+        else target_operator_user_id,
         "operator_username": sub_order.operator.username
         if sub_order and sub_order.operator
         else None,
@@ -2085,6 +2088,7 @@ def _collect_my_order_items(
                     is_operator_context=True,
                     work_view="assist",
                     assist_authorization_id=assist_row.id,
+                    target_operator_user_id=assist_row.target_operator_user_id,
                     can_first_article_override=can_first_article,
                     can_end_production_override=can_end_production,
                 )
