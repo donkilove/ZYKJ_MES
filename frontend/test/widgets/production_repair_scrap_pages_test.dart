@@ -285,6 +285,38 @@ void main() {
     expect(service.lastScrapProcessCode, '01-01');
   });
 
+  testWidgets('production scrap statistics page uses workbench skeleton', (
+    tester,
+  ) async {
+    setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = _FakeRepairAndScrapService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionScrapStatisticsPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canExport: true,
+            service: service,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.byType(MesFilterBar), findsOneWidget);
+    expect(find.byType(MesMetricCard), findsAtLeastNWidgets(4));
+    expect(find.text('筛选控制台'), findsOneWidget);
+    expect(find.text('质量总览'), findsOneWidget);
+    expect(find.text('报废记录'), findsOneWidget);
+    expect(find.byType(MesSectionCard), findsAtLeastNWidgets(2));
+  });
+
   testWidgets('production scrap statistics pagination updates request page', (
     tester,
   ) async {
