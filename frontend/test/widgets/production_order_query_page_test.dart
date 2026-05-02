@@ -51,6 +51,9 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
   String? lastAssistReason;
   int processCompletedQuantity = 4;
   int? userCompletedQuantity = 4;
+  int? lastEndProductionEffectiveOperatorUserId;
+  int? lastEndProductionAssistAuthorizationId;
+  bool returnAssistViewItems = false;
   Object? proxyOperatorOptionsError;
   Object? proxyViewOperatorOptionsError;
   Object? assistUserOptionsError;
@@ -92,10 +95,10 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
           userSubOrderId: 31,
           userAssignedQuantity: 12,
           userCompletedQuantity: userCompletedQuantity,
-          operatorUserId: 8,
-          operatorUsername: 'zhangsan',
-          workView: 'own',
-          assistAuthorizationId: null,
+          operatorUserId: returnAssistViewItems ? 99 : 8,
+          operatorUsername: returnAssistViewItems ? 'lisi' : 'zhangsan',
+          workView: returnAssistViewItems ? 'assist' : 'own',
+          assistAuthorizationId: returnAssistViewItems ? 99 : null,
           pipelineInstanceId: 301,
           pipelineInstanceNo: 'P1-31-1-PIPE0001',
           pipelineModeEnabled: true,
@@ -366,6 +369,8 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
     endProductionCallCount += 1;
     lastEndProductionQuantity = quantity;
     lastEndProductionDefects = defectItems ?? const [];
+    lastEndProductionEffectiveOperatorUserId = effectiveOperatorUserId;
+    lastEndProductionAssistAuthorizationId = assistAuthorizationId;
     return ProductionActionResult(
       orderId: orderId,
       status: 'completed',
@@ -1469,5 +1474,143 @@ void main() {
     expect(find.text('代班安排'), findsOneWidget);
     expect(find.text('目标操作员'), findsOneWidget);
     expect(find.text('代班人'), findsOneWidget);
+  });
+
+  testWidgets('订单查询页代班视角列表展示代班工单信息', (tester) async {
+    final service = _FakeProductionOrderQueryPageService()
+      ..returnAssistViewItems = true;
+    await tester.binding.setSurfaceSize(const Size(1600, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionOrderQueryPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canFirstArticle: true,
+            canEndProduction: true,
+            canCreateManualRepairOrder: true,
+            canCreateAssistAuthorization: false,
+            canProxyView: false,
+            canExportCsv: false,
+            service: service,
+            pollInterval: Duration.zero,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
+
+    expect(find.text('PO-QUERY-001'), findsOneWidget);
+    expect(find.text('产线试产件1'), findsOneWidget);
+  });
+
+  testWidgets('代班视角结束生产时传递被代班人ID和授权ID', (tester) async {
+    final service = _FakeProductionOrderQueryPageService()
+      ..returnAssistViewItems = true;
+    await tester.binding.setSurfaceSize(const Size(1600, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionOrderQueryPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canFirstArticle: false,
+            canEndProduction: true,
+            canCreateManualRepairOrder: false,
+            canCreateAssistAuthorization: false,
+            canProxyView: false,
+            canExportCsv: false,
+            service: service,
+            pollInterval: Duration.zero,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('结束生产').last);
+    await tester.pumpAndSettle();
+
+    final fields = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(fields.at(0), '3');
+    await tester.tap(find.widgetWithText(FilledButton, '提交'));
+    await tester.pumpAndSettle();
+
+    expect(service.endProductionCallCount, 1);
+    expect(service.lastEndProductionEffectiveOperatorUserId, 99);
+    expect(service.lastEndProductionAssistAuthorizationId, 99);
+    expect(service.lastEndProductionQuantity, 3);
+  });
+
+  testWidgets('代班视角结束生产弹窗展示必需字段', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionEndProductionDialog(
+            order: MyOrderItem(
+              orderId: 1,
+              orderCode: 'PO-ASSIST-001',
+              productId: 10,
+              productName: '产线试产件1',
+              supplierName: null,
+              quantity: 12,
+              orderStatus: 'in_progress',
+              currentProcessId: 21,
+              currentStageId: 5,
+              currentStageCode: 'CUT',
+              currentStageName: '切割段',
+              currentProcessCode: 'CUT-01',
+              currentProcessName: '切割',
+              currentProcessOrder: 1,
+              processStatus: 'in_progress',
+              visibleQuantity: 12,
+              processCompletedQuantity: 4,
+              userSubOrderId: 31,
+              userAssignedQuantity: 12,
+              userCompletedQuantity: 4,
+              operatorUserId: 99,
+              operatorUsername: 'lisi',
+              workView: 'assist',
+              assistAuthorizationId: 88,
+              pipelineInstanceId: null,
+              pipelineInstanceNo: null,
+              pipelineModeEnabled: false,
+              pipelineStartAllowed: true,
+              pipelineEndAllowed: true,
+              maxProducibleQuantity: 8,
+              canFirstArticle: false,
+              canEndProduction: true,
+              canApplyAssist: false,
+              canCreateManualRepair: false,
+              dueDate: DateTime.parse('2026-03-18T00:00:00Z'),
+              remark: '',
+              updatedAt: DateTime.parse('2026-03-01T08:00:00Z'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('production-end-production-dialog')),
+      findsOneWidget,
+    );
+    expect(find.text('结束生产'), findsOneWidget);
   });
 }
