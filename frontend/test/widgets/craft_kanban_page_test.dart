@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/craft/presentation/craft_kanban_page.dart';
@@ -40,6 +43,16 @@ class _FakeCraftService extends CraftService {
                 workMinutes: 60,
                 productionQty: 120,
                 capacityPerHour: 120,
+              ),
+              CraftKanbanSampleItem(
+                orderProcessId: 102,
+                orderId: 1002,
+                orderCode: 'MO-1002',
+                startAt: DateTime.parse('2026-03-02T08:00:00Z'),
+                endAt: DateTime.parse('2026-03-02T10:10:00Z'),
+                workMinutes: 130,
+                productionQty: 100,
+                capacityPerHour: 46.2,
               ),
             ],
           ),
@@ -184,7 +197,7 @@ void main() {
     expect(find.byTooltip('刷新'), findsOneWidget);
     expect(find.text('工序趋势对比（平均工时/产能）'), findsOneWidget);
     expect(find.textContaining('CUT 切割段  /  CUT-01 激光切割'), findsOneWidget);
-    expect(find.textContaining('样本 1'), findsOneWidget);
+    expect(find.textContaining('样本 2'), findsOneWidget);
     expect(find.byType(CrudListTableSection), findsOneWidget);
 
     await tester.tap(find.text('导出数据'));
@@ -197,6 +210,87 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('暂无可导出数据'), findsOneWidget);
+  });
+
+  testWidgets('工艺看板首屏展示驾驶舱摘要卡和控制台', (tester) async {
+    final craftService = _FakeCraftService();
+    tester.view.physicalSize = const Size(1600, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await pumpCraftKanbanPage(
+      tester,
+      craftService: craftService,
+      productionService: _FakeProductionService(),
+    );
+
+    expect(find.byType(MesMetricCard), findsNWidgets(5));
+    expect(find.text('工序数'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(MesMetricCard),
+        matching: find.text('样本数'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('平均工时'), findsOneWidget);
+    expect(find.text('平均产能'), findsOneWidget);
+    expect(find.text('异常样本'), findsOneWidget);
+    expect(find.byType(MesSectionCard), findsAtLeastNWidgets(3));
+    expect(find.text('筛选控制台'), findsOneWidget);
+    expect(find.text('统计规则'), findsOneWidget);
+  });
+
+  testWidgets('宽桌面下工序详情卡使用左右双栏图表', (tester) async {
+    tester.view.physicalSize = const Size(1600, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await pumpCraftKanbanPage(
+      tester,
+      craftService: _FakeCraftService(),
+      productionService: _FakeProductionService(),
+    );
+
+    final workChart = find.byKey(const ValueKey('craft-kanban-work-chart-11'));
+    final capacityChart = find.byKey(
+      const ValueKey('craft-kanban-capacity-chart-11'),
+    );
+    expect(workChart, findsOneWidget);
+    expect(capacityChart, findsOneWidget);
+
+    final workLeft = tester.getTopLeft(workChart);
+    final capacityLeft = tester.getTopLeft(capacityChart);
+    expect(capacityLeft.dx, greaterThan(workLeft.dx + 80));
+  });
+
+  testWidgets('窄桌面下工序详情卡改为上下堆叠图表', (tester) async {
+    tester.view.physicalSize = const Size(920, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await pumpCraftKanbanPage(
+      tester,
+      craftService: _FakeCraftService(),
+      productionService: _FakeProductionService(),
+    );
+
+    final workChart = find.byKey(const ValueKey('craft-kanban-work-chart-11'));
+    final capacityChart = find.byKey(
+      const ValueKey('craft-kanban-capacity-chart-11'),
+    );
+    final workTop = tester.getTopLeft(workChart);
+    final capacityTop = tester.getTopLeft(capacityChart);
+    expect(capacityTop.dy, greaterThan(workTop.dy + 120));
   });
 
   testWidgets('工艺看板顶部筛选区在窄桌面宽度下不溢出', (tester) async {
@@ -261,7 +355,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('工艺看板查询失败时展示错误态', (tester) async {
+  testWidgets('工艺看板查询失败时内容区展示可重试错误态', (tester) async {
     final craftService = _FakeCraftService()
       ..metricsError = ApiException('统计接口异常', 500);
 
@@ -272,7 +366,27 @@ void main() {
     );
 
     expect(find.text('加载看板失败：统计接口异常'), findsOneWidget);
-    expect(find.text('暂无可统计数据'), findsOneWidget);
+    expect(find.text('当前看板数据加载失败，请重试。'), findsOneWidget);
+    expect(find.text('重试'), findsOneWidget);
+  });
+
+  testWidgets('工艺看板无结果时展示带说明的空态卡片', (tester) async {
+    final craftService = _FakeCraftService()
+      ..metricsResult = CraftKanbanProcessMetricsResult(
+        productId: 1,
+        productName: '产品A',
+        items: const [],
+      );
+
+    await pumpCraftKanbanPage(
+      tester,
+      craftService: craftService,
+      productionService: _FakeProductionService(),
+    );
+
+    expect(find.byType(MesEmptyState), findsOneWidget);
+    expect(find.text('当前筛选下暂无已完工样本'), findsOneWidget);
+    expect(find.text('可尝试调整产品、工段、工序或日期范围后重试'), findsOneWidget);
   });
 
   testWidgets('工艺看板无产品时展示空态并隐藏筛选区', (tester) async {
