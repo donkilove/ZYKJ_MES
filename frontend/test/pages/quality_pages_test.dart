@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mes_client/core/ui/patterns/mes_filter_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
@@ -20,6 +23,11 @@ void main() {
   }
 
   testWidgets('每日首件仅对不通过记录展示处置入口', (tester) async {
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(
       wrapBody(
         DailyFirstArticlePage(
@@ -198,6 +206,95 @@ void main() {
     await tester.tap(find.text('按产品'));
     await tester.pumpAndSettle();
     expect(find.text('产品A'), findsOneWidget);
+  });
+
+  testWidgets('质量数据页首屏使用统一工作台骨架', (tester) async {
+    final service = _FakeQualityService(
+      overviewResult: QualityStatsOverview(
+        firstArticleTotal: 31,
+        passedTotal: 30,
+        failedTotal: 1,
+        passRatePercent: 96.77,
+        defectTotal: 5,
+        scrapTotal: 2,
+        repairTotal: 1,
+        coveredOrderCount: 3,
+        coveredProcessCount: 3,
+        coveredOperatorCount: 3,
+        latestFirstArticleAt: DateTime(2026, 3, 5, 8),
+      ),
+      processItems: [
+        QualityProcessStatItem(
+          processCode: 'QA-01',
+          processName: '检验',
+          firstArticleTotal: 10,
+          passedTotal: 9,
+          failedTotal: 1,
+          passRatePercent: 90,
+          defectTotal: 2,
+          scrapTotal: 1,
+          repairTotal: 0,
+          latestFirstArticleAt: DateTime(2026, 3, 5, 8),
+        ),
+      ],
+      operatorItems: [
+        QualityOperatorStatItem(
+          operatorUserId: 9,
+          operatorUsername: 'quality_worker',
+          firstArticleTotal: 10,
+          passedTotal: 9,
+          failedTotal: 1,
+          passRatePercent: 90,
+          defectTotal: 2,
+          scrapTotal: 1,
+          repairTotal: 0,
+          latestFirstArticleAt: DateTime(2026, 3, 5, 8),
+        ),
+      ],
+      productItems: const [
+        QualityProductStatItem(
+          productId: 3,
+          productCode: 'P-003',
+          productName: '产品A',
+          firstArticleTotal: 10,
+          passedTotal: 9,
+          failedTotal: 1,
+          passRatePercent: 90,
+          defectTotal: 2,
+          scrapTotal: 1,
+          repairTotal: 0,
+        ),
+      ],
+      trendItems: const [
+        QualityTrendItem(
+          date: '2026-03-02',
+          firstArticleTotal: 10,
+          passedTotal: 9,
+          failedTotal: 1,
+          passRatePercent: 90,
+          defectTotal: 2,
+          scrapTotal: 1,
+          repairTotal: 0,
+        ),
+      ],
+    );
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      wrapBody(
+        QualityDataPage(session: session, onLogout: () {}, service: service),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MesFilterBar), findsOneWidget);
+    expect(find.byType(MesMetricCard), findsAtLeastNWidgets(4));
+    expect(find.text('筛选控制台'), findsOneWidget);
+    expect(find.text('质量总览'), findsOneWidget);
+    expect(find.byType(MesSectionCard), findsAtLeastNWidgets(3));
   });
 
   testWidgets('不良分析页在非法日期范围时即时提示', (tester) async {

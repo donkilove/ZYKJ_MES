@@ -6,7 +6,10 @@ import 'package:file_selector_platform_interface/file_selector_platform_interfac
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/ui/patterns/mes_filter_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
 import 'package:mes_client/features/production/presentation/production_repair_orders_page.dart';
@@ -944,6 +947,10 @@ void main() {
   });
 
   testWidgets('质量趋势页接入统一页头锚点', (tester) async {
+    _setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(
       _wrapBody(
         QualityTrendPage(session: session, onLogout: () {}, canExport: true),
@@ -961,7 +968,54 @@ void main() {
     expect(find.text('统一查看趋势图与时间范围统计。'), findsNothing);
   });
 
+  testWidgets('质量数据页第一页批改版后仍接入统一页头和工作台骨架', (tester) async {
+    _setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _wrapBody(
+        QualityDataPage(
+          session: session,
+          onLogout: () {},
+          service: _FakeQualityService(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.byType(MesFilterBar), findsOneWidget);
+  });
+
+  testWidgets('质量趋势页第一页批改版后仍接入统一页头和工作台骨架', (tester) async {
+    _setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      _wrapBody(
+        QualityTrendPage(
+          session: session,
+          onLogout: () {},
+          service: _FakeQualityService(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('quality-trend-page-header')),
+      findsOneWidget,
+    );
+    expect(find.byType(MesFilterBar), findsOneWidget);
+  });
+
   testWidgets('质量维修订单包装页不再额外嵌套页头', (tester) async {
+    _setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(
       _wrapBody(
         QualityRepairOrdersPage(
@@ -1327,7 +1381,7 @@ void main() {
     await tester.enterText(find.byType(TextField).at(1), '产品A');
     await tester.enterText(find.byType(TextField).at(2), 'worker_a');
     await tester.enterText(find.byType(TextField).at(3), '虚焊');
-    await tester.tap(find.byTooltip('查询'));
+    await tester.tap(find.widgetWithText(FilledButton, '查询'));
     await tester.pumpAndSettle();
 
     expect(service.lastDefectQuery?.processCode, 'QA-01');
@@ -1338,7 +1392,7 @@ void main() {
 
     await tester.tap(find.text('清除日期'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('查询'));
+    await tester.tap(find.widgetWithText(FilledButton, '查询'));
     await tester.pumpAndSettle();
     expect(service.lastDefectQuery?.startDate, isNull);
     expect(service.lastDefectQuery?.endDate, isNull);
@@ -1347,6 +1401,62 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(service.exportDefectAnalysisCalls, 1);
+  });
+
+  testWidgets('不良分析页第一页批改版后使用分析工作台骨架', (tester) async {
+    _setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = _FakeQualityService(
+      defectResult: DefectAnalysisResult(
+        totalDefectQuantity: 9,
+        topDefects: [
+          DefectTopItem(phenomenon: '虚焊', quantity: 5, ratio: 55.56),
+        ],
+        topReasons: [
+          DefectReasonItem(reason: '治具偏移', quantity: 4, ratio: 44.44),
+        ],
+        productQualityComparison: const [],
+        byProcess: [
+          DefectByProcessItem(
+            processCode: 'QA-01',
+            processName: '检验',
+            quantity: 4,
+          ),
+        ],
+        byProduct: [
+          DefectByProductItem(productId: 11, productName: '产品A', quantity: 9),
+        ],
+        byOperator: [
+          DefectByOperatorItem(
+            operatorUserId: 7,
+            operatorUsername: 'worker_a',
+            quantity: 6,
+          ),
+        ],
+        byDate: [DefectByDateItem(date: '2026-03-01', quantity: 9)],
+      ),
+    );
+
+    await tester.pumpWidget(
+      _wrapBody(
+        QualityDefectAnalysisPage(
+          session: session,
+          onLogout: () {},
+          canExport: true,
+          service: service,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MesFilterBar), findsOneWidget);
+    expect(find.byType(MesMetricCard), findsAtLeastNWidgets(4));
+    expect(find.text('筛选控制台'), findsOneWidget);
+    expect(find.text('质量总览'), findsOneWidget);
+    expect(find.text('关键分布'), findsOneWidget);
+    expect(find.byType(MesSectionCard), findsAtLeastNWidgets(3));
   });
 
   testWidgets('不良分析页处理空态 错误态 与 401', (tester) async {
