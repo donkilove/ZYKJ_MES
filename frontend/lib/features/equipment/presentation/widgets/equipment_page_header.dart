@@ -10,7 +10,6 @@ class EquipmentPageHeader extends StatelessWidget {
       key: ValueKey('equipment-page-header'),
       child: MesPageHeader(
         title: '设备管理',
-        subtitle: '统一装配设备模块全部页签。',
       ),
     );
   }

@@ -17,6 +17,7 @@ import 'package:mes_client/features/quality/presentation/quality_page.dart';
 import 'package:mes_client/features/production/presentation/quality_repair_orders_page.dart';
 import 'package:mes_client/features/quality/presentation/quality_scrap_statistics_page.dart';
 import 'package:mes_client/features/quality/presentation/quality_trend_page.dart';
+import 'package:mes_client/features/production/presentation/widgets/quality_repair_orders_page_header.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/quality/services/quality_service.dart';
 import 'package:mes_client/features/quality/services/quality_supplier_service.dart';
@@ -978,6 +979,17 @@ void main() {
       findsNothing,
     );
     expect(find.text('维修订单'), findsOneWidget);
+  });
+
+  testWidgets('质量维修订单页头组件不再展示副标题', (tester) async {
+    await tester.pumpWidget(
+      _wrapBody(const QualityRepairOrdersPageHeader()),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(find.byType(QualityRepairOrdersPageHeader), findsOneWidget);
+    expect(find.text('统一查看质量维修订单与处理入口。'), findsNothing);
   });
 
   testWidgets('质量数据页支持 route payload 进入预警过滤态', (tester) async {

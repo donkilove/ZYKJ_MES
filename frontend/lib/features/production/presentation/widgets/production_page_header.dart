@@ -10,7 +10,6 @@ class ProductionPageHeader extends StatelessWidget {
       key: ValueKey('production-page-header'),
       child: MesPageHeader(
         title: '生产管理',
-        subtitle: '统一装配生产模块全部页签。',
       ),
     );
   }

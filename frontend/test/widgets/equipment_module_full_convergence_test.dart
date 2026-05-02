@@ -39,6 +39,7 @@ void main() {
       );
 
       expect(find.byType(EquipmentPageHeader), findsOneWidget);
+      expect(find.text('统一装配设备模块全部页签。'), findsNothing);
     });
   });
 }

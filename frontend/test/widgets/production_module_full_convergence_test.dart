@@ -46,6 +46,7 @@ void main() {
       );
 
       expect(find.byType(ProductionPageHeader), findsOneWidget);
+      expect(find.text('统一装配生产模块全部页签。'), findsNothing);
     });
 
     testWidgets('ProductionOrderStatusChip renders pending status', (tester) async {
