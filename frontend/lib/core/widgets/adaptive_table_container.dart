@@ -30,14 +30,32 @@ class _AdaptiveTableContainerState extends State<AdaptiveTableContainer> {
 
   @override
   Widget build(BuildContext context) {
-    final dataTable = widget.child is DataTable
-        ? widget.child as DataTable
-        : null;
-    if (dataTable != null) {
-      return _buildStickyHeaderLayout(dataTable);
+    final rawDataTable = _extractDataTable(widget.child);
+    if (rawDataTable != null) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final dataTable = _normalizeDataTable(
+            rawDataTable,
+            availableWidth: constraints.hasBoundedWidth
+                ? constraints.maxWidth
+                : 0,
+          );
+          return _buildStickyHeaderLayout(dataTable);
+        },
+      );
     }
     final content = _wrapContent(context, widget.child);
     return _buildNormalLayout(content);
+  }
+
+  DataTable? _extractDataTable(Widget child) {
+    if (child is DataTable) {
+      return child;
+    }
+    if (child is SingleChildScrollView && child.child is DataTable) {
+      return child.child as DataTable;
+    }
+    return null;
   }
 
   Widget _wrapContent(BuildContext context, Widget child) {
@@ -140,6 +158,97 @@ class _AdaptiveTableContainerState extends State<AdaptiveTableContainer> {
       data: UnifiedListTableHeaderStyle.dataTableTheme(theme),
       child: stickyLayout,
     );
+  }
+
+  DataTable _normalizeDataTable(
+    DataTable dataTable, {
+    required double availableWidth,
+  }) {
+    final resolvedColumnWidth = _resolveUniformColumnWidth(
+      availableWidth: availableWidth,
+      horizontalMargin: dataTable.horizontalMargin,
+      columnSpacing: dataTable.columnSpacing,
+      columnCount: dataTable.columns.length,
+    );
+
+    return DataTable(
+      key: dataTable.key,
+      columns: dataTable.columns
+          .map(
+            (column) => UnifiedListTableHeaderStyle.normalizeColumn(
+              column,
+              columnWidth: resolvedColumnWidth,
+            ),
+          )
+          .toList(growable: false),
+      rows: dataTable.rows
+          .map(
+            (row) => DataRow(
+              key: row.key,
+              selected: row.selected,
+              onSelectChanged: row.onSelectChanged,
+              onLongPress: row.onLongPress,
+              color: row.color,
+              mouseCursor: row.mouseCursor,
+              cells: row.cells
+                  .map(UnifiedListTableHeaderStyle.normalizeCell)
+                  .toList(growable: false),
+            ),
+          )
+          .toList(growable: false),
+      sortColumnIndex: dataTable.sortColumnIndex,
+      sortAscending: dataTable.sortAscending,
+      onSelectAll: dataTable.onSelectAll,
+      decoration: dataTable.decoration,
+      dataRowColor: dataTable.dataRowColor,
+      dataRowMinHeight: UnifiedListTableHeaderStyle.defaultDataRowMinHeight,
+      dataRowMaxHeight: UnifiedListTableHeaderStyle.defaultDataRowMaxHeight,
+      dataTextStyle: dataTable.dataTextStyle,
+      headingRowColor: dataTable.headingRowColor,
+      headingRowHeight: dataTable.headingRowHeight,
+      headingTextStyle: dataTable.headingTextStyle,
+      horizontalMargin: dataTable.horizontalMargin,
+      columnSpacing: dataTable.columnSpacing,
+      showCheckboxColumn: dataTable.showCheckboxColumn,
+      showBottomBorder: dataTable.showBottomBorder,
+      dividerThickness: dataTable.dividerThickness,
+      checkboxHorizontalMargin: dataTable.checkboxHorizontalMargin,
+      border: dataTable.border,
+      clipBehavior: dataTable.clipBehavior,
+    );
+  }
+
+  TableColumnWidth _resolveUniformColumnWidth({
+    required double availableWidth,
+    required double? horizontalMargin,
+    required double? columnSpacing,
+    required int columnCount,
+  }) {
+    if (columnCount <= 0) {
+      return FixedColumnWidth(
+        UnifiedListTableHeaderStyle.minimumColumnWidth,
+      );
+    }
+    if (availableWidth <= 0) {
+      return FixedColumnWidth(
+        UnifiedListTableHeaderStyle.minimumColumnWidth,
+      );
+    }
+    final resolvedHorizontalMargin = horizontalMargin ?? 24;
+    final resolvedColumnSpacing = columnSpacing ?? 56;
+    final spacingWidth = columnCount > 1
+        ? resolvedColumnSpacing * (columnCount - 1)
+        : 0.0;
+    final usableWidth =
+        availableWidth - (resolvedHorizontalMargin * 2) - spacingWidth;
+    final candidateWidth = usableWidth > 0
+        ? usableWidth / columnCount
+        : availableWidth / columnCount;
+    final resolvedWidth = candidateWidth <
+            UnifiedListTableHeaderStyle.minimumColumnWidth
+        ? UnifiedListTableHeaderStyle.minimumColumnWidth
+        : candidateWidth;
+    return FixedColumnWidth(resolvedWidth);
   }
 
   DataTable _buildBodyOnlyDataTable(DataTable dataTable) {

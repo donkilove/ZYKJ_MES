@@ -63,6 +63,7 @@ class ProductVersionTableSection extends StatelessWidget {
           loadingWidget: const MesLoadingState(label: '版本加载中...'),
           enableUnifiedHeaderStyle: true,
           child: DataTable(
+            showCheckboxColumn: false,
             columnSpacing: 12,
             columns: const [
               DataColumn(label: Text('版本号')),

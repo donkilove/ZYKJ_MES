@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:mes_client/core/widgets/adaptive_table_container.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
@@ -41,57 +40,57 @@ class ProductParameterVersionTableSection extends StatelessWidget {
         isEmpty: rows.isEmpty,
         emptyText: emptyText,
         enableUnifiedHeaderStyle: true,
-        child: AdaptiveTableContainer(
-          child: UnifiedListTableHeaderStyle.wrap(
-            theme: theme,
-            child: DataTable(
-              columns: [
-                UnifiedListTableHeaderStyle.column(context, '产品名称'),
-                UnifiedListTableHeaderStyle.column(context, '产品分类'),
-                UnifiedListTableHeaderStyle.column(context, '版本标签/版本号'),
-                UnifiedListTableHeaderStyle.column(context, '创建时间'),
-                UnifiedListTableHeaderStyle.column(context, '版本状态'),
-                UnifiedListTableHeaderStyle.column(
-                  context,
-                  '操作',
-                  textAlign: TextAlign.center,
+        child: DataTable(
+          columns: [
+            UnifiedListTableHeaderStyle.column(context, '产品名称'),
+            UnifiedListTableHeaderStyle.column(context, '产品分类'),
+            UnifiedListTableHeaderStyle.column(context, '版本'),
+            UnifiedListTableHeaderStyle.column(context, '创建时间'),
+            UnifiedListTableHeaderStyle.column(context, '状态'),
+            UnifiedListTableHeaderStyle.column(
+              context,
+              '操作',
+              textAlign: TextAlign.center,
+            ),
+          ],
+          rows: rows.map((row) {
+            return DataRow(
+              cells: [
+                DataCell(Text(row.productName)),
+                DataCell(
+                  Text(row.productCategory.isEmpty ? '-' : row.productCategory),
+                ),
+                DataCell(Text('${row.versionLabel} / #${row.version}')),
+                DataCell(Text(formatTime(row.createdAt))),
+                DataCell(Text(_versionStatusLabel(row))),
+                DataCell(
+                  UnifiedListTableHeaderStyle.actionMenuButton<
+                      ProductParameterManagementListAction>(
+                    theme: theme,
+                    onSelected: (action) => onSelected(action, row),
+                    itemBuilder: (context) => buildActionItems(row),
+                  ),
                 ),
               ],
-              rows: rows.map((row) {
-                return DataRow(
-                  cells: [
-                    DataCell(Text(row.productName)),
-                    DataCell(
-                      Text(row.productCategory.isEmpty ? '-' : row.productCategory),
-                    ),
-                    DataCell(Text('${row.versionLabel} / #${row.version}')),
-                    DataCell(Text(formatTime(row.createdAt))),
-                    DataCell(
-                      Text(
-                        [
-                          _lifecycleLabel(row.lifecycleStatus),
-                          if (row.isCurrentVersion) '当前版本',
-                          if (row.isEffectiveVersion) '生效版本',
-                        ].join(' / '),
-                      ),
-                    ),
-                    DataCell(
-                      UnifiedListTableHeaderStyle.actionMenuButton<
-                          ProductParameterManagementListAction>(
-                        theme: theme,
-                        onSelected: (action) => onSelected(action, row),
-                        itemBuilder: (context) => buildActionItems(row),
-                      ),
-                    ),
-                  ],
-                );
-              }).toList(),
-            ),
-          ),
+            );
+          }).toList(),
         ),
       ),
     );
   }
+}
+
+String _versionStatusLabel(ProductParameterVersionListItem row) {
+  if (row.isCurrentVersion && row.isEffectiveVersion) {
+    return '当前生效';
+  }
+  if (row.isCurrentVersion) {
+    return '当前草稿';
+  }
+  if (row.isEffectiveVersion) {
+    return '生效';
+  }
+  return _lifecycleLabel(row.lifecycleStatus);
 }
 
 String _lifecycleLabel(String value) {

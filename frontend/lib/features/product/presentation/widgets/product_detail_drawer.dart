@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
+import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_history_timeline.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_related_info_section.dart';
@@ -145,9 +146,15 @@ class ProductDetailDrawer extends StatelessWidget {
                         enableUnifiedHeaderStyle: true,
                         child: DataTable(
                           columnSpacing: 16,
-                          headingRowHeight: 36,
-                          dataRowMinHeight: 32,
-                          dataRowMaxHeight: 40,
+                          headingRowHeight:
+                              UnifiedListTableHeaderStyle
+                                  .defaultHeadingRowHeight,
+                          dataRowMinHeight:
+                              UnifiedListTableHeaderStyle
+                                  .defaultDataRowMinHeight,
+                          dataRowMaxHeight:
+                              UnifiedListTableHeaderStyle
+                                  .defaultDataRowMaxHeight,
                           columns: const [
                             DataColumn(label: Text('参数名')),
                             DataColumn(label: Text('分组')),

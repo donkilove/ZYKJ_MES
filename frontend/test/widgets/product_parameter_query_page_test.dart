@@ -5,6 +5,7 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/foundation/mes_theme.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
+import 'package:mes_client/core/widgets/adaptive_table_container.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/product_page.dart';
@@ -53,6 +54,10 @@ class _QueryPageStructureService extends ProductService {
 
   final List<ProductItem> products;
   int queryCalls = 0;
+  String? lastKeyword;
+  String? lastCategory;
+  String? lastLifecycleStatus;
+  bool? lastHasEffectiveVersion;
 
   @override
   Future<ProductListResult> listProducts({
@@ -82,7 +87,54 @@ class _QueryPageStructureService extends ProductService {
     String? effectiveVersionKeyword,
   }) async {
     queryCalls += 1;
+    lastKeyword = keyword;
+    lastCategory = category;
+    lastLifecycleStatus = lifecycleStatus;
+    lastHasEffectiveVersion = hasEffectiveVersion;
     return ProductListResult(total: products.length, items: products);
+  }
+}
+
+class _RetryQueryPageStructureService extends ProductService {
+  _RetryQueryPageStructureService() : super(_session());
+
+  int queryCalls = 0;
+
+  @override
+  Future<ProductListResult> listProducts({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? category,
+    String? lifecycleStatus,
+    bool? hasEffectiveVersion,
+    DateTime? updatedAfter,
+    DateTime? updatedBefore,
+    String? currentVersionKeyword,
+    String? currentParamNameKeyword,
+    String? currentParamCategoryKeyword,
+  }) async {
+    throw ApiException('参数查询页不应回退产品管理列表接口', 500);
+  }
+
+  @override
+  Future<ProductListResult> listProductsForParameterQuery({
+    required int page,
+    required int pageSize,
+    String? keyword,
+    String? category,
+    String? lifecycleStatus,
+    bool? hasEffectiveVersion,
+    String? effectiveVersionKeyword,
+  }) async {
+    queryCalls += 1;
+    if (queryCalls == 1) {
+      return ProductListResult(total: 0, items: const []);
+    }
+    return ProductListResult(
+      total: 1,
+      items: [_buildProduct(id: 93, category: 'DTU', effectiveVersion: 1)],
+    );
   }
 }
 
@@ -173,6 +225,31 @@ void main() {
     expect(find.widgetWithText(TextButton, '查看参数'), findsNWidgets(2));
   });
 
+  testWidgets('产品参数查询表格区不重复嵌套 AdaptiveTableContainer', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildMesTheme(
+          brightness: Brightness.light,
+          visualDensity: VisualDensity.standard,
+        ),
+        home: Scaffold(
+          body: ProductParameterQueryTableSection(
+            products: [
+              _buildProduct(id: 81, effectiveVersion: 1),
+            ],
+            loading: false,
+            emptyText: '暂无产品',
+            formatTime: (_) => '2026-04-21 08:00:00',
+            onViewParameters: (_) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AdaptiveTableContainer), findsOneWidget);
+  });
+
   testWidgets('ProductParameterQueryPage 列表态接入统一查询骨架并展示锚点', (tester) async {
     await tester.binding.setSurfaceSize(const Size(1440, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -217,6 +294,144 @@ void main() {
     expect(find.widgetWithText(OutlinedButton, '导出'), findsOneWidget);
     expect(service.queryCalls, 1);
     expect(find.text('产品91'), findsOneWidget);
+    expect(service.lastLifecycleStatus, isNull);
+    expect(service.lastHasEffectiveVersion, isNull);
+  });
+
+  testWidgets('产品参数查询页首屏默认查询全部产品而非仅启用生效产品', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final service = _QueryPageStructureService([
+      _buildProduct(id: 91, effectiveVersion: 1),
+      _buildProduct(id: 92, lifecycleStatus: 'inactive', effectiveVersion: 0),
+    ]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildMesTheme(
+          brightness: Brightness.light,
+          visualDensity: VisualDensity.standard,
+        ),
+        home: Scaffold(
+          body: SizedBox(
+            width: 1440,
+            height: 900,
+            child: ProductParameterQueryPage(
+              session: _session(),
+              onLogout: () {},
+              tabCode: productParameterQueryTabCode,
+              service: service,
+              canExportParameters: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(service.queryCalls, 1);
+    expect(service.lastKeyword, '');
+    expect(service.lastCategory, '');
+    expect(service.lastLifecycleStatus, isNull);
+    expect(service.lastHasEffectiveVersion, isNull);
+    expect(find.text('产品91'), findsOneWidget);
+    expect(find.text('产品92'), findsOneWidget);
+  });
+
+  testWidgets('产品参数查询页在页签重新可见时会自动刷新列表', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final service = _QueryPageStructureService([
+      _buildProduct(id: 91, effectiveVersion: 1),
+    ]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildMesTheme(
+          brightness: Brightness.light,
+          visualDensity: VisualDensity.standard,
+        ),
+        home: Scaffold(
+          body: SizedBox(
+            width: 1440,
+            height: 900,
+            child: ProductParameterQueryPage(
+              session: _session(),
+              onLogout: () {},
+              tabCode: productParameterQueryTabCode,
+              service: service,
+              isCurrentTabVisible: false,
+              canExportParameters: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(service.queryCalls, 1);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildMesTheme(
+          brightness: Brightness.light,
+          visualDensity: VisualDensity.standard,
+        ),
+        home: Scaffold(
+          body: SizedBox(
+            width: 1440,
+            height: 900,
+            child: ProductParameterQueryPage(
+              session: _session(),
+              onLogout: () {},
+              tabCode: productParameterQueryTabCode,
+              service: service,
+              isCurrentTabVisible: true,
+              canExportParameters: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(service.queryCalls, 2);
+  });
+
+  testWidgets('产品参数查询页在当前可见且空列表时会自动重试一次拉取数据', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1440, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final service = _RetryQueryPageStructureService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildMesTheme(
+          brightness: Brightness.light,
+          visualDensity: VisualDensity.standard,
+        ),
+        home: Scaffold(
+          body: SizedBox(
+            width: 1440,
+            height: 900,
+            child: ProductParameterQueryPage(
+              session: _session(),
+              onLogout: () {},
+              tabCode: productParameterQueryTabCode,
+              isCurrentTabVisible: true,
+              service: service,
+              canExportParameters: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(service.queryCalls, 2);
+    expect(find.text('产品93'), findsOneWidget);
   });
 
   testWidgets('参数查看弹窗展示顶部摘要和参数表格', (tester) async {

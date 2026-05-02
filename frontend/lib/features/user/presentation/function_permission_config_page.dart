@@ -24,8 +24,8 @@ const List<String> _allowedModuleCodes = [
   'user',
   'product',
   'craft',
-  'production',
   'quality',
+  'production',
   'equipment',
   'message',
 ];
@@ -227,7 +227,7 @@ class _FunctionPermissionConfigPageState
       }
 
       final bootstrap = await _authzService.loadCapabilityPackCatalog(
-        moduleCode: _selectedModuleCode ?? 'production',
+        moduleCode: _selectedModuleCode ?? 'user',
       );
       _catalogByModule[bootstrap.moduleCode] = bootstrap;
       final modules = _filterAllowedModuleCodes(bootstrap.moduleCodes);
@@ -235,8 +235,8 @@ class _FunctionPermissionConfigPageState
         throw StateError('未查询到可配置模块');
       }
 
-      final initialModule = modules.contains('production')
-          ? 'production'
+      final initialModule = modules.contains('user')
+          ? 'user'
           : modules.first;
       await _loadModuleData(initialModule, roles: roles, moduleCodes: modules);
     } catch (error) {

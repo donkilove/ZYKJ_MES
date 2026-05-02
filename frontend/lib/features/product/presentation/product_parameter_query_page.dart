@@ -23,6 +23,7 @@ class ProductParameterQueryPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.tabCode,
+    this.isCurrentTabVisible = true,
     this.jumpCommand,
     this.onJumpHandled,
     this.service,
@@ -32,6 +33,7 @@ class ProductParameterQueryPage extends StatefulWidget {
   final AppSession session;
   final VoidCallback onLogout;
   final String tabCode;
+  final bool isCurrentTabVisible;
   final ProductJumpCommand? jumpCommand;
   final ValueChanged<int>? onJumpHandled;
   final ProductService? service;
@@ -53,6 +55,7 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
   List<ProductItem> _products = const [];
   int _handledJumpSeq = 0;
   String _selectedCategoryFilter = '';
+  bool _scheduledVisibleEmptyRetry = false;
 
   @override
   void initState() {
@@ -64,6 +67,9 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
   @override
   void didUpdateWidget(covariant ProductParameterQueryPage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.isCurrentTabVisible && !oldWidget.isCurrentTabVisible) {
+      unawaited(_loadProducts());
+    }
     final command = widget.jumpCommand;
     if (command == null) {
       return;
@@ -115,6 +121,7 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
   }
 
   Future<void> _loadProducts() async {
+    _scheduledVisibleEmptyRetry = false;
     setState(() {
       _loading = true;
       _message = '';
@@ -125,8 +132,6 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
         pageSize: _listPageSize,
         keyword: _keywordController.text.trim(),
         category: _selectedCategoryFilter,
-        lifecycleStatus: 'active',
-        hasEffectiveVersion: true,
       );
       if (!mounted) {
         return;
@@ -307,6 +312,24 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
   }
 
   Widget _buildListView() {
+    if (widget.isCurrentTabVisible &&
+        !_loading &&
+        _products.isEmpty &&
+        _message.trim().isEmpty &&
+        !_scheduledVisibleEmptyRetry) {
+      _scheduledVisibleEmptyRetry = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted ||
+            !widget.isCurrentTabVisible ||
+            _loading ||
+            _products.isNotEmpty ||
+            _message.trim().isNotEmpty) {
+          return;
+        }
+        unawaited(_loadProducts());
+      });
+    }
+
     return MesCrudPageScaffold(
       header: ProductParameterQueryPageHeader(
         loading: _loading,

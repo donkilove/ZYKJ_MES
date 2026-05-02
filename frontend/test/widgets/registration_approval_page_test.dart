@@ -417,13 +417,53 @@ void main() {
     expect(find.text('通过'), findsNothing);
     expect(find.text('驳回'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(TextButton, '驳回'));
+    await tester.tap(
+      find.byKey(const ValueKey('registration-approval-reject-button-1')),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '确认驳回'));
     await tester.pumpAndSettle();
 
     expect(userService.rejectCalls, 1);
     expect(userService.approveCalls, 0);
+  });
+
+  testWidgets('注册审批列表的通过与驳回按钮使用绿色和红色实底样式', (tester) async {
+    final userService = _FakeApprovalUserService();
+    final craftService = _FakeApprovalCraftService();
+    await _pumpApprovalPage(
+      tester,
+      userService: userService,
+      craftService: craftService,
+    );
+
+    final approveMaterial = tester.widget<Material>(
+      find.byKey(const ValueKey('registration-approval-approve-button-1')),
+    );
+    final rejectMaterial = tester.widget<Material>(
+      find.byKey(const ValueKey('registration-approval-reject-button-1')),
+    );
+    final approveBox = tester.widget<SizedBox>(
+      find.ancestor(
+        of: find.text('通过'),
+        matching: find.byType(SizedBox),
+      ).first,
+    );
+    final rejectBox = tester.widget<SizedBox>(
+      find.ancestor(
+        of: find.text('驳回'),
+        matching: find.byType(SizedBox),
+      ).first,
+    );
+
+    expect(approveMaterial.color, Colors.green.shade600);
+    expect(rejectMaterial.color, Colors.red.shade600);
+    expect(approveBox.width, 64);
+    expect(approveBox.height, 28);
+    expect(rejectBox.width, 64);
+    expect(rejectBox.height, 28);
+    expect(approveMaterial.borderRadius, BorderRadius.circular(20));
+    expect(rejectMaterial.borderRadius, BorderRadius.circular(20));
   });
 
   testWidgets('注册审批页直接展示并校验初始密码规则', (tester) async {
@@ -518,7 +558,9 @@ void main() {
       craftService: craftService,
     );
 
-    await tester.tap(find.widgetWithText(TextButton, '驳回'));
+    await tester.tap(
+      find.byKey(const ValueKey('registration-approval-reject-button-1')),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '确认驳回'));
     await tester.pumpAndSettle();

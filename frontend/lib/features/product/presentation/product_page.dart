@@ -56,6 +56,7 @@ class _ProductPageState extends State<ProductPage>
     with SingleTickerProviderStateMixin {
   late List<String> _orderedVisibleTabCodes;
   TabController? _tabController;
+  int _currentTabIndex = 0;
 
   ProductJumpCommand? _jumpCommand;
   int _jumpSeq = 0;
@@ -123,6 +124,7 @@ class _ProductPageState extends State<ProductPage>
     _tabController?.dispose();
     if (_orderedVisibleTabCodes.isEmpty) {
       _tabController = null;
+      _currentTabIndex = 0;
       return;
     }
     var initialIndex = 0;
@@ -137,6 +139,14 @@ class _ProductPageState extends State<ProductPage>
       vsync: this,
       initialIndex: initialIndex,
     );
+    _currentTabIndex = initialIndex;
+    _tabController!.addListener(() {
+      if (!_tabController!.indexIsChanging && mounted) {
+        setState(() {
+          _currentTabIndex = _tabController!.index;
+        });
+      }
+    });
   }
 
   void _selectPreferredTab(String? preferredCode) {
@@ -247,6 +257,8 @@ class _ProductPageState extends State<ProductPage>
   }
 
   Widget _buildTabContent(String code) {
+    final currentIndex = _orderedVisibleTabCodes.indexOf(code);
+    final isCurrentTabVisible = currentIndex == _currentTabIndex;
     switch (code) {
       case productManagementTabCode:
         return _buildTabChild(
@@ -361,6 +373,7 @@ class _ProductPageState extends State<ProductPage>
             session: widget.session,
             onLogout: widget.onLogout,
             tabCode: productParameterQueryTabCode,
+            isCurrentTabVisible: isCurrentTabVisible,
             jumpCommand: _jumpCommand,
             onJumpHandled: _handleJumpConsumed,
             canExportParameters: _hasPermission(

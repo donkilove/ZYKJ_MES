@@ -285,8 +285,10 @@ class _AuditLogPageState extends State<AuditLogPage> {
           enableUnifiedHeaderStyle: true,
           child: DataTable(
             columnSpacing: 16,
-            dataRowMinHeight: 56,
-            dataRowMaxHeight: 72,
+            dataRowMinHeight:
+                UnifiedListTableHeaderStyle.defaultDataRowMinHeight,
+            dataRowMaxHeight:
+                UnifiedListTableHeaderStyle.defaultDataRowMaxHeight,
             columns: [
               for (final column in _columns)
                 UnifiedListTableHeaderStyle.column(context, column.label),

@@ -240,6 +240,7 @@ class _FakeSupportAuthzService extends AuthzService {
 
   int applyCapabilityPacksCalls = 0;
   final List<String> loadedCatalogModules = <String>[];
+  List<String> catalogModuleCodes = const ['user', 'system', 'product'];
   String? lastAppliedModuleCode;
   int? lastExpectedRevision;
   List<CapabilityPackRoleDraftItem>? lastAppliedRoleItems;
@@ -251,10 +252,20 @@ class _FakeSupportAuthzService extends AuthzService {
     required String moduleCode,
   }) async {
     loadedCatalogModules.add(moduleCode);
+    final moduleNameMap = <String, String>{
+      'user': '用户管理',
+      'product': '产品管理',
+      'craft': '工艺管理',
+      'quality': '质量管理',
+      'production': '生产管理',
+      'equipment': '设备管理',
+      'message': '消息中心',
+      'system': '系统管理',
+    };
     return CapabilityPackCatalogResult(
       moduleCode: moduleCode,
-      moduleCodes: const ['user', 'system', 'product'],
-      moduleName: moduleCode == 'product' ? '产品管理' : '用户管理',
+      moduleCodes: catalogModuleCodes,
+      moduleName: moduleNameMap[moduleCode] ?? moduleCode,
       moduleRevision: 1,
       modulePermissionCode: moduleCode == 'product'
           ? 'module.product'
@@ -642,7 +653,7 @@ void main() {
 
     expect(find.text('切换模块'), findsOneWidget);
     expect(find.text('当前有未保存改动，是否放弃并切换？'), findsOneWidget);
-    expect(authzService.loadedCatalogModules, ['production', 'user']);
+    expect(authzService.loadedCatalogModules, ['user', 'user']);
   });
 
   testWidgets('function permission config save success triggers callback', (
@@ -816,6 +827,54 @@ void main() {
       authzService.loadedCatalogModules,
       containsAll(<String>['user', 'product']),
     );
+  });
+
+  testWidgets('function permission config 模块下拉顺序与默认选中遵循用户导航顺序', (tester) async {
+    authzService.loadedCatalogModules.clear();
+    authzService.catalogModuleCodes = const [
+      'production',
+      'equipment',
+      'message',
+      'quality',
+      'user',
+      'craft',
+      'product',
+      'system',
+    ];
+
+    await _pumpPage(
+      tester,
+      FunctionPermissionConfigPage(
+        session: _session,
+        onLogout: () {},
+        authzService: authzService,
+        userService: userService,
+      ),
+    );
+
+    expect(authzService.loadedCatalogModules, ['user', 'user']);
+    expect(find.text('用户管理'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(DropdownButtonFormField<String>, '用户管理'));
+    await tester.pumpAndSettle();
+
+    final modules = tester
+        .widgetList<DropdownMenuItem<String>>(find.byType(DropdownMenuItem<String>))
+        .map((item) => ((item.child as Text).data ?? '').trim())
+        .where((text) => text.isNotEmpty)
+        .fold<List<String>>(<String>[], (result, text) {
+          if (!result.contains(text)) {
+            result.add(text);
+          }
+          return result;
+        });
+
+    expect(
+      modules,
+      const ['用户管理', '产品管理', '工艺管理', '质量管理', '生产管理', '设备管理', '消息中心'],
+    );
+
+    authzService.catalogModuleCodes = const ['user', 'system', 'product'];
   });
 
   testWidgets('audit log page renders audit rows', (tester) async {

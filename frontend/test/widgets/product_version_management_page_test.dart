@@ -334,6 +334,58 @@ void main() {
     expect(find.text('删除版本'), findsOneWidget);
   });
 
+  testWidgets('版本列表不展示 DataTable 自动复选框列', (tester) async {
+    tester.view.physicalSize = const Size(1800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildMesTheme(
+          brightness: Brightness.light,
+          visualDensity: VisualDensity.standard,
+        ),
+        home: Scaffold(
+          body: SizedBox(
+            width: 1200,
+            height: 600,
+            child: ProductVersionTableSection(
+              versions: [
+                _buildVersion(
+                  version: 2,
+                  label: 'V1.1',
+                  lifecycleStatus: 'draft',
+                  note: '草稿版本',
+                ),
+              ],
+              loading: false,
+              selectedVersionNumber: 2,
+              canManageVersions: true,
+              canActivateVersions: true,
+              canExportVersionParameters: true,
+              onSelectVersion: (_) {},
+              onShowDetail: (_) {},
+              onActivate: (_) {},
+              onCopy: (_) {},
+              onEditNote: (_) {},
+              onEditParameters: (_) {},
+              onExport: (_) {},
+              onDisable: (_) {},
+              onDelete: (_) {},
+              formatDate: (_) => '2026-04-20 08:00',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(Checkbox), findsNothing);
+  });
+
   testWidgets('ProductVersionManagementPage 接入主从骨架并装配拆分组件', (tester) async {
     tester.view.physicalSize = const Size(1800, 1200);
     tester.view.devicePixelRatio = 1.0;

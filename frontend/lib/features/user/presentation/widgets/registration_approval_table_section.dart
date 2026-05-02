@@ -71,14 +71,26 @@ class RegistrationApprovalTableSection extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (item.status == 'pending' && canApprove)
-                        TextButton(
+                        UnifiedListTableHeaderStyle.capsuleActionButton(
+                          key: ValueKey(
+                            'registration-approval-approve-button-${item.id}',
+                          ),
+                          label: '通过',
+                          backgroundColor: Colors.green.shade600,
+                          foregroundColor: Colors.white,
                           onPressed: () => onApprove(item),
-                          child: const Text('通过'),
                         ),
+                      if (item.status == 'pending' && canApprove && canReject)
+                        const SizedBox(width: 8),
                       if (item.status == 'pending' && canReject)
-                        TextButton(
+                        UnifiedListTableHeaderStyle.capsuleActionButton(
+                          key: ValueKey(
+                            'registration-approval-reject-button-${item.id}',
+                          ),
+                          label: '驳回',
+                          backgroundColor: Colors.red.shade600,
+                          foregroundColor: Colors.white,
                           onPressed: () => onReject(item),
-                          child: const Text('驳回'),
                         ),
                       if (item.status != 'pending' ||
                           (!canApprove && !canReject))

@@ -354,8 +354,10 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
                   enableUnifiedHeaderStyle: true,
                   child: DataTable(
                     columnSpacing: 16,
-                    dataRowMinHeight: 60,
-                    dataRowMaxHeight: 76,
+                    dataRowMinHeight:
+                        UnifiedListTableHeaderStyle.defaultDataRowMinHeight,
+                    dataRowMaxHeight:
+                        UnifiedListTableHeaderStyle.defaultDataRowMaxHeight,
                     columns: [
                       UnifiedListTableHeaderStyle.column(context, '选择'),
                       UnifiedListTableHeaderStyle.column(context, '用户名'),

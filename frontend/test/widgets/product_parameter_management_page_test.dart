@@ -55,6 +55,7 @@ class _PageStructureService extends ProductService {
     : super(AppSession(baseUrl: '', accessToken: 'token'));
 
   final List<int> historyPages = [];
+  String? lastKeyword;
 
   @override
   Future<ProductParameterVersionListResult> listProductParameterVersions({
@@ -69,6 +70,32 @@ class _PageStructureService extends ProductService {
     DateTime? updatedAfter,
     DateTime? updatedBefore,
   }) async {
+    lastKeyword = keyword;
+    if (keyword == 'AAA') {
+      return ProductParameterVersionListResult(
+        total: 1,
+        items: [
+          ProductParameterVersionListItem(
+            productId: 88,
+            productName: 'AAA',
+            productCategory: 'DTU',
+            version: 1,
+            versionLabel: 'V1.0',
+            lifecycleStatus: 'draft',
+            isCurrentVersion: true,
+            isEffectiveVersion: false,
+            createdAt: _fixedDate,
+            parameterSummary: '初始草稿参数',
+            parameterCount: 5,
+            matchedParameterName: '产品名称',
+            matchedParameterCategory: '基础参数',
+            lastModifiedParameter: '产品名称',
+            lastModifiedParameterCategory: '基础参数',
+            updatedAt: _fixedDate,
+          ),
+        ],
+      );
+    }
     return ProductParameterVersionListResult(
       total: 2,
       items: [
@@ -281,6 +308,40 @@ void main() {
     );
     expect(find.byType(ProductParameterVersionTableSection), findsOneWidget);
     expect(find.byType(ProductParameterManagementFeedbackBanner), findsNothing);
+  });
+
+  testWidgets('参数管理页点击搜索后会按产品名称查询并展示匹配版本行', (tester) async {
+    final service = _PageStructureService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildMesTheme(
+          brightness: Brightness.light,
+          visualDensity: VisualDensity.standard,
+        ),
+        home: Scaffold(
+          body: SizedBox(
+            width: 1440,
+            height: 900,
+            child: ProductParameterManagementPage(
+              session: AppSession(baseUrl: '', accessToken: 'token'),
+              onLogout: () {},
+              tabCode: 'product-parameter-management',
+              service: service,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, '搜索产品名称'), 'AAA');
+    await tester.tap(find.widgetWithText(FilledButton, '搜索'));
+    await tester.pumpAndSettle();
+
+    expect(service.lastKeyword, 'AAA');
+    expect(find.text('AAA'), findsWidgets);
+    expect(find.text('V1.0 / #1'), findsOneWidget);
   });
 
   testWidgets('ProductParameterManagementPage 列表态与统一页面骨架保持单层边距', (tester) async {
