@@ -1,44 +1,80 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
+import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/craft/presentation/process_management_page.dart';
+import 'package:mes_client/features/craft/presentation/widgets/process_item_panel.dart';
+import 'package:mes_client/features/craft/presentation/widgets/process_management_models.dart';
+import 'package:mes_client/features/craft/presentation/widgets/process_stage_panel.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 
 class _FakeCraftService extends CraftService {
   _FakeCraftService() : super(AppSession(baseUrl: '', accessToken: ''));
 
-  final List<CraftStageItem> _stages = [
-    CraftStageItem(
-      id: 1,
-      code: 'CUT',
-      name: '切割段',
-      sortOrder: 1,
+  late final List<CraftStageItem> _stages = List.generate(21, (index) {
+    final sortOrder = index + 1;
+    final code = switch (index) {
+      0 => 'CUT',
+      1 => 'TEST',
+      2 => 'PACK',
+      _ => 'STG${sortOrder.toString().padLeft(2, '0')}',
+    };
+    final name = switch (index) {
+      0 => '切割段',
+      1 => '产品测试',
+      2 => '产品包装',
+      _ => '工段$sortOrder',
+    };
+    return CraftStageItem(
+      id: sortOrder,
+      code: code,
+      name: name,
+      sortOrder: sortOrder,
       isEnabled: true,
-      processCount: 1,
+      processCount: sortOrder,
       createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
       updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
-    ),
-  ];
-  final List<CraftProcessItem> _processes = [
-    CraftProcessItem(
-      id: 11,
-      code: 'CUT-01',
-      name: '激光切割',
-      stageId: 1,
-      stageCode: 'CUT',
-      stageName: '切割段',
+    );
+  });
+  late final List<CraftProcessItem> _processes = List.generate(21, (index) {
+    final id = index + 11;
+    final stage = _stages[index % _stages.length];
+    final code = switch (index) {
+      0 => 'CUT-01',
+      1 => 'TEST-01',
+      2 => 'PACK-01',
+      _ => '${stage.code}-${(index + 1).toString().padLeft(2, '0')}',
+    };
+    final name = switch (index) {
+      0 => '激光切割',
+      1 => '程序烧录',
+      2 => '产品包装',
+      _ => '工序${index + 1}',
+    };
+    return CraftProcessItem(
+      id: id,
+      code: code,
+      name: name,
+      stageId: stage.id,
+      stageCode: stage.code,
+      stageName: stage.name,
       isEnabled: true,
       createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
       updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
-    ),
-  ];
+    );
+  });
 
   int createProcessCalls = 0;
   int updateStageCalls = 0;
   int updateProcessCalls = 0;
   int deleteProcessCalls = 0;
+  int lastStagePage = 1;
+  int lastProcessPage = 1;
+  int lastStagePageSize = 200;
+  int lastProcessPageSize = 500;
   int? lastUpdatedStageId;
   bool? lastUpdatedStageEnabled;
   int? lastUpdatedProcessId;
@@ -53,7 +89,27 @@ class _FakeCraftService extends CraftService {
     String? keyword,
     bool? enabled,
   }) async {
-    return CraftStageListResult(total: _stages.length, items: List.of(_stages));
+    lastStagePage = page;
+    lastStagePageSize = pageSize;
+    var items = List<CraftStageItem>.from(_stages);
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      final normalized = keyword.trim().toLowerCase();
+      items = items
+          .where(
+            (item) =>
+                item.code.toLowerCase().contains(normalized) ||
+                item.name.toLowerCase().contains(normalized),
+          )
+          .toList();
+    }
+    items.sort((a, b) {
+      final orderCompare = a.sortOrder.compareTo(b.sortOrder);
+      return orderCompare != 0 ? orderCompare : a.id.compareTo(b.id);
+    });
+    final start = (page - 1) * pageSize;
+    final end = (start + pageSize).clamp(0, items.length);
+    final paged = start >= items.length ? <CraftStageItem>[] : items.sublist(start, end);
+    return CraftStageListResult(total: items.length, items: paged);
   }
 
   @override
@@ -64,9 +120,37 @@ class _FakeCraftService extends CraftService {
     int? stageId,
     bool? enabled,
   }) async {
+    lastProcessPage = page;
+    lastProcessPageSize = pageSize;
+    var items = List<CraftProcessItem>.from(_processes);
+    if (stageId != null) {
+      items = items.where((item) => item.stageId == stageId).toList();
+    }
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      final normalized = keyword.trim().toLowerCase();
+      items = items
+          .where(
+            (item) =>
+                item.code.toLowerCase().contains(normalized) ||
+                item.name.toLowerCase().contains(normalized) ||
+                (item.stageName?.toLowerCase().contains(normalized) ?? false),
+          )
+          .toList();
+    }
+    items.sort((a, b) {
+      final stageCompare = (a.stageId ?? 0).compareTo(b.stageId ?? 0);
+      if (stageCompare != 0) {
+        return stageCompare;
+      }
+      final codeCompare = a.code.compareTo(b.code);
+      return codeCompare != 0 ? codeCompare : a.id.compareTo(b.id);
+    });
+    final start = (page - 1) * pageSize;
+    final end = (start + pageSize).clamp(0, items.length);
+    final paged = start >= items.length ? <CraftProcessItem>[] : items.sublist(start, end);
     return CraftProcessListResult(
-      total: _processes.length,
-      items: List.of(_processes),
+      total: items.length,
+      items: paged,
     );
   }
 
@@ -211,6 +295,12 @@ Future<void> _pumpProcessManagementPage(
 }
 
 void main() {
+  Finder _popupMenuButtons() {
+    return find.byWidgetPredicate(
+      (widget) => widget.runtimeType.toString().startsWith('PopupMenuButton'),
+    );
+  }
+
   testWidgets('默认进入工序主视图并显示视图切换按钮', (tester) async {
     await _pumpProcessManagementPage(tester, size: const Size(1400, 1200));
 
@@ -226,6 +316,10 @@ void main() {
       find.byKey(const ValueKey('process-management-view-switch')),
       findsOneWidget,
     );
+    expect(find.text('工序列表'), findsNWidgets(2));
+    expect(find.byType(CrudListTableSection), findsOneWidget);
+    expect(find.byType(MesPaginationBar), findsOneWidget);
+    expect(find.byType(Checkbox), findsNothing);
     expect(find.byKey(const ValueKey('process-item-panel')), findsOneWidget);
     expect(find.byKey(const ValueKey('process-stage-panel')), findsNothing);
     expect(find.byKey(const ValueKey('process-focus-panel')), findsNothing);
@@ -242,14 +336,181 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('process-view-switch-stage')));
     await tester.pumpAndSettle();
 
+    expect(find.byType(CrudListTableSection), findsOneWidget);
+    expect(find.byType(MesPaginationBar), findsOneWidget);
+    expect(find.byType(Checkbox), findsNothing);
+    expect(find.text('工段列表'), findsNWidgets(2));
     expect(find.byKey(const ValueKey('process-stage-panel')), findsOneWidget);
     expect(find.byKey(const ValueKey('process-item-panel')), findsNothing);
+  });
+
+  testWidgets('工段视图筛选区接入统一 MesFilterBar', (tester) async {
+    await _pumpProcessManagementPage(tester, size: const Size(1400, 1200));
+
+    await tester.tap(find.byKey(const ValueKey('process-view-switch-stage')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('process-stage-filter-bar')), findsOneWidget);
+  });
+
+  testWidgets('工序列表加载态与空态文案使用统一口径', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 1400,
+            height: 900,
+            child: ProcessItemPanel(
+              searchController: TextEditingController(),
+              stageFilter: null,
+              stageOptions: const [],
+              items: const [],
+              loading: true,
+              page: 1,
+              totalPages: 1,
+              total: 0,
+              focusedProcessId: null,
+              canWrite: true,
+              onKeywordChanged: (_) {},
+              onStageFilterChanged: (_) {},
+              onPreviousPage: null,
+              onNextPage: null,
+              onFocusProcess: (_) {},
+              onActionSelected: (_, __) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('工序列表加载中...'), findsOneWidget);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 1400,
+            height: 900,
+            child: ProcessItemPanel(
+              searchController: TextEditingController(),
+              stageFilter: null,
+              stageOptions: const [],
+              items: const [],
+              loading: false,
+              page: 1,
+              totalPages: 1,
+              total: 0,
+              focusedProcessId: null,
+              canWrite: true,
+              onKeywordChanged: (_) {},
+              onStageFilterChanged: (_) {},
+              onPreviousPage: null,
+              onNextPage: null,
+              onFocusProcess: (_) {},
+              onActionSelected: (_, __) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('当前筛选下暂无工序记录'), findsOneWidget);
+  });
+
+  testWidgets('工段列表加载态与空态文案使用统一口径', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 1400,
+            height: 900,
+            child: ProcessStagePanel(
+              searchController: TextEditingController(),
+              items: const [],
+              loading: true,
+              page: 1,
+              totalPages: 1,
+              total: 0,
+              canWrite: true,
+              onKeywordChanged: (_) {},
+              onPreviousPage: null,
+              onNextPage: null,
+              onActionSelected: (_, __) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('工段列表加载中...'), findsOneWidget);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 1400,
+            height: 900,
+            child: ProcessStagePanel(
+              searchController: TextEditingController(),
+              items: const [],
+              loading: false,
+              page: 1,
+              totalPages: 1,
+              total: 0,
+              canWrite: true,
+              onKeywordChanged: (_) {},
+              onPreviousPage: null,
+              onNextPage: null,
+              onActionSelected: (_, __) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('当前筛选下暂无工段记录'), findsOneWidget);
+  });
+
+  testWidgets('工序列表点击下一页会请求第二页数据', (tester) async {
+    final craftService = _FakeCraftService();
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProcessManagementPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canWrite: true,
+            craftService: craftService,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(craftService.lastProcessPage, 1);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '下一页'));
+    await tester.pumpAndSettle();
+
+    expect(craftService.lastProcessPage, 2);
   });
 
   testWidgets('工序管理引用弹窗展示编码字段', (tester) async {
     await _pumpProcessManagementPage(tester, size: const Size(1600, 1200));
 
-    await tester.tap(find.text('操作').last);
+    await tester.tap(_popupMenuButtons().first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('查看引用').last);
     await tester.pump();
@@ -342,7 +603,7 @@ void main() {
     expect(craftService.lastCreatedProcess?.code, 'CUT-02');
     expect(find.text('折弯'), findsOneWidget);
 
-    await tester.tap(find.text('操作').last);
+    await tester.tap(_popupMenuButtons().at(1));
     await tester.pumpAndSettle();
     await tester.tap(find.text('删除').last);
     await tester.pumpAndSettle();
@@ -350,7 +611,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(craftService.deleteProcessCalls, 1);
-    expect(craftService.lastDeletedProcessId, 20);
+    expect(craftService.lastDeletedProcessId, craftService.lastCreatedProcess?.id);
     expect(find.text('折弯'), findsNothing);
   });
 
@@ -380,7 +641,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('process-view-switch-stage')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('操作').last);
+    await tester.tap(_popupMenuButtons().first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('启用/停用').last);
     await tester.pumpAndSettle();
@@ -421,7 +682,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    await tester.tap(find.text('操作').last);
+    await tester.tap(_popupMenuButtons().first);
     await tester.pumpAndSettle();
     await tester.tap(find.text('启用/停用').last);
     await tester.pumpAndSettle();

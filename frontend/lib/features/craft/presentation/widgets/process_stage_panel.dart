@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 
+import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_filter_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
+import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/craft/presentation/widgets/process_management_models.dart';
@@ -10,44 +15,28 @@ class ProcessStagePanel extends StatelessWidget {
     super.key,
     required this.searchController,
     required this.items,
+    required this.loading,
+    required this.page,
+    required this.totalPages,
+    required this.total,
     required this.canWrite,
     required this.onKeywordChanged,
+    required this.onPreviousPage,
+    required this.onNextPage,
     required this.onActionSelected,
   });
 
   final TextEditingController searchController;
   final List<CraftStageItem> items;
+  final bool loading;
+  final int page;
+  final int totalPages;
+  final int total;
   final bool canWrite;
   final ValueChanged<String> onKeywordChanged;
+  final VoidCallback? onPreviousPage;
+  final VoidCallback? onNextPage;
   final void Function(StageAction action, CraftStageItem item) onActionSelected;
-
-  Widget _buildHeaderLabel(
-    ThemeData theme,
-    String text, {
-    TextAlign textAlign = TextAlign.start,
-  }) {
-    return Text(
-      text,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      textAlign: textAlign,
-      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-    );
-  }
-
-  Widget _buildCellText(
-    String text, {
-    TextAlign textAlign = TextAlign.start,
-    TextStyle? style,
-  }) {
-    return Text(
-      text,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      textAlign: textAlign,
-      style: style,
-    );
-  }
 
   Widget _buildSearchField() {
     return SizedBox(
@@ -66,32 +55,6 @@ class ProcessStagePanel extends StatelessWidget {
     );
   }
 
-  Widget _buildHeaderRow(ThemeData theme) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.65),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Expanded(flex: 1, child: _buildHeaderLabel(theme, '工段编码')),
-          Expanded(flex: 2, child: _buildHeaderLabel(theme, '工段名称')),
-          Expanded(flex: 2, child: _buildHeaderLabel(theme, '备注')),
-          Expanded(flex: 1, child: _buildHeaderLabel(theme, '排序')),
-          Expanded(flex: 1, child: _buildHeaderLabel(theme, '状态')),
-          Expanded(flex: 1, child: _buildHeaderLabel(theme, '关联工序数')),
-          Expanded(flex: 1, child: _buildHeaderLabel(theme, '创建时间')),
-          SizedBox(
-            width: 64,
-            child: _buildHeaderLabel(theme, '操作', textAlign: TextAlign.center),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -103,102 +66,101 @@ class ProcessStagePanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text('工段列表', style: theme.textTheme.titleMedium),
-                _buildSearchField(),
-              ],
+            KeyedSubtree(
+              key: const ValueKey('process-stage-filter-bar'),
+              child: MesFilterBar(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [_buildSearchField()],
+                ),
+              ),
             ),
             const SizedBox(height: 8),
-            _buildHeaderRow(theme),
-            const SizedBox(height: 8),
             Expanded(
-              child: items.isEmpty
-                  ? const Center(child: Text('暂无工段'))
-                  : ListView.separated(
-                      itemCount: items.length,
-                      separatorBuilder: (context, index) =>
-                          const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final item = items[index];
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: 8,
-                            horizontal: 12,
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Expanded(flex: 1, child: _buildCellText(item.code)),
-                              Expanded(flex: 2, child: _buildCellText(item.name)),
-                              Expanded(
-                                flex: 2,
-                                child: _buildCellText(
-                                  item.remark.isEmpty ? '-' : item.remark,
-                                ),
-                              ),
-                              Expanded(
-                                flex: 1,
-                                child: _buildCellText('${item.sortOrder}'),
-                              ),
-                              Expanded(
-                                flex: 1,
-                                child: _buildCellText(item.isEnabled ? '启用' : '停用'),
-                              ),
-                              Expanded(
-                                flex: 1,
-                                child: _buildCellText('${item.processCount}'),
-                              ),
-                              Expanded(
-                                flex: 1,
-                                child: _buildCellText(
-                                  '${item.createdAt.year}-${item.createdAt.month.toString().padLeft(2, '0')}-${item.createdAt.day.toString().padLeft(2, '0')}',
-                                  style: theme.textTheme.bodySmall,
-                                ),
-                              ),
-                              SizedBox(
-                                width: 64,
-                                child:
-                                    UnifiedListTableHeaderStyle.actionMenuButton<StageAction>(
-                                      theme: theme,
-                                      onSelected: (action) =>
-                                          onActionSelected(action, item),
-                                      itemBuilder: (context) {
-                                        final items =
-                                            <PopupMenuEntry<StageAction>>[
-                                              const PopupMenuItem(
-                                                value: StageAction.viewReference,
-                                                child: Text('查看引用'),
-                                              ),
-                                            ];
-                                        if (canWrite) {
-                                          items.addAll(const [
-                                            PopupMenuItem(
-                                              value: StageAction.edit,
-                                              child: Text('编辑'),
-                                            ),
-                                            PopupMenuItem(
-                                              value: StageAction.toggle,
-                                              child: Text('启用/停用'),
-                                            ),
-                                            PopupMenuItem(
-                                              value: StageAction.delete,
-                                              child: Text('删除'),
-                                            ),
-                                          ]);
-                                        }
-                                        return items;
-                                      },
-                                    ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
+              child: CrudListTableSection(
+                loading: loading,
+                isEmpty: items.isEmpty,
+                emptyText: '当前筛选下暂无工段记录',
+                loadingWidget: const MesLoadingState(label: '工段列表加载中...'),
+                emptyWidget: const MesEmptyState(title: '当前筛选下暂无工段记录'),
+                enableUnifiedHeaderStyle: true,
+                child: DataTable(
+                  showCheckboxColumn: false,
+                  columns: [
+                    UnifiedListTableHeaderStyle.column(context, '工段编码'),
+                    UnifiedListTableHeaderStyle.column(context, '工段名称'),
+                    UnifiedListTableHeaderStyle.column(context, '备注'),
+                    UnifiedListTableHeaderStyle.column(context, '排序'),
+                    UnifiedListTableHeaderStyle.column(context, '状态'),
+                    UnifiedListTableHeaderStyle.column(context, '关联工序数'),
+                    UnifiedListTableHeaderStyle.column(context, '创建时间'),
+                    UnifiedListTableHeaderStyle.column(
+                      context,
+                      '操作',
+                      textAlign: TextAlign.center,
                     ),
+                  ],
+                  rows: items.map((item) {
+                    return DataRow(
+                      cells: [
+                        DataCell(Text(item.code)),
+                        DataCell(Text(item.name)),
+                        DataCell(Text(item.remark.isEmpty ? '-' : item.remark)),
+                        DataCell(Text('${item.sortOrder}')),
+                        DataCell(Text(item.isEnabled ? '启用' : '停用')),
+                        DataCell(Text('${item.processCount}')),
+                        DataCell(
+                          Text(
+                            '${item.createdAt.year}-${item.createdAt.month.toString().padLeft(2, '0')}-${item.createdAt.day.toString().padLeft(2, '0')}',
+                          ),
+                        ),
+                        DataCell(
+                          UnifiedListTableHeaderStyle.actionMenuButton<StageAction>(
+                            theme: theme,
+                            onSelected: (action) => onActionSelected(action, item),
+                            itemBuilder: (context) {
+                              final items = <PopupMenuEntry<StageAction>>[
+                                const PopupMenuItem(
+                                  value: StageAction.viewReference,
+                                  child: Text('查看引用'),
+                                ),
+                              ];
+                              if (canWrite) {
+                                items.addAll(const [
+                                  PopupMenuItem(
+                                    value: StageAction.edit,
+                                    child: Text('编辑'),
+                                  ),
+                                  PopupMenuItem(
+                                    value: StageAction.toggle,
+                                    child: Text('启用/停用'),
+                                  ),
+                                  PopupMenuItem(
+                                    value: StageAction.delete,
+                                    child: Text('删除'),
+                                  ),
+                                ]);
+                              }
+                              return items;
+                            },
+                          ),
+                        ),
+                      ],
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            MesPaginationBar(
+              page: page,
+              totalPages: totalPages,
+              total: total,
+              loading: loading,
+              onPrevious: onPreviousPage,
+              onNext: onNextPage,
             ),
           ],
         ),

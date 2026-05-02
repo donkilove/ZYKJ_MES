@@ -6,6 +6,9 @@ import 'package:mes_client/features/craft/presentation/widgets/process_managemen
 import 'package:mes_client/features/craft/services/craft_service.dart';
 
 class ProcessManagementState extends ChangeNotifier {
+  static const int stagePageSize = 10;
+  static const int processPageSize = 10;
+
   ProcessManagementState({
     required CraftService service,
     required VoidCallback onUnauthorized,
@@ -24,40 +27,9 @@ class ProcessManagementState extends ChangeNotifier {
   String _errorMessage(Object error) =>
       error is ApiException ? error.message : error.toString();
 
-  List<CraftStageItem> get filteredStages {
-    final kw = _viewState.stageKeyword.trim().toLowerCase();
-    if (kw.isEmpty) {
-      return _viewState.stages;
-    }
-    return _viewState.stages
-        .where(
-          (stage) =>
-              stage.code.toLowerCase().contains(kw) ||
-              stage.name.toLowerCase().contains(kw),
-        )
-        .toList();
-  }
+  List<CraftStageItem> get filteredStages => _viewState.stages;
 
-  List<CraftProcessItem> get filteredProcesses {
-    var list = _viewState.processes;
-    if (_viewState.processStageFilter != null) {
-      list = list
-          .where((process) => process.stageId == _viewState.processStageFilter)
-          .toList();
-    }
-    final kw = _viewState.processKeyword.trim().toLowerCase();
-    if (kw.isEmpty) {
-      return list;
-    }
-    return list
-        .where(
-          (process) =>
-              process.code.toLowerCase().contains(kw) ||
-              process.name.toLowerCase().contains(kw) ||
-              (process.stageName?.toLowerCase().contains(kw) ?? false),
-        )
-        .toList();
-  }
+  List<CraftProcessItem> get filteredProcesses => _viewState.processes;
 
   CraftProcessItem? get focusedProcess {
     final focusedId = _viewState.focusedProcessId;
@@ -73,37 +45,50 @@ class ProcessManagementState extends ChangeNotifier {
   }
 
   Future<void> loadData() async {
-    _viewState = _viewState.copyWith(loading: true, message: '');
+    _viewState = _viewState.copyWith(
+      loading: true,
+      message: '',
+      stagePage: 1,
+      processPage: 1,
+    );
     notifyListeners();
     try {
-      final stageResult = await _service.listStages(pageSize: 500);
-      final processResult = await _service.listProcesses(pageSize: 500);
-      final stages = [...stageResult.items]
-        ..sort((a, b) {
-          final orderCompare = a.sortOrder.compareTo(b.sortOrder);
-          return orderCompare != 0 ? orderCompare : a.id.compareTo(b.id);
-        });
+      final stageResult = await _service.listStages(
+        page: _viewState.stagePage,
+        pageSize: stagePageSize,
+        keyword: _viewState.stageKeyword,
+      );
+      final stages = [...stageResult.items]..sort((a, b) {
+        final orderCompare = a.sortOrder.compareTo(b.sortOrder);
+        return orderCompare != 0 ? orderCompare : a.id.compareTo(b.id);
+      });
       final stageSortOrderById = <int, int>{
         for (final item in stages) item.id: item.sortOrder,
       };
       const missingStageSortOrder = 1 << 30;
-      final processes = [...processResult.items]
-        ..sort((a, b) {
-          final stageOrderCompare =
-              (stageSortOrderById[a.stageId] ?? missingStageSortOrder)
-                  .compareTo(
-                    stageSortOrderById[b.stageId] ?? missingStageSortOrder,
-                  );
-          if (stageOrderCompare != 0) {
-            return stageOrderCompare;
-          }
-          final codeCompare = a.code.compareTo(b.code);
-          return codeCompare != 0 ? codeCompare : a.id.compareTo(b.id);
-        });
+      final processResult = await _service.listProcesses(
+        page: _viewState.processPage,
+        pageSize: processPageSize,
+        keyword: _viewState.processKeyword,
+        stageId: _viewState.processStageFilter,
+      );
+      final processes = [...processResult.items]..sort((a, b) {
+        final stageOrderCompare =
+            (stageSortOrderById[a.stageId] ?? missingStageSortOrder).compareTo(
+              stageSortOrderById[b.stageId] ?? missingStageSortOrder,
+            );
+        if (stageOrderCompare != 0) {
+          return stageOrderCompare;
+        }
+        final codeCompare = a.code.compareTo(b.code);
+        return codeCompare != 0 ? codeCompare : a.id.compareTo(b.id);
+      });
       _viewState = _viewState.copyWith(
         loading: false,
         stages: stages,
         processes: processes,
+        stageTotal: stageResult.total,
+        processTotal: processResult.total,
       );
       notifyListeners();
     } catch (error) {
@@ -120,18 +105,105 @@ class ProcessManagementState extends ChangeNotifier {
   }
 
   void setStageKeyword(String value) {
-    _viewState = _viewState.copyWith(stageKeyword: value.trim());
+    _viewState = _viewState.copyWith(stageKeyword: value.trim(), stagePage: 1);
     notifyListeners();
   }
 
   void setProcessKeyword(String value) {
-    _viewState = _viewState.copyWith(processKeyword: value.trim());
+    _viewState = _viewState.copyWith(processKeyword: value.trim(), processPage: 1);
     notifyListeners();
   }
 
   void setProcessStageFilter(int? stageId) {
-    _viewState = _viewState.copyWith(processStageFilter: stageId);
+    _viewState = _viewState.copyWith(
+      processStageFilter: stageId,
+      processPage: 1,
+    );
     notifyListeners();
+  }
+
+  Future<void> reloadStages({int? page}) async {
+    _viewState = _viewState.copyWith(
+      loading: true,
+      message: '',
+      stagePage: page ?? _viewState.stagePage,
+    );
+    notifyListeners();
+    try {
+      final result = await _service.listStages(
+        page: _viewState.stagePage,
+        pageSize: stagePageSize,
+        keyword: _viewState.stageKeyword,
+      );
+      final stages = [...result.items]..sort((a, b) {
+        final orderCompare = a.sortOrder.compareTo(b.sortOrder);
+        return orderCompare != 0 ? orderCompare : a.id.compareTo(b.id);
+      });
+      _viewState = _viewState.copyWith(
+        loading: false,
+        stages: stages,
+        stageTotal: result.total,
+      );
+      notifyListeners();
+    } catch (error) {
+      if (_isUnauthorized(error)) {
+        _onUnauthorized();
+        return;
+      }
+      _viewState = _viewState.copyWith(
+        loading: false,
+        message: '加载工段列表失败：${_errorMessage(error)}',
+      );
+      notifyListeners();
+    }
+  }
+
+  Future<void> reloadProcesses({int? page}) async {
+    _viewState = _viewState.copyWith(
+      loading: true,
+      message: '',
+      processPage: page ?? _viewState.processPage,
+    );
+    notifyListeners();
+    try {
+      final processResult = await _service.listProcesses(
+        page: _viewState.processPage,
+        pageSize: processPageSize,
+        keyword: _viewState.processKeyword,
+        stageId: _viewState.processStageFilter,
+      );
+      final stageSortOrderById = <int, int>{
+        for (final item in _viewState.stages) item.id: item.sortOrder,
+      };
+      const missingStageSortOrder = 1 << 30;
+      final processes = [...processResult.items]..sort((a, b) {
+        final stageOrderCompare =
+            (stageSortOrderById[a.stageId] ?? missingStageSortOrder).compareTo(
+              stageSortOrderById[b.stageId] ?? missingStageSortOrder,
+            );
+        if (stageOrderCompare != 0) {
+          return stageOrderCompare;
+        }
+        final codeCompare = a.code.compareTo(b.code);
+        return codeCompare != 0 ? codeCompare : a.id.compareTo(b.id);
+      });
+      _viewState = _viewState.copyWith(
+        loading: false,
+        processes: processes,
+        processTotal: processResult.total,
+      );
+      notifyListeners();
+    } catch (error) {
+      if (_isUnauthorized(error)) {
+        _onUnauthorized();
+        return;
+      }
+      _viewState = _viewState.copyWith(
+        loading: false,
+        message: '加载工序列表失败：${_errorMessage(error)}',
+      );
+      notifyListeners();
+    }
   }
 
   void setActiveView(ProcessManagementPrimaryView view) {

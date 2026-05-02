@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
@@ -42,6 +44,22 @@ class ProcessManagementPage extends StatefulWidget {
 }
 
 class _ProcessManagementPageState extends State<ProcessManagementPage> {
+  int get _stageTotalPages {
+    final total = _viewState.stageTotal;
+    if (total <= 0) {
+      return 1;
+    }
+    return ((total - 1) ~/ ProcessManagementState.stagePageSize) + 1;
+  }
+
+  int get _processTotalPages {
+    final total = _viewState.processTotal;
+    if (total <= 0) {
+      return 1;
+    }
+    return ((total - 1) ~/ ProcessManagementState.processPageSize) + 1;
+  }
+
   late final CraftService _service;
   late final ProcessManagementState _pageState;
   final _stageSearchController = TextEditingController();
@@ -507,18 +525,55 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
         stageFilter: _viewState.processStageFilter,
         stageOptions: _stages,
         items: _filteredProcesses,
+        loading: _viewState.loading,
+        page: _viewState.processPage,
+        totalPages: _processTotalPages,
+        total: _viewState.processTotal,
         focusedProcessId: _viewState.focusedProcessId,
         canWrite: widget.canWrite,
-        onKeywordChanged: _pageState.setProcessKeyword,
-        onStageFilterChanged: _pageState.setProcessStageFilter,
+        onKeywordChanged: (value) {
+          _pageState.setProcessKeyword(value);
+          unawaited(_pageState.reloadProcesses(page: 1));
+        },
+        onStageFilterChanged: (value) {
+          _pageState.setProcessStageFilter(value);
+          unawaited(_pageState.reloadProcesses(page: 1));
+        },
+        onPreviousPage: _viewState.processPage > 1
+            ? () => unawaited(
+                _pageState.reloadProcesses(page: _viewState.processPage - 1),
+              )
+            : null,
+        onNextPage: _viewState.processPage < _processTotalPages
+            ? () => unawaited(
+                _pageState.reloadProcesses(page: _viewState.processPage + 1),
+              )
+            : null,
         onFocusProcess: _pageState.focusProcess,
         onActionSelected: _handleProcessAction,
       ),
       ProcessManagementPrimaryView.stageList => ProcessStagePanel(
         searchController: _stageSearchController,
         items: _filteredStages,
+        loading: _viewState.loading,
+        page: _viewState.stagePage,
+        totalPages: _stageTotalPages,
+        total: _viewState.stageTotal,
         canWrite: widget.canWrite,
-        onKeywordChanged: _pageState.setStageKeyword,
+        onKeywordChanged: (value) {
+          _pageState.setStageKeyword(value);
+          unawaited(_pageState.reloadStages(page: 1));
+        },
+        onPreviousPage: _viewState.stagePage > 1
+            ? () => unawaited(
+                _pageState.reloadStages(page: _viewState.stagePage - 1),
+              )
+            : null,
+        onNextPage: _viewState.stagePage < _stageTotalPages
+            ? () => unawaited(
+                _pageState.reloadStages(page: _viewState.stagePage + 1),
+              )
+            : null,
         onActionSelected: _handleStageAction,
       ),
     };
