@@ -794,6 +794,7 @@ def _create_product_revision_snapshot(
     db: Session,
     *,
     product: Product,
+    version: int,
     lifecycle_status: str,
     action: str,
     note: str | None,
@@ -820,7 +821,7 @@ def _create_product_revision_snapshot(
         items_to_write = [dict(item) for item in parameter_items]
     row = ProductRevision(
         product_id=product.id,
-        version=product.current_version,
+        version=version,
         version_label=version_label or f"V1.{product.current_version - 1}",
         lifecycle_status=_normalize_revision_lifecycle_status(lifecycle_status),
         action=action,
@@ -930,6 +931,7 @@ def create_product(
     initial_revision = _create_product_revision_snapshot(
         db,
         product=product,
+        version=1,
         lifecycle_status=PRODUCT_LIFECYCLE_DRAFT,
         action="create",
         note="Initial draft V1.0",
@@ -1697,6 +1699,18 @@ def get_draft_revision(db: Session, *, product_id: int) -> ProductRevision | Non
     )
 
 
+def _next_product_revision_version(db: Session, product_id: int) -> int:
+    max_existing = (
+        db.execute(
+            select(func.coalesce(func.max(ProductRevision.version), 0)).where(
+                ProductRevision.product_id == product_id
+            )
+        ).scalar()
+        or 0
+    )
+    return max_existing + 1
+
+
 def _next_version_label(db: Session, product_id: int) -> str:
     labels = (
         db.execute(
@@ -1731,7 +1745,7 @@ def create_product_version(
         )
 
     version_label = _next_version_label(db, product.id)
-    next_version = max(product.current_version, 0) + 1
+    next_version = _next_product_revision_version(db, product.id)
     product.current_version = next_version
     db.flush()
 
@@ -1755,6 +1769,7 @@ def create_product_version(
     revision = _create_product_revision_snapshot(
         db,
         product=product,
+        version=next_version,
         lifecycle_status=PRODUCT_LIFECYCLE_DRAFT,
         action="create",
         note=None,
@@ -1801,13 +1816,14 @@ def copy_product_version(
         raise ValueError("来源版本参数为空，无法复制")
 
     version_label = _next_version_label(db, product.id)
-    next_version = max(product.current_version, 0) + 1
+    next_version = _next_product_revision_version(db, product.id)
     product.current_version = next_version
     db.flush()
 
     revision = _create_product_revision_snapshot(
         db,
         product=product,
+        version=next_version,
         lifecycle_status=PRODUCT_LIFECYCLE_DRAFT,
         action="copy",
         note=f"Copied from {source.version_label}",
@@ -2205,7 +2221,7 @@ def rollback_product_to_version(
     after_snapshot = _snapshot_signature(target_snapshot)
     product.name = candidate_name
     product.updated_at = datetime.now(UTC)
-    product.current_version = max(product.current_version, 0) + 1
+    product.current_version = _next_product_revision_version(db, product.id)
     revision_status = PRODUCT_LIFECYCLE_DRAFT
     if product.lifecycle_status == PRODUCT_LIFECYCLE_ACTIVE:
         product.effective_version = product.current_version
@@ -2228,6 +2244,7 @@ def rollback_product_to_version(
     revision = _create_product_revision_snapshot(
         db,
         product=product,
+        version=product.current_version,
         lifecycle_status=revision_status,
         action="rollback",
         note=rollback_note,
