@@ -2123,8 +2123,8 @@ def _collect_my_order_items(
             )
         process_rows = db.execute(stmt).scalars().all()
         user_process_codes = {
-            process.code
-            for process in db.execute(
+            str(process_code)
+            for process_code in db.execute(
                 select(Process.code)
                 .select_from(User)
                 .join(User.roles)

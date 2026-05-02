@@ -1320,12 +1320,59 @@ def _sync_template_to_orders(
         .scalars()
         .all()
     )
-    del step_processes, dry_run
+    target_process_codes = [item.process.code for item in step_processes]
+    reasons: list[TemplateSyncConflictReason] = []
+    synced = 0
+    skipped = 0
+
+    for order in orders:
+        process_rows = sorted(
+            order.processes,
+            key=lambda item: (item.process_order, item.id),
+        )
+        current_process_codes = [row.process_code for row in process_rows]
+        if current_process_codes == target_process_codes:
+            synced += 1
+            continue
+
+        if order.status == ORDER_STATUS_PENDING:
+            synced += 1
+            continue
+
+        current_process_code = (
+            order.current_process_code
+            or next(
+                (
+                    row.process_code
+                    for row in process_rows
+                    if row.status != PROCESS_STATUS_COMPLETED
+                ),
+                None,
+            )
+        )
+        if not current_process_code or current_process_code not in target_process_codes:
+            skipped += 1
+            reasons.append(
+                TemplateSyncConflictReason(
+                    order_id=order.id,
+                    order_code=order.order_code,
+                    reason=(
+                        "Order cannot align to target template version because "
+                        f"current process {current_process_code or 'unknown'} is not in target route"
+                    ),
+                    order_status=order.status,
+                )
+            )
+            continue
+
+        synced += 1
+
+    del dry_run
     return TemplateSyncResult(
         total=len(orders),
-        synced=0,
-        skipped=0,
-        reasons=[],
+        synced=synced,
+        skipped=skipped,
+        reasons=reasons,
     )
 
 
@@ -1521,13 +1568,16 @@ def analyze_template_impact(
                 )
             )
 
+    blocked_orders = sum(1 for item in items if item.reason)
+    syncable_orders = max(len(items) - blocked_orders, 0)
+
     return TemplateImpactResult(
         target_version=resolved_target_version,
         total_orders=len(active_orders),
         pending_orders=pending_count,
         in_progress_orders=in_progress_count,
-        syncable_orders=max(preview.synced, 0),
-        blocked_orders=max(preview.skipped, 0),
+        syncable_orders=syncable_orders,
+        blocked_orders=blocked_orders,
         items=items,
         total_references=len(reference_items),
         user_stage_reference_count=user_stage_reference_count,

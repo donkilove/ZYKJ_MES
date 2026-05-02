@@ -10,6 +10,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from app.core.rbac import (
     ROLE_MAINTENANCE_STAFF,
+    ROLE_OPERATOR,
     ROLE_PRODUCTION_ADMIN,
     ROLE_QUALITY_ADMIN,
     ROLE_SYSTEM_ADMIN,
@@ -78,12 +79,66 @@ class PerfCapacityPermissionServiceUnitTest(unittest.TestCase):
                 (ROLE_SYSTEM_ADMIN, "system"),
                 (ROLE_SYSTEM_ADMIN, "message"),
                 (ROLE_PRODUCTION_ADMIN, "production"),
+                (ROLE_OPERATOR, "production"),
                 (ROLE_PRODUCTION_ADMIN, "craft"),
                 (ROLE_PRODUCTION_ADMIN, "product"),
                 (ROLE_QUALITY_ADMIN, "quality"),
                 (ROLE_MAINTENANCE_STAFF, "equipment"),
             ],
         )
+
+    def test_build_perf_capacity_permission_rollout_plan_limits_operator_production_permissions(
+        self,
+    ) -> None:
+        db = MagicMock()
+
+        def fake_permission_catalog(db, *, module_code: str):
+            mapping = {
+                "production": [
+                    "module.production.access",
+                    "page.production.view",
+                    "page.production_order_query.view",
+                    "feature.production.order_query.execute",
+                    "feature.production.assist.launch",
+                    "feature.production.repair_orders.create_manual",
+                    "production.my_orders.list",
+                    "production.my_orders.context",
+                    "production.execution.first_article",
+                    "production.execution.end_production",
+                    "production.assist_authorizations.create",
+                    "production.assist_user_options.list",
+                    "production.repair_orders.create_manual",
+                    "production.orders.create",
+                ]
+            }
+            return [
+                authz_service.PermissionCatalogRow(
+                    permission_code=permission_code,
+                    permission_name=permission_code,
+                    module_code=module_code,
+                    resource_type="permission",
+                    parent_permission_code=None,
+                    is_enabled=True,
+                )
+                for permission_code in mapping[module_code]
+            ]
+
+        with patch.object(
+            perf_capacity_permission_service.authz_service,
+            "list_permission_catalog_rows",
+            side_effect=fake_permission_catalog,
+        ):
+            plan = perf_capacity_permission_service.build_perf_capacity_permission_rollout_plan(
+                db,
+                role_modules=[(ROLE_OPERATOR, "production")],
+            )
+
+        self.assertEqual(len(plan), 1)
+        self.assertEqual(plan[0].role_code, ROLE_OPERATOR)
+        self.assertEqual(plan[0].module_code, "production")
+        self.assertIn("production.my_orders.list", plan[0].permission_codes)
+        self.assertIn("production.execution.first_article", plan[0].permission_codes)
+        self.assertNotIn("production.orders.create", plan[0].permission_codes)
 
     def test_build_perf_capacity_permission_rollout_plan_uses_permission_catalog_codes(
         self,

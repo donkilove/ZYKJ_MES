@@ -396,6 +396,14 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
                 .first()
             )
             assert process_row is not None
+            process_def = (
+                db.query(Process)
+                .filter(Process.code == process_row.process_code)
+                .first()
+            )
+            assert process_def is not None
+            if all(row.id != process_def.id for row in admin.processes):
+                admin.processes.append(process_def)
             if process_row.visible_quantity <= 0:
                 process_row.visible_quantity = order_row.quantity
             if not order_row.current_process_code:
@@ -405,7 +413,6 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
                 .filter(
                     ProductionSubOrder.order_process_id == process_row.id,
                     ProductionSubOrder.operator_user_id == admin.id,
-                    ProductionSubOrder.is_visible.is_(True),
                 )
                 .first()
             )
@@ -414,10 +421,8 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
                     ProductionSubOrder(
                         order_process_id=process_row.id,
                         operator_user_id=admin.id,
-                        assigned_quantity=order_row.quantity,
                         completed_quantity=0,
                         status="pending",
-                        is_visible=True,
                     )
                 )
             db.commit()
@@ -881,10 +886,8 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             sub_order = ProductionSubOrder(
                 order_process_id=process_row.id,
                 operator_user_id=admin.id,
-                assigned_quantity=10,
                 completed_quantity=0,
                 status="in_progress",
-                is_visible=True,
             )
             db.add(sub_order)
             db.commit()
@@ -2001,6 +2004,145 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(list_items[0]["order_id"], order["id"])
         self.assertEqual(list_items[0]["current_process_name"], process["name"])
 
+    def test_my_orders_hides_existing_sub_order_without_process_binding(self) -> None:
+        stage = self._create_stage("MYNOPROC")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="MYNOPROC"
+        )
+        operator_user = self._create_user_with_permissions(
+            suffix="myown",
+            permission_codes=[
+                "production.my_orders.list",
+                "production.my_orders.context",
+                "production.execution.first_article",
+                "production.execution.end_production",
+            ],
+        )
+        operator_token = self._login_as(username=operator_user.username)
+
+        product = self._create_product("无工序绑定我的工单")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+            ],
+        )
+
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .first()
+            )
+            operator_row = db.get(User, int(operator_user.id))
+            assert order_row is not None
+            assert process_row is not None
+            assert operator_row is not None
+            self.assertEqual(operator_row.processes, [])
+            existing = (
+                db.query(ProductionSubOrder)
+                .filter(
+                    ProductionSubOrder.order_process_id == process_row.id,
+                    ProductionSubOrder.operator_user_id == int(operator_user.id),
+                )
+                .first()
+            )
+            if existing is None:
+                db.add(
+                    ProductionSubOrder(
+                        order_process_id=process_row.id,
+                        operator_user_id=int(operator_user.id),
+                        completed_quantity=0,
+                        status="pending",
+                    )
+                )
+            db.commit()
+        finally:
+            db.close()
+
+        list_response = self.client.get(
+            "/api/v1/production/my-orders",
+            headers={"Authorization": f"Bearer {operator_token}"},
+            params={"keyword": order["order_code"]},
+        )
+        self.assertEqual(list_response.status_code, 200, list_response.text)
+        list_items = list_response.json()["data"]["items"]
+        self.assertEqual(list_items, [])
+
+        context_response = self.client.get(
+            f"/api/v1/production/my-orders/{order['id']}/context",
+            headers={"Authorization": f"Bearer {operator_token}"},
+        )
+        self.assertEqual(context_response.status_code, 200, context_response.text)
+        context_payload = context_response.json()["data"]
+        self.assertFalse(context_payload["found"])
+        self.assertIsNone(context_payload["item"])
+
+    def test_first_article_rejects_operator_without_process_binding(self) -> None:
+        stage = self._create_stage("FANOPROC")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="FANOPROC"
+        )
+        operator_user = self._create_user_with_permissions(
+            suffix="fanoproc",
+            permission_codes=["production.execution.first_article"],
+        )
+        operator_token = self._login_as(username=operator_user.username)
+
+        product = self._create_product("无工序绑定首件拦截")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+            ],
+        )
+
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            admin = db.query(User).filter(User.username == "admin").first()
+            operator_row = db.get(User, int(operator_user.id))
+            assert order_row is not None and admin is not None and operator_row is not None
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == order_row.id)
+                .first()
+            )
+            assert process_row is not None
+            process_row_id = int(process_row.id)
+            self.assertEqual(operator_row.processes, [])
+            today_code = (
+                db.query(DailyVerificationCode)
+                .filter(DailyVerificationCode.verify_date == date.today())
+                .first()
+            )
+            if today_code is None:
+                today_code = DailyVerificationCode(
+                    verify_date=date.today(),
+                    code="code-1",
+                    created_by_user_id=admin.id,
+                )
+                db.add(today_code)
+            else:
+                today_code.code = "code-1"
+            db.commit()
+        finally:
+            db.close()
+
+        response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/first-article",
+            headers={"Authorization": f"Bearer {operator_token}"},
+            json={
+                "order_process_id": process_row_id,
+                "verification_code": "code-1",
+            },
+        )
+        self.assertEqual(response.status_code, 403, response.text)
+
     def test_my_orders_backfills_historical_release_visibility_on_query(self) -> None:
         stage_a = self._create_stage("MYBF1")
         process_a = self._create_process(
@@ -2214,8 +2356,13 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         try:
             order_row = db.get(ProductionOrder, int(order["id"]))
             admin = db.query(User).filter(User.username == "admin").first()
+            operator_a_row = db.get(User, int(operator_a.id))
+            process_def = db.get(Process, int(process["id"]))
             assert order_row is not None
             assert admin is not None
+            assert operator_a_row is not None and process_def is not None
+            if all(row.id != process_def.id for row in operator_a_row.processes):
+                operator_a_row.processes.append(process_def)
             process_row = (
                 db.query(ProductionOrderProcess)
                 .filter(ProductionOrderProcess.order_id == order_row.id)

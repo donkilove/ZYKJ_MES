@@ -19,11 +19,13 @@ from app.core.production_constants import (
     SUB_ORDER_STATUS_IN_PROGRESS,
     SUB_ORDER_STATUS_PENDING,
 )
+from app.core.rbac import ROLE_PRODUCTION_ADMIN, ROLE_SYSTEM_ADMIN
 from app.models.daily_verification_code import DailyVerificationCode
 from app.models.first_article_participant import FirstArticleParticipant
 from app.models.first_article_record import FirstArticleRecord
 from app.models.first_article_template import FirstArticleTemplate
 from app.models.order_sub_order_pipeline_instance import ProcessPipelineInstance
+from app.models.process import Process
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_record import ProductionRecord
@@ -84,6 +86,55 @@ def _can_proxy_cross_user_operation(db: Session, *, operator: User) -> bool:
         user=operator,
         permission_code=PERM_PROD_MY_ORDERS_PROXY,
     )
+
+
+def _has_process_scope_exemption(user: User) -> bool:
+    if user.is_superuser:
+        return True
+    role_codes = {role.code for role in user.roles if role.is_enabled}
+    return bool(role_codes.intersection({ROLE_SYSTEM_ADMIN, ROLE_PRODUCTION_ADMIN}))
+
+
+def _is_user_bound_to_process(
+    db: Session,
+    *,
+    user_id: int,
+    process_code: str,
+) -> bool:
+    return (
+        db.execute(
+            select(Process.id)
+            .select_from(User)
+            .join(User.processes)
+            .where(
+                User.id == user_id,
+                User.is_active.is_(True),
+                Process.code == process_code,
+            )
+            .limit(1)
+        ).scalar()
+        is not None
+    )
+
+
+def _ensure_effective_operator_can_operate_process(
+    db: Session,
+    *,
+    effective_operator_user_id: int,
+    process_row: ProductionOrderProcess,
+) -> None:
+    effective_operator = db.get(User, effective_operator_user_id)
+    if effective_operator is None or not effective_operator.is_active:
+        raise ValueError("Effective operator not found or inactive")
+    if _has_process_scope_exemption(effective_operator):
+        return
+    if _is_user_bound_to_process(
+        db,
+        user_id=effective_operator_user_id,
+        process_code=process_row.process_code,
+    ):
+        return
+    raise PermissionError("当前操作员未绑定该工序，不能操作该工序订单")
 
 
 def _lock_order_and_process(
@@ -559,6 +610,12 @@ def submit_first_article(
                 "Assist authorization is required for cross-user operation"
             )
 
+    _ensure_effective_operator_can_operate_process(
+        db,
+        effective_operator_user_id=effective_user_id,
+        process_row=process_row,
+    )
+
     sub_order = _lock_sub_order(
         db,
         order_process_id=process_row.id,
@@ -777,6 +834,12 @@ def end_production(
             raise ValueError(
                 "Assist authorization is required for cross-user operation"
             )
+
+    _ensure_effective_operator_can_operate_process(
+        db,
+        effective_operator_user_id=effective_user_id,
+        process_row=process_row,
+    )
 
     sub_order = _lock_sub_order(
         db,

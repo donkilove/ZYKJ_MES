@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.rbac import (
     ROLE_MAINTENANCE_STAFF,
+    ROLE_OPERATOR,
     ROLE_PRODUCTION_ADMIN,
     ROLE_QUALITY_ADMIN,
     ROLE_SYSTEM_ADMIN,
@@ -20,10 +21,30 @@ DEFAULT_PERF_CAPACITY_ROLE_MODULES: tuple[tuple[str, str], ...] = (
     (ROLE_SYSTEM_ADMIN, "system"),
     (ROLE_SYSTEM_ADMIN, "message"),
     (ROLE_PRODUCTION_ADMIN, "production"),
+    (ROLE_OPERATOR, "production"),
     (ROLE_PRODUCTION_ADMIN, "craft"),
     (ROLE_PRODUCTION_ADMIN, "product"),
     (ROLE_QUALITY_ADMIN, "quality"),
     (ROLE_MAINTENANCE_STAFF, "equipment"),
+)
+
+OPERATOR_PRODUCTION_PERMISSION_CODES = frozenset(
+    {
+        "module.production.access",
+        "page.production.view",
+        "page.production_order_query.view",
+        "feature.production.order_query.execute",
+        "feature.production.assist.launch",
+        "feature.production.repair_orders.create_manual",
+        "production.orders.detail",
+        "production.my_orders.list",
+        "production.my_orders.context",
+        "production.execution.first_article",
+        "production.execution.end_production",
+        "production.assist_authorizations.create",
+        "production.assist_user_options.list",
+        "production.repair_orders.create_manual",
+    }
 )
 
 
@@ -94,15 +115,23 @@ def build_perf_capacity_permission_rollout_plan(
 ) -> list[PerfCapacityPermissionPlanItem]:
     plan: list[PerfCapacityPermissionPlanItem] = []
     for role_code, module_code in role_modules:
-        permission_codes = sorted(
-            {
-                str(row.permission_code)
-                for row in authz_service.list_permission_catalog_rows(
-                    db, module_code=module_code
+        catalog_permission_codes = {
+            str(row.permission_code)
+            for row in authz_service.list_permission_catalog_rows(
+                db, module_code=module_code
+            )
+            if str(row.permission_code).strip()
+        }
+        if role_code == ROLE_OPERATOR and module_code == "production":
+            permission_codes = sorted(
+                catalog_permission_codes.intersection(
+                    OPERATOR_PRODUCTION_PERMISSION_CODES
                 )
-                if str(row.permission_code).strip()
-            }
-        )
+            )
+        else:
+            permission_codes = sorted(
+                catalog_permission_codes
+            )
         if not permission_codes:
             raise ValueError(f"模块 {module_code} 的权限目录为空")
         plan.append(

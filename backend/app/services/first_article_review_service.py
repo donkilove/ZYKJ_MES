@@ -17,6 +17,7 @@ from app.services.production_event_log_service import add_order_event_log
 from app.services.production_execution_service import (
     _get_first_article_template,
     _get_required_pipeline_instance,
+    _ensure_effective_operator_can_operate_process,
     _is_start_gate_allowed,
     _lock_order_and_process,
     _lock_sub_order,
@@ -129,6 +130,11 @@ def _prepare_first_article_draft(
         db,
         order_id=order_id,
         order_process_id=order_process_id,
+    )
+    _ensure_effective_operator_can_operate_process(
+        db,
+        effective_operator_user_id=operator.id,
+        process_row=process_row,
     )
     sub_order = _lock_sub_order(
         db,

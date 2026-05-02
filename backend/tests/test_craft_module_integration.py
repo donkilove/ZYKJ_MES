@@ -26,6 +26,7 @@ from app.models.production_order_process import ProductionOrderProcess  # noqa: 
 from app.models.production_record import ProductionRecord  # noqa: E402
 from app.models.supplier import Supplier  # noqa: E402
 from app.models.user import User  # noqa: E402
+from app.services.bootstrap_seed_service import seed_initial_data  # noqa: E402
 from app.services.perf_sample_seed_service import seed_production_craft_samples  # noqa: E402
 
 
@@ -102,7 +103,19 @@ class CraftModuleIntegrationTest(unittest.TestCase):
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.token}"}
 
+    def _ensure_admin(self) -> None:
+        db = SessionLocal()
+        try:
+            seed_initial_data(
+                db,
+                admin_username="admin",
+                admin_password="Admin@123456",
+            )
+        finally:
+            db.close()
+
     def _login(self) -> str:
+        self._ensure_admin()
         response = self.client.post(
             "/api/v1/auth/login",
             data={"username": "admin", "password": "Admin@123456"},
@@ -792,6 +805,55 @@ class CraftModuleIntegrationTest(unittest.TestCase):
             "template_reuse",
             {item["ref_type"] for item in ref_payload["items"]},
         )
+
+    def test_impact_analysis_counts_syncable_orders_for_current_template_version(
+        self,
+    ) -> None:
+        stage = self._create_stage("R04")
+        process = self._create_process(
+            stage_id=stage["id"],
+            stage_code=stage["code"],
+            suffix="01",
+        )
+        product = self._create_product("工艺影响同步统计")
+        detail = self._create_template(
+            product_id=product["id"],
+            template_name="工艺影响同步统计模板",
+            stage_id=stage["id"],
+            process_id=process["id"],
+        )
+        template_id = int(detail["template"]["id"])
+
+        publish_response = self.client.post(
+            f"/api/v1/craft/templates/{template_id}/publish",
+            headers=self._headers(),
+            json={
+                "apply_order_sync": False,
+                "confirmed": True,
+                "expected_version": 1,
+            },
+        )
+        self.assertEqual(publish_response.status_code, 200, publish_response.text)
+
+        order = self._create_order_from_template(
+            product_id=product["id"],
+            template_id=template_id,
+        )
+
+        impact_response = self.client.get(
+            f"/api/v1/craft/templates/{template_id}/impact-analysis",
+            headers=self._headers(),
+        )
+        self.assertEqual(impact_response.status_code, 200, impact_response.text)
+
+        payload = impact_response.json()["data"]
+        self.assertEqual(payload["total_orders"], 1)
+        self.assertEqual(payload["blocked_orders"], 0)
+        self.assertEqual(payload["syncable_orders"], 1)
+        self.assertEqual(len(payload["items"]), 1)
+        self.assertEqual(payload["items"][0]["order_id"], int(order["id"]))
+        self.assertTrue(payload["items"][0]["syncable"])
+        self.assertIsNone(payload["items"][0]["reason"])
 
     def test_publish_template_with_apply_order_sync_does_not_mutate_existing_orders(self) -> None:
         stage_a = self._create_stage("NS1")
