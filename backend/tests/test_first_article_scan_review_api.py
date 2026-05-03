@@ -437,7 +437,7 @@ class FirstArticleScanReviewApiTest(unittest.TestCase):
             page_response = client.get(review_url)
             self.assertEqual(page_response.status_code, 200, page_response.text)
             self.assertIn("首件扫码复核", page_response.text)
-            self.assertIn("/api/v1/auth/login", page_response.text)
+            self.assertIn("/api/v1/auth/mobile-scan-review-login", page_response.text)
 
     def test_scan_review_rejects_and_refresh_invalidates_old_token(self) -> None:
         context = self._create_context("FAIL")
