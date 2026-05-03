@@ -1298,6 +1298,88 @@ def _create_order_process_row(
     )
 
 
+def _replace_order_processes_from_template(
+    db: Session,
+    order: ProductionOrder,
+    step_processes: list[TemplateStepResolvedItem],
+) -> None:
+    existing_rows = (
+        db.execute(
+            select(ProductionOrderProcess)
+            .where(ProductionOrderProcess.order_id == order.id)
+            .order_by(ProductionOrderProcess.process_order.asc())
+            .with_for_update()
+        )
+        .scalars()
+        .all()
+    )
+    for row in existing_rows:
+        db.delete(row)
+
+    for idx, item in enumerate(step_processes, start=1):
+        db.add(
+            ProductionOrderProcess(
+                order_id=order.id,
+                process_id=item.process.id,
+                stage_id=item.stage.id,
+                stage_code=item.stage.code,
+                stage_name=item.stage.name,
+                process_code=item.process.code,
+                process_name=item.process.name,
+                process_order=idx,
+                status=PROCESS_STATUS_PENDING,
+                visible_quantity=order.quantity if idx == 1 else 0,
+                completed_quantity=0,
+            )
+        )
+
+
+def _align_order_processes_to_template(
+    db: Session,
+    order: ProductionOrder,
+    step_processes: list[TemplateStepResolvedItem],
+) -> None:
+    existing_rows = sorted(
+        db.execute(
+            select(ProductionOrderProcess)
+            .where(ProductionOrderProcess.order_id == order.id)
+            .order_by(ProductionOrderProcess.process_order.asc())
+            .with_for_update()
+        )
+        .scalars()
+        .all(),
+        key=lambda r: (r.process_order, r.id),
+    )
+    existing_codes = {r.process_code for r in existing_rows}
+    template_codes = [item.process.code for item in step_processes]
+
+    max_order = max((r.process_order for r in existing_rows), default=0)
+    new_codes = [c for c in template_codes if c not in existing_codes]
+
+    for code in new_codes:
+        target = next(
+            (item for item in step_processes if item.process.code == code), None
+        )
+        if target is None:
+            continue
+        max_order += 1
+        db.add(
+            ProductionOrderProcess(
+                order_id=order.id,
+                process_id=target.process.id,
+                stage_id=target.stage.id,
+                stage_code=target.stage.code,
+                stage_name=target.stage.name,
+                process_code=target.process.code,
+                process_name=target.process.name,
+                process_order=max_order,
+                status=PROCESS_STATUS_PENDING,
+                visible_quantity=0,
+                completed_quantity=0,
+            )
+        )
+
+
 def _sync_template_to_orders(
     db: Session,
     *,
@@ -1337,6 +1419,10 @@ def _sync_template_to_orders(
 
         if order.status == ORDER_STATUS_PENDING:
             synced += 1
+            if not dry_run:
+                _replace_order_processes_from_template(
+                    db, order=order, step_processes=step_processes
+                )
             continue
 
         current_process_code = (
@@ -1366,6 +1452,10 @@ def _sync_template_to_orders(
             continue
 
         synced += 1
+        if not dry_run:
+            _align_order_processes_to_template(
+                db, order=order, step_processes=step_processes
+            )
 
     del dry_run
     return TemplateSyncResult(
