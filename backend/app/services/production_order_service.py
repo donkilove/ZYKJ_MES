@@ -358,7 +358,11 @@ def is_pipeline_start_allowed_for_process(
         previous_process_code=previous_process.process_code,
         current_process_code=process_row.process_code,
     ):
-        return previous_process.completed_quantity > 0
+        return previous_process.status in {
+            PROCESS_STATUS_IN_PROGRESS,
+            PROCESS_STATUS_PARTIAL,
+            PROCESS_STATUS_COMPLETED,
+        }
     return previous_process.status == PROCESS_STATUS_COMPLETED
 
 
@@ -711,6 +715,30 @@ def _invalidate_pipeline_instances_for_order(
         update(ProcessPipelineInstance)
         .where(
             ProcessPipelineInstance.order_id == order_id,
+            ProcessPipelineInstance.is_active.is_(True),
+        )
+        .values(
+            is_active=False,
+            invalid_reason=reason,
+            invalidated_at=now,
+            updated_at=now,
+        )
+    )
+    result = db.execute(stmt)
+    return int(result.rowcount or 0)
+
+
+def invalidate_pipeline_instances_for_process(
+    db: Session,
+    *,
+    order_process_id: int,
+    reason: str,
+) -> int:
+    now = datetime.now(UTC)
+    stmt = (
+        update(ProcessPipelineInstance)
+        .where(
+            ProcessPipelineInstance.order_process_id == order_process_id,
             ProcessPipelineInstance.is_active.is_(True),
         )
         .values(

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.authz_catalog import PERM_PROD_MY_ORDERS_PROXY
@@ -44,12 +44,14 @@ from app.services.assist_authorization_service import (
 from app.services.authz_service import has_permission
 from app.services.production_event_log_service import add_order_event_log
 from app.services.production_order_service import (
+    _invalidate_pipeline_instances_for_order,
     allocate_pipeline_instance_for_process,
     ensure_sub_orders_visible_quantity,
     get_active_pipeline_instance_for_process,
     get_active_pipeline_instance_for_sub_order,
     get_active_pipeline_instance_for_link_id,
     get_active_pipeline_instance_for_process_sequence,
+    invalidate_pipeline_instances_for_process,
     is_pipeline_parallel_edge_for_processes,
     is_pipeline_process_selected_for_order,
 )
@@ -718,6 +720,8 @@ def submit_first_article(
         if process_row.status == PROCESS_STATUS_PENDING:
             process_row.status = PROCESS_STATUS_IN_PROGRESS
         sub_order.status = SUB_ORDER_STATUS_IN_PROGRESS
+        if pipeline_instance is not None:
+            pipeline_instance.sub_order_id = sub_order.id
         order.status = ORDER_STATUS_IN_PROGRESS
         if not order.current_process_code:
             order.current_process_code = process_row.process_code
@@ -925,6 +929,13 @@ def end_production(
     else:
         process_row.status = PROCESS_STATUS_PARTIAL
 
+    if process_row.status == PROCESS_STATUS_COMPLETED:
+        invalidate_pipeline_instances_for_process(
+            db,
+            order_process_id=process_row.id,
+            reason="process_completed",
+        )
+
     sub_order.status = SUB_ORDER_STATUS_PENDING
 
     next_process = (
@@ -1051,6 +1062,12 @@ def end_production(
         )
 
     _refresh_order_status(db, order=order)
+    if order.status == ORDER_STATUS_COMPLETED:
+        _invalidate_pipeline_instances_for_order(
+            db,
+            order_id=order.id,
+            reason="order_completed",
+        )
     db.commit()
     db.refresh(order)
     db.refresh(process_row)
