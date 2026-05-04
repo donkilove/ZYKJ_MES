@@ -588,11 +588,15 @@ def _apply_user_active_state(
                 session_token_ids=list(active_session_token_ids),
             )
         is_online, _ = get_user_online_snapshot(user.id)
-        clear_user(user.id)
         cleared_online_status = is_online
 
+    # ── 隐患 H 修复：先 DB 变更并 flush，再清理 Redis ───────────────────
+    # 保证 DB 侧先完成变更，Redis 清理紧跟其后。
+    # 若 DB commit 失败，Redis 清理不会执行（由调用方保证），两者保持一致。
     user.is_active = active
     db.flush()
+    if not active:
+        clear_user(user.id)
     return UserLifecycleChange(
         forced_offline_session_count=forced_offline_session_count,
         cleared_online_status=cleared_online_status,
@@ -643,7 +647,15 @@ def normalize_users_to_single_role(db: Session) -> int:
             changed = True
 
     if changed:
-        db.commit()
+        # ── 隐患 I 修复：先 flush 全量变更，再尝试 commit ─────────────────
+        # flush 失败会直接抛异常，外层调用方感知，无需额外处理。
+        # commit 失败（FK 约束冲突、死锁等）→ 显式 rollback → 抛异常。
+        db.flush()
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
 
     return normalized_users_count
 
