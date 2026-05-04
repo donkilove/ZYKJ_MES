@@ -501,11 +501,55 @@ def count_active_system_admin_users(
     return int(db.execute(stmt).scalar_one())
 
 
-def ensure_can_deactivate_user(db: Session, user: User) -> tuple[bool, str | None]:
+def _lock_and_count_active_system_admins_for_guardrail(
+    db: Session,
+    *,
+    operator_user_id: int,
+    target_user_id: int,
+) -> int:
+    """持排他行锁计数活跃系统管理员（用于保底护栏检查）。
+
+    使用 SQLAlchemy with_for_update() 对所有活跃系统管理员行加排他锁，
+    配合 order_by(User.id.asc()) 防止死锁（两管理员互相停用时，
+    双方按相同顺序锁定同一组行，不会出现循环等待）。
+
+    串行化效果（仅 2 个管理员 A, B）：
+    - 先获锁者（A）：remaining = count - 1 = 1 >= 1 → 继续，停用 B
+    - 后获锁者（B）：A 已提交，remaining = 1 - 1 = 0 < 1 → 护栏拒绝（400）
+
+    业务阈值严格保持为 remaining < 1，绝不使用 < 2。
+    """
+    # ── 排他行锁：锁定所有活跃系统管理员行，按 id 升序防止死锁 ────────────
+    stmt = (
+        select(User)
+        .join(User.roles)
+        .where(
+            User.is_deleted.is_(False),
+            User.is_active.is_(True),
+            Role.code == ROLE_SYSTEM_ADMIN,
+        )
+        .order_by(User.id.asc())
+        .with_for_update()
+    )
+    rows = db.execute(stmt).scalars().all()
+
+    # 剩余可用管理员数 = 总数 - 1（当前操作者自己）
+    # 后获锁者看到的是先获锁者提交后的最新状态
+    return len(rows) - 1
+
+
+def ensure_can_deactivate_user(
+    db: Session, user: User, operator_user_id: int | None = None
+) -> tuple[bool, str | None]:
     role_codes = {role.code for role in user.roles}
     if ROLE_SYSTEM_ADMIN not in role_codes:
         return True, None
-    remaining = count_active_permission_admin_users(db, exclude_user_id=user.id)
+    # ── 关键修复：持锁计数，防止 TOCTOU 竞态 ─────────────────────────────
+    remaining = _lock_and_count_active_system_admins_for_guardrail(
+        db,
+        operator_user_id=operator_user_id or 0,
+        target_user_id=user.id,
+    )
     if remaining < 1:
         return False, "必须至少保留一个可进入功能权限配置页面的系统管理员账号"
     return True, None
