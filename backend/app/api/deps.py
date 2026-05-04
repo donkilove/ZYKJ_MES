@@ -194,7 +194,7 @@ def get_current_user(
         session_row, session_touched = touch_session_by_token_id(
             db,
             session_token_id,
-            allow_cached_active=True,
+            require_user_id=user_id,
         )
         if session_touched:
             db.commit()
@@ -332,7 +332,7 @@ def require_permission_fast(permission_code: str) -> Callable[[str, Request, Ses
         session_row, session_touched = touch_session_by_token_id(
             db,
             session_token_id,
-            allow_cached_active=True,
+            require_user_id=user_id,
         )
         if session_touched:
             db.commit()

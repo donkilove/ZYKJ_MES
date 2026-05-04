@@ -1,39 +1,237 @@
 from __future__ import annotations
 
+import logging
+import time
 from datetime import UTC, datetime, timedelta
 from dataclasses import dataclass
-from threading import Lock, RLock
-import time
+from threading import Lock
 from uuid import uuid4
 
 from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.orm import Session
 
-from app.models.associations import user_roles
+try:
+    from redis import Redis
+    from redis.exceptions import RedisError
+except Exception:  # pragma: no cover - graceful fallback
+    Redis = None  # type: ignore[assignment]
+    RedisError = Exception  # type: ignore[misc, assignment]
+
 from app.core.config import settings
+from app.models.associations import user_roles
 from app.models.login_log import LoginLog
 from app.models.process_stage import ProcessStage
 from app.models.role import Role
 from app.models.user import User
 from app.models.user_session import UserSession
-from app.services.online_status_service import (
-    list_online_user_ids as list_online_user_ids_from_memory,
-)
+
+logger = logging.getLogger(__name__)
+
+# ── Module-level Redis client (lazy, global) ───────────────────────────────────
+
+_SESSION_REDIS_CLIENT: Redis | None = None
+_SESSION_REDIS_INIT = False
+_SESSION_REDIS_DISABLED_UNTIL = 0.0
+_SESSION_REDIS_BACKOFF_SECONDS = 30.0
+_SESSION_REDIS_KEY_PREFIX = "mes:session:active"
+
+# ── Module-level lock for login-log deduplication ──────────────────────────────
 
 _LOGIN_LOG_CLEANUP_LOCK = Lock()
 _LOGIN_LOG_CLEANUP_NEXT_AT = 0.0
 _LOGIN_LOG_CLEANUP_MIN_INTERVAL_SECONDS = 300
+
+# ── Module-level lock for session cleanup throttle ──────────────────────────────
+
 _SESSION_CLEANUP_LOCK = Lock()
 _SESSION_CLEANUP_NEXT_AT = 0.0
 _SESSION_CLEANUP_MIN_INTERVAL_SECONDS = 30
-_SESSION_TOUCH_WRITE_MIN_INTERVAL_SECONDS = 30
-_SESSION_ACTIVE_LOCAL_CACHE: dict[str, float] = {}
-_SESSION_ACTIVE_LOCAL_CACHE_LOCK = RLock()
+
+# ── Login-log deduplication cache (process-local, short TTL) ──────────────────
+
 _SUCCESS_LOGIN_LOG_LOCAL_CACHE: dict[str, float] = {}
-_SUCCESS_LOGIN_LOG_LOCAL_CACHE_LOCK = RLock()
+_SUCCESS_LOGIN_LOG_LOCAL_CACHE_LOCK = Lock()
 _SUCCESS_LOGIN_LOG_MIN_INTERVAL_SECONDS = 60
+
 _TERMINAL_INFO_MAX_LENGTH = 255
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Redis client helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _get_session_redis_client() -> Redis | None:
+    """Return the shared Redis client, or None if unavailable / disabled."""
+    global _SESSION_REDIS_CLIENT, _SESSION_REDIS_INIT, _SESSION_REDIS_DISABLED_UNTIL
+
+    if _SESSION_REDIS_DISABLED_UNTIL > time.monotonic():
+        return None
+    if _SESSION_REDIS_INIT:
+        return _SESSION_REDIS_CLIENT
+    _SESSION_REDIS_INIT = True
+
+    if Redis is None:
+        logger.warning("[SESSION] redis 依赖不可用，Session 缓存将不生效。")
+        return None
+
+    try:
+        _SESSION_REDIS_CLIENT = Redis(
+            host=settings.redis_host,
+            port=settings.redis_port,
+            db=settings.redis_db,
+            password=settings.redis_password or None,
+            ssl=settings.redis_ssl,
+            decode_responses=True,
+            socket_timeout=max(0.05, settings.redis_socket_timeout_seconds),
+            socket_connect_timeout=max(0.05, settings.redis_connect_timeout_seconds),
+        )
+        _SESSION_REDIS_CLIENT.ping()
+        logger.info("[SESSION] Redis 连接已建立。")
+    except Exception:
+        _SESSION_REDIS_CLIENT = None
+        _SESSION_REDIS_DISABLED_UNTIL = (
+            time.monotonic() + _SESSION_REDIS_BACKOFF_SECONDS
+        )
+        logger.warning(
+            "[SESSION] Redis 连接失败，Session 缓存暂时禁用（backoff %ds）。",
+            _SESSION_REDIS_BACKOFF_SECONDS,
+            exc_info=True,
+        )
+    return _SESSION_REDIS_CLIENT
+
+
+def _mark_session_redis_unavailable() -> None:
+    global _SESSION_REDIS_CLIENT, _SESSION_REDIS_INIT, _SESSION_REDIS_DISABLED_UNTIL
+    _SESSION_REDIS_CLIENT = None
+    _SESSION_REDIS_INIT = False
+    _SESSION_REDIS_DISABLED_UNTIL = (
+        time.monotonic() + _SESSION_REDIS_BACKOFF_SECONDS
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Redis key helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _session_active_key(session_token_id: str) -> str:
+    """Redis key for session-active marker.
+
+    Value format: "{user_id}:{expires_at_ts}"
+    """
+    return f"{_SESSION_REDIS_KEY_PREFIX}:{session_token_id.strip()}"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Redis-backed session-active primitives
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _touch_session_active_in_redis(
+    session_token_id: str,
+    *,
+    user_id: int,
+    ttl_seconds: int,
+) -> None:
+    """Set/refresh the session-active marker in Redis with TTL."""
+    redis_client = _get_session_redis_client()
+    if redis_client is None:
+        return
+    key = _session_active_key(session_token_id)
+    value = f"{user_id}:{int(time.time())}"
+    try:
+        redis_client.setex(key, max(1, ttl_seconds), value)
+    except RedisError:
+        _mark_session_redis_unavailable()
+
+
+def _get_session_active_from_redis(
+    session_token_id: str,
+) -> tuple[bool, int | None]:
+    """Read the session-active marker from Redis.
+
+    Returns (exists, user_id).  On Redis failure returns (False, None).
+    """
+    redis_client = _get_session_redis_client()
+    if redis_client is None:
+        return False, None
+    key = _session_active_key(session_token_id)
+    try:
+        value = redis_client.get(key)
+        if value is None:
+            return False, None
+        parts = value.split(":", 1)
+        user_id = int(parts[0]) if parts else None
+        return True, user_id
+    except (RedisError, ValueError, IndexError):
+        _mark_session_redis_unavailable()
+        return False, None
+
+
+def _delete_session_active_in_redis(session_token_id: str) -> None:
+    """Delete the session-active marker from Redis."""
+    redis_client = _get_session_redis_client()
+    if redis_client is None:
+        return
+    key = _session_active_key(session_token_id)
+    try:
+        redis_client.delete(key)
+    except RedisError:
+        pass  # best-effort; DB state is authoritative
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Public API (replaces in-process cache calls)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def remember_active_session_token(
+    session_token_id: str,
+    *,
+    user_id: int,
+    ttl_seconds: int | None = None,
+    expires_at: datetime | None = None,
+) -> None:
+    normalized_token = session_token_id.strip()
+    if not normalized_token:
+        return
+    resolved_ttl = max(1, ttl_seconds or settings.session_touch_min_interval_seconds)
+    if expires_at is not None:
+        remaining = int((expires_at - _now_utc()).total_seconds())
+        if remaining <= 0:
+            forget_active_session_token(normalized_token)
+            return
+        resolved_ttl = min(resolved_ttl, remaining)
+    if resolved_ttl < 1:
+        forget_active_session_token(normalized_token)
+        return
+    _touch_session_active_in_redis(
+        normalized_token,
+        user_id=user_id,
+        ttl_seconds=resolved_ttl,
+    )
+
+
+def forget_active_session_token(session_token_id: str) -> None:
+    normalized_token = session_token_id.strip()
+    if not normalized_token:
+        return
+    _delete_session_active_in_redis(normalized_token)
+
+
+def is_session_active_in_redis(session_token_id: str) -> bool:
+    """Fast check only — returns True if key exists in Redis."""
+    redis_client = _get_session_redis_client()
+    if redis_client is None:
+        return False
+    key = _session_active_key(session_token_id.strip())
+    try:
+        return redis_client.exists(key) > 0
+    except RedisError:
+        _mark_session_redis_unavailable()
+        return False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Dataclasses
+# ─────────────────────────────────────────────────────────────────────────────
 
 @dataclass(frozen=True, slots=True)
 class SessionStatusSnapshot:
@@ -57,6 +255,32 @@ class OnlineSessionProjection:
     ip_address: str | None
     terminal_info: str | None
     status: str
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _now_utc() -> datetime:
+    return datetime.now(UTC)
+
+
+def _session_expire_at() -> datetime:
+    return _now_utc() + timedelta(seconds=settings.session_max_seconds)
+
+
+def _session_touch_interval_seconds() -> int:
+    return max(
+        30,
+        settings.session_touch_min_interval_seconds,
+    )
+
+
+def _cap_session_cache_ttl(ttl_seconds: int, expires_at: datetime, now: datetime) -> int:
+    remaining = (expires_at - now).total_seconds()
+    if remaining <= 0:
+        return 1
+    return max(1, min(ttl_seconds, int(remaining)))
 
 
 def _build_login_log_filters(
@@ -123,78 +347,11 @@ def _list_primary_role_meta_by_user_ids(
     }
 
 
-def _now_utc() -> datetime:
-    return datetime.now(UTC)
-
-
 def normalize_terminal_info(value: str | None) -> str | None:
     text = (value or "").strip()
     if not text:
         return None
     return text[:_TERMINAL_INFO_MAX_LENGTH]
-
-
-def _session_expire_at() -> datetime:
-    return _now_utc() + timedelta(seconds=settings.session_max_seconds)
-
-
-def _session_touch_interval_seconds() -> int:
-    return max(
-        _SESSION_TOUCH_WRITE_MIN_INTERVAL_SECONDS,
-        settings.session_touch_min_interval_seconds,
-    )
-
-
-def _cap_session_cache_ttl(ttl_seconds: int, expires_at: datetime, now: datetime) -> int:
-    remaining = (expires_at - now).total_seconds()
-    if remaining <= 0:
-        return 1
-    return max(1, min(ttl_seconds, int(remaining)))
-
-
-def _get_cached_active_session(session_token_id: str) -> bool:
-    normalized_token = session_token_id.strip()
-    if not normalized_token:
-        return False
-    with _SESSION_ACTIVE_LOCAL_CACHE_LOCK:
-        expire_at = _SESSION_ACTIVE_LOCAL_CACHE.get(normalized_token)
-        if expire_at is None:
-            return False
-        if expire_at <= time.monotonic():
-            _SESSION_ACTIVE_LOCAL_CACHE.pop(normalized_token, None)
-            return False
-        return True
-
-
-def remember_active_session_token(
-    session_token_id: str,
-    *,
-    ttl_seconds: int | None = None,
-    expires_at: datetime | None = None,
-) -> None:
-    normalized_token = session_token_id.strip()
-    if not normalized_token:
-        return
-    resolved_ttl = max(1, ttl_seconds or _session_touch_interval_seconds())
-    if expires_at is not None:
-        remaining_seconds = int((expires_at - _now_utc()).total_seconds())
-        if remaining_seconds <= 0:
-            forget_active_session_token(normalized_token)
-            return
-        resolved_ttl = min(resolved_ttl, remaining_seconds)
-    if resolved_ttl < 1:
-        forget_active_session_token(normalized_token)
-        return
-    with _SESSION_ACTIVE_LOCAL_CACHE_LOCK:
-        _SESSION_ACTIVE_LOCAL_CACHE[normalized_token] = time.monotonic() + resolved_ttl
-
-
-def forget_active_session_token(session_token_id: str) -> None:
-    normalized_token = session_token_id.strip()
-    if not normalized_token:
-        return
-    with _SESSION_ACTIVE_LOCAL_CACHE_LOCK:
-        _SESSION_ACTIVE_LOCAL_CACHE.pop(normalized_token, None)
 
 
 def should_record_success_login(
@@ -215,6 +372,10 @@ def should_record_success_login(
         _SUCCESS_LOGIN_LOG_LOCAL_CACHE[cache_key] = now_monotonic + interval_seconds
     return True
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Core session operations
+# ─────────────────────────────────────────────────────────────────────────────
 
 def create_login_log(
     db: Session,
@@ -332,38 +493,63 @@ def touch_session_by_token_id(
     db: Session,
     session_token_id: str,
     *,
-    allow_cached_active: bool = False,
+    require_user_id: int | None = None,
 ) -> tuple[UserSession | SessionStatusSnapshot | None, bool]:
-    if allow_cached_active and _get_cached_active_session(session_token_id):
-        return SessionStatusSnapshot(status="active"), False
+    """
+    Touch a session, optionally verifying the caller-supplied user_id against Redis.
+
+    **require_user_id**: if provided, the Redis-active marker must belong to this
+    user_id.  This eliminates the allow_cached_active identity-bypass that existed
+    in the old in-process cache path.
+
+    Returns (session_row_or_snapshot, was_db_touched).
+    """
+    redis_active, redis_user_id = _get_session_active_from_redis(session_token_id)
+
+    # ── Fast path: Redis says active AND user_id matches ──────────────────
+    if redis_active and require_user_id is not None:
+        if redis_user_id != require_user_id:
+            # Stale Redis key or token mismatch — force DB lookup
+            pass
+        else:
+            return SessionStatusSnapshot(status="active", user_id=redis_user_id), False
+
+    # ── DB path (authoritative) ───────────────────────────────────────────
     row = get_session_by_token_id(db, session_token_id)
     if not row:
-        forget_active_session_token(session_token_id)
+        _delete_session_active_in_redis(session_token_id)
         return None, False
+
     now = _now_utc()
     if row.status != "active":
-        forget_active_session_token(session_token_id)
+        _delete_session_active_in_redis(session_token_id)
         return row, False
+
     if row.expires_at <= now:
         row.status = "expired"
         row.logout_time = now
         db.flush()
-        forget_active_session_token(session_token_id)
+        _delete_session_active_in_redis(session_token_id)
         return row, True
+
     min_touch_interval = _session_touch_interval_seconds()
     if row.last_active_at is not None:
-        elapsed_seconds = (now - row.last_active_at).total_seconds()
-        if elapsed_seconds < min_touch_interval:
+        elapsed = (now - row.last_active_at).total_seconds()
+        if elapsed < min_touch_interval:
+            # Refresh Redis TTL without touching DB
             cache_ttl = _cap_session_cache_ttl(
-                max(1, int(min_touch_interval - elapsed_seconds)),
+                max(1, int(min_touch_interval - elapsed)),
                 expires_at=row.expires_at,
                 now=now,
             )
-            remember_active_session_token(
+            _touch_session_active_in_redis(
                 session_token_id,
+                user_id=row.user_id,
                 ttl_seconds=cache_ttl,
             )
             return row, False
+
+    # Actual DB touch
     row.last_active_at = now
     db.flush()
     cache_ttl = _cap_session_cache_ttl(
@@ -371,8 +557,9 @@ def touch_session_by_token_id(
         expires_at=row.expires_at,
         now=now,
     )
-    remember_active_session_token(
+    _touch_session_active_in_redis(
         session_token_id,
+        user_id=row.user_id,
         ttl_seconds=cache_ttl,
     )
     return row, True
@@ -393,7 +580,7 @@ def mark_session_logout(
     row.logout_time = now
     row.last_active_at = now
     db.flush()
-    forget_active_session_token(session_token_id)
+    _delete_session_active_in_redis(session_token_id)
     return row
 
 
@@ -403,7 +590,6 @@ def renew_session(
     session_token_id: str,
     extend_seconds: int = 3600,
 ) -> UserSession | None:
-    """延长活跃session的过期时间，返回session行或None（不可续期）。"""
     now = _now_utc()
     row = get_session_by_token_id(db, session_token_id)
     if not row or row.status != "active" or row.expires_at <= now:
@@ -411,9 +597,17 @@ def renew_session(
     row.expires_at = row.expires_at + timedelta(seconds=extend_seconds)
     row.last_active_at = now
     db.flush()
-    remember_active_session_token(session_token_id, expires_at=row.expires_at)
+    _touch_session_active_in_redis(
+        session_token_id,
+        user_id=row.user_id,
+        ttl_seconds=settings.session_touch_min_interval_seconds,
+    )
     return row
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Cleanup
+# ─────────────────────────────────────────────────────────────────────────────
 
 def cleanup_expired_sessions(db: Session) -> int:
     now = _now_utc()
@@ -455,6 +649,10 @@ def get_user_current_session(db: Session, *, session_token_id: str) -> UserSessi
     cleanup_expired_sessions_if_due(db)
     return get_session_by_token_id(db, session_token_id)
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Listing
+# ─────────────────────────────────────────────────────────────────────────────
 
 def list_online_sessions(
     db: Session,
@@ -558,6 +756,10 @@ def list_login_logs(
     return total, rows
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Force offline
+# ─────────────────────────────────────────────────────────────────────────────
+
 def force_offline_sessions(
     db: Session,
     *,
@@ -579,7 +781,7 @@ def force_offline_sessions(
         row.is_forced_offline = True
         row.logout_time = now
         row.last_active_at = now
-        forget_active_session_token(row.session_token_id)
+        _delete_session_active_in_redis(row.session_token_id)
     if rows:
         db.flush()
     return len(rows)
@@ -610,12 +812,16 @@ def force_offline_user_sessions_except(
         row.is_forced_offline = True
         row.logout_time = now
         row.last_active_at = now
-        forget_active_session_token(row.session_token_id)
+        _delete_session_active_in_redis(row.session_token_id)
 
     if rows:
         db.flush()
     return len(rows)
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Login log cleanup
+# ─────────────────────────────────────────────────────────────────────────────
 
 def delete_expired_login_logs(db: Session) -> int:
     deadline = _now_utc() - timedelta(days=settings.login_log_retention_days)
@@ -645,8 +851,12 @@ def cleanup_expired_login_logs_if_due(
         raise
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Online user IDs (delegated to online_status_service)
+# ─────────────────────────────────────────────────────────────────────────────
+
 def list_online_user_ids(
     db: Session, *, candidate_user_ids: list[int] | None = None
 ) -> set[int]:
-    _ = db
-    return list_online_user_ids_from_memory(candidate_user_ids)
+    from app.services.online_status_service import list_online_user_ids as _list
+    return _list(candidate_user_ids)

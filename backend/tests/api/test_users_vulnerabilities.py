@@ -728,82 +728,337 @@ class TestVulnerabilityI_TC042:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TC-043 / TC-044  隐患 J — 多 Worker 内存缓存不一致
+# TC-043 / TC-044  隐患 J — 多 Worker 内存缓存不一致（已修复）
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestVulnerabilityJ_TC043_TC044:
-    """_SESSION_ACTIVE_LOCAL_CACHE 和 _AUTH_USER_CACHE 不跨进程共享。"""
+    """修复验证：Session 活跃度追踪和用户在线状态已迁移至 Redis。
 
-    def test_session_cache_not_shared_across_worker_processes(self) -> None:
+    修复核心：
+      session_service.py:
+        - 删除 _SESSION_ACTIVE_LOCAL_CACHE（进程本地字典）
+        - 引入 Redis SETEX（Key = "mes:session:active:{session_token_id}"，TTL = 30s）
+        - remember_active_session_token / forget_active_session_token 改为 Redis 操作
+        - touch_session_by_token_id 新增 require_user_id 参数，消除 allow_cached_active
+          绕过的身份验证漏洞
+
+      online_status_service.py:
+        - 删除 _last_seen_by_user_id（进程本地字典）
+        - 引入 Redis SETEX（Key = "mes:online:{user_id}"，TTL = online_status_ttl_seconds = 90s）
+        - Redis TTL 天然接管心跳逻辑，无需手动 prune
+
+      force_offline / mark_session_logout / clear_user 在更新 DB 的同时同步删除 Redis Key，
+      确保强制下线在所有 Worker 立即生效。
+
+    TC-043: 验证 Redis 会话活跃度 Key 在模拟多 Worker 环境下跨进程共享。
+    TC-044: 验证 force offline / logout 立即清除 Redis Key，且 user_id 强校验。
+    """
+
+    def test_redis_session_active_key_is_shared_across_worker_simulation(
+        self,
+    ) -> None:
         """
-        Simulate two workers by reading the in-process cache state directly.
+        TC-043: Redis Key "mes:session:active:{token}" 对所有 Worker 可见。
 
-        In a real deployment (uvicorn --workers N), Worker-1 writes to its
-        local _SESSION_ACTIVE_LOCAL_CACHE and Worker-2 cannot see it.
-
-        We verify that the cache key is process-local by importing the
-        module-level dict directly.
+        通过 mock 两个隔离的 Redis 客户端（模拟 Worker-A 和 Worker-B）验证：
+          1. Worker-A 调用 remember_active_session_token → Redis SETEX
+          2. Worker-B 调用 is_session_active_in_redis → Redis GET → True
+          3. 即使进程/Worker 独立，只要共享同一 Redis 实例，Key 即共享。
         """
+        import unittest.mock as mock
         from app.services import session_service
 
-        # Worker-A perspective: mark a session as active
-        fake_token = "test_worker_sid_001"
-        fake_expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        fake_token = "tc043_fake_token_001"
+        fake_user_id = 42
+        fake_ttl = 30
 
-        session_service.remember_active_session_token(
-            fake_token,
-            expires_at=fake_expires_at,
+        # ── 隔离的 Redis 模拟：Worker-A（写） ───────────────────────────────
+        redis_worker_a: dict[str, str] = {}
+
+        def redis_worker_a_setex(key: str, ttl: int, value: str) -> None:
+            redis_worker_a[key] = value
+
+        def redis_worker_a_get(key: str) -> str | None:
+            return redis_worker_a.get(key)
+
+        def redis_worker_a_exists(key: str) -> int:
+            return 1 if key in redis_worker_a else 0
+
+        def redis_worker_a_delete(key: str) -> int:
+            return redis_worker_a.pop(key, None) is not None
+
+        mock_client_a = mock.MagicMock()
+        mock_client_a.setex.side_effect = redis_worker_a_setex
+        mock_client_a.get.side_effect = redis_worker_a_get
+        mock_client_a.exists.side_effect = redis_worker_a_exists
+        mock_client_a.delete.side_effect = redis_worker_a_delete
+
+        # ── 隔离的 Redis 模拟：Worker-B（读） ───────────────────────────────
+        redis_worker_b: dict[str, str] = {}
+
+        def redis_worker_b_setex(key: str, ttl: int, value: str) -> None:
+            redis_worker_b[key] = value
+
+        def redis_worker_b_get(key: str) -> str | None:
+            return redis_worker_b.get(key)
+
+        def redis_worker_b_exists(key: str) -> int:
+            return 1 if key in redis_worker_b else 0
+
+        def redis_worker_b_delete(key: str) -> int:
+            return redis_worker_b.pop(key, None) is not None
+
+        mock_client_b = mock.MagicMock()
+        mock_client_b.setex.side_effect = redis_worker_b_setex
+        mock_client_b.get.side_effect = redis_worker_b_get
+        mock_client_b.exists.side_effect = redis_worker_b_exists
+        mock_client_b.delete.side_effect = redis_worker_b_delete
+
+        # ── Worker-A 写入 Redis ────────────────────────────────────────────
+        with mock.patch.object(
+            session_service,
+            "_get_session_redis_client",
+            return_value=mock_client_a,
+        ):
+            session_service.remember_active_session_token(
+                session_token_id=fake_token,
+                user_id=fake_user_id,
+                ttl_seconds=fake_ttl,
+            )
+
+        # Verify Worker-A wrote the key
+        expected_key = f"mes:session:active:{fake_token}"
+        assert expected_key in redis_worker_a, (
+            f"Worker-A should have written key {expected_key}"
+        )
+        assert redis_worker_a[expected_key].startswith(f"{fake_user_id}:"), (
+            "Redis value should contain user_id prefix"
         )
 
-        # Worker-B perspective: read from the SAME dict (same process in this test)
-        is_active_worker_b = session_service._get_cached_active_session(fake_token)
+        # ── Worker-B 读取 Redis（共享同一 Redis 实例） ──────────────────────
+        # Simulate Worker-B using a different client connected to the SAME Redis
+        # by injecting the shared dict (simulates shared Redis)
+        redis_shared: dict[str, str] = redis_worker_a  # both point to same store
 
-        # VULNERABILITY J: In a single-process test they share the dict,
-        # but in production with --workers=2 each process has its own dict.
-        # We confirm the cache exists and is a plain dict (not Redis/shared).
-        assert isinstance(session_service._SESSION_ACTIVE_LOCAL_CACHE, dict), (
-            "Cache is not a shared store — VULNERABILITY J: each worker "
-            "process maintains its own isolated cache."
+        def shared_get(key: str) -> str | None:
+            return redis_shared.get(key)
+
+        def shared_exists(key: str) -> int:
+            return 1 if key in redis_shared else 0
+
+        def shared_delete(key: str) -> int:
+            return redis_shared.pop(key, None) is not None
+
+        mock_client_b.get.side_effect = shared_get
+        mock_client_b.exists.side_effect = shared_exists
+        mock_client_b.delete.side_effect = shared_delete
+
+        with mock.patch.object(
+            session_service,
+            "_get_session_redis_client",
+            return_value=mock_client_b,
+        ):
+            is_active = session_service.is_session_active_in_redis(fake_token)
+
+        # FIX CONFIRMED: Worker-B can see Worker-A's write through shared Redis
+        assert is_active is True, (
+            "FIX VULNERABILITY J: Redis key should be visible across workers. "
+            "If this fails, Redis is not shared or key was not set correctly."
         )
-
-        # The real vulnerability is verified by noting the cache is a plain
-        # dict, not a Redis or database-backed shared store.
-        # In-process: cache IS shared (both point to same dict).
-        # In production: each worker has its own dict → inconsistent.
-        assert is_active_worker_b is True  # same process → shared dict
 
         # Cleanup
-        session_service.forget_active_session_token(fake_token)
+        with mock.patch.object(
+            session_service,
+            "_get_session_redis_client",
+            return_value=mock_client_a,
+        ):
+            session_service.forget_active_session_token(fake_token)
 
-    def test_session_status_snapshot_bypasses_user_id_verification(self) -> None:
+        assert expected_key not in redis_shared, (
+            "Redis key should be deleted after forget_active_session_token"
+        )
+
+    def test_force_offline_immediately_deletes_redis_key_and_user_id_verification(
+        self,
+    ) -> None:
         """
-        touch_session_by_token_id with allow_cached_active=True returns
-        SessionStatusSnapshot(status='active') WITHOUT verifying user_id.
+        TC-044: force_offline_sessions / mark_session_logout 必须同步删除 Redis Key。
+
+        验证三点：
+          1. force offline 立即删除 Redis Key（模拟所有 Worker 可见）
+          2. touch_session_by_token_id(require_user_id=X) 在 Redis user_id 不匹配时
+             降级到 DB 查询（消除 allow_cached_active 绕过）
+          3. 在线状态 clear_user 立即删除 Redis Key
         """
+        import unittest.mock as mock
         from app.services import session_service
-        from app.models.user_session import UserSession
+        from app.services import online_status_service
 
-        # Manually register a session in the cache
-        fake_token = "test_bypass_sid"
-        fake_expires = datetime.now(timezone.utc) + timedelta(hours=1)
-        session_service.remember_active_session_token(fake_token, expires_at=fake_expires)
+        fake_token = "tc044_fake_token_001"
+        fake_user_id = 99
 
-        # Call touch with allow_cached_active=True — returns snapshot, not row
-        snapshot_or_row, was_touched = session_service.touch_session_by_token_id(
-            db=None,  # type: ignore[arg-type]
-            session_token_id=fake_token,
-            allow_cached_active=True,
-        )
+        # ── Shared Redis store ─────────────────────────────────────────────
+        redis_store: dict[str, str] = {}
 
-        # VULNERABILITY J CONFIRMED: returns snapshot without DB lookup
-        assert hasattr(snapshot_or_row, "status"), (
-            f"Expected SessionStatusSnapshot, got {type(snapshot_or_row)}"
-        )
-        assert snapshot_or_row.status == "active"
-        assert was_touched is False  # did not hit DB
+        def make_mock_client() -> mock.MagicMock:
+            client = mock.MagicMock()
 
-        # Cleanup
-        session_service.forget_active_session_token(fake_token)
+            def _setex(key: str, ttl: int, value: str) -> None:
+                redis_store[key] = value
+
+            def _get(key: str) -> str | None:
+                return redis_store.get(key)
+
+            def _exists(key: str) -> int:
+                return 1 if key in redis_store else 0
+
+            def _delete(key: str) -> int:
+                return redis_store.pop(key, None) is not None
+
+            client.setex.side_effect = _setex
+            client.get.side_effect = _get
+            client.exists.side_effect = _exists
+            client.delete.side_effect = _delete
+            return client
+
+        session_redis = make_mock_client()
+        online_redis = make_mock_client()
+
+        def get_session_redis():
+            return session_redis
+
+        def get_online_redis():
+            return online_redis
+
+        with (
+            mock.patch.object(session_service, "_get_session_redis_client", get_session_redis),
+            mock.patch.object(online_status_service, "_get_online_redis_client", get_online_redis),
+        ):
+            # Step 1: Touch session — sets Redis key
+            session_service.remember_active_session_token(
+                session_token_id=fake_token,
+                user_id=fake_user_id,
+                ttl_seconds=30,
+            )
+            session_key = f"mes:session:active:{fake_token}"
+            assert session_key in redis_store, "Redis key should be set after touch"
+
+            # Step 2: Force offline — must DELETE Redis key
+            session_service.mark_session_logout(
+                db=mock.MagicMock(),  # type: ignore[arg-type]
+                session_token_id=fake_token,
+                forced_offline=True,
+            )
+            assert session_key not in redis_store, (
+                "FIX VULNERABILITY J: Redis key must be deleted IMMEDIATELY on force offline. "
+                "If this fails, Redis key persists and other workers still think session is active."
+            )
+
+            # Step 3: Redis key gone → subsequent touch_session_by_token_id falls
+            # back to DB (no snapshot bypass). Verify by checking require_user_id mismatch.
+            # Re-set the key with a different user_id to test mismatch path
+            redis_store[session_key] = f"{fake_user_id}:{int(time.time())}"
+
+            # Mock DB to return None (key not in DB → should return None)
+            mock_db = mock.MagicMock()
+            mock_db.execute.return_value.scalars.return_value.first.return_value = None
+
+            result, _ = session_service.touch_session_by_token_id(
+                mock_db,
+                session_token_id=fake_token,
+                require_user_id=fake_user_id + 1,  # intentionally wrong
+            )
+            # Redis has user_id=fake_user_id, but require_user_id=fake_user_id+1
+            # → Redis lookup returns (True, fake_user_id) but mismatch → falls to DB
+            # → DB returns None → result is None
+            assert result is None, (
+                "Mismatch require_user_id should fall through to DB and return None"
+            )
+
+            # Step 4: Online status — clear_user deletes Redis key
+            test_user_id = 12345
+            online_key = f"mes:online:{test_user_id}"
+            redis_store[online_key] = str(int(time.time()))
+            assert online_key in redis_store
+
+            online_status_service.clear_user(test_user_id)
+            assert online_key not in redis_store, (
+                "FIX VULNERABILITY J: Redis online key must be deleted on clear_user"
+            )
+
+    def test_redis_online_ttl_auto_expires(self) -> None:
+        """
+        Verify that online status uses Redis TTL (90s) as the heartbeat mechanism.
+
+        No in-process dictionary, no manual prune loop — Redis auto-expiry is
+        the source of truth for online/offline.
+        """
+        import unittest.mock as mock
+        from app.services import online_status_service
+
+        redis_store: dict[str, str] = {}
+        stored_ttls: dict[str, int] = {}
+
+        def _setex(key: str, ttl: int, value: str) -> None:
+            redis_store[key] = value
+            stored_ttls[key] = ttl
+
+        def _get(key: str) -> str | None:
+            return redis_store.get(key)
+
+        def _delete(key: str) -> int:
+            return redis_store.pop(key, None) is not None
+
+        # Mock pipeline for list_online_user_ids batch check
+        def _pipeline():
+            pipe = mock.MagicMock()
+            pending_keys: list[str] = []
+
+            def _exists(key: str) -> mock.MagicMock:
+                pending_keys.append(key)
+                return pipe  # fluent API
+
+            def _execute() -> list[int]:
+                result = []
+                for k in pending_keys:
+                    result.append(1 if k in redis_store else 0)
+                pending_keys.clear()
+                return result
+
+            pipe.exists = _exists
+            pipe.execute = _execute
+            return pipe
+
+        mock_client = mock.MagicMock()
+        mock_client.setex.side_effect = _setex
+        mock_client.get.side_effect = _get
+        mock_client.delete.side_effect = _delete
+        mock_client.pipeline.side_effect = _pipeline
+
+        with mock.patch.object(
+            online_status_service,
+            "_get_online_redis_client",
+            return_value=mock_client,
+        ):
+            # Touch user — Redis SETEX with TTL
+            online_status_service.touch_user(50001)
+            key = "mes:online:50001"
+            assert key in redis_store, "Online key should be set"
+            assert stored_ttls.get(key) == 90, (
+                f"TTL should be 90s (online_status_ttl_seconds), got {stored_ttls.get(key)}"
+            )
+
+            # list_online_user_ids — batch pipelined check
+            online_ids = online_status_service.list_online_user_ids([50001])
+            assert 50001 in online_ids, "User should be online"
+
+            # clear_user — DELETE key
+            online_status_service.clear_user(50001)
+            assert key not in redis_store, "Online key should be deleted on clear_user"
+
+            # After deletion, user is offline
+            online_ids_after = online_status_service.list_online_user_ids([50001])
+            assert 50001 not in online_ids_after, "User should be offline after clear_user"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -17,7 +17,6 @@ class SessionServiceUnitTest(unittest.TestCase):
     def setUp(self) -> None:
         session_service._LOGIN_LOG_CLEANUP_NEXT_AT = 0.0
         session_service._SESSION_CLEANUP_NEXT_AT = 0.0
-        session_service._SESSION_ACTIVE_LOCAL_CACHE.clear()
         session_service._SUCCESS_LOGIN_LOG_LOCAL_CACHE.clear()
 
     def test_touch_session_throttles_when_interval_not_elapsed(self) -> None:
@@ -27,12 +26,18 @@ class SessionServiceUnitTest(unittest.TestCase):
             expires_at=now + timedelta(minutes=10),
             last_active_at=now - timedelta(seconds=10),
             logout_time=None,
+            user_id=7,
         )
         db = MagicMock()
 
         with (
             patch.object(session_service, "get_session_by_token_id", return_value=row),
             patch.object(session_service, "_now_utc", return_value=now),
+            patch.object(
+                session_service,
+                "_get_session_active_from_redis",
+                return_value=(False, None),
+            ),
             patch.object(
                 session_service.settings,
                 "session_touch_min_interval_seconds",
@@ -53,12 +58,18 @@ class SessionServiceUnitTest(unittest.TestCase):
             expires_at=now + timedelta(minutes=10),
             last_active_at=now - timedelta(seconds=45),
             logout_time=None,
+            user_id=7,
         )
         db = MagicMock()
 
         with (
             patch.object(session_service, "get_session_by_token_id", return_value=row),
             patch.object(session_service, "_now_utc", return_value=now),
+            patch.object(
+                session_service,
+                "_get_session_active_from_redis",
+                return_value=(False, None),
+            ),
             patch.object(
                 session_service.settings,
                 "session_touch_min_interval_seconds",
@@ -101,12 +112,18 @@ class SessionServiceUnitTest(unittest.TestCase):
             expires_at=now + timedelta(minutes=10),
             last_active_at=now - timedelta(seconds=20),
             logout_time=None,
+            user_id=7,
         )
         db = MagicMock()
 
         with (
             patch.object(session_service, "get_session_by_token_id", return_value=row),
             patch.object(session_service, "_now_utc", return_value=now),
+            patch.object(
+                session_service,
+                "_get_session_active_from_redis",
+                return_value=(False, None),
+            ),
             patch.object(
                 session_service.settings,
                 "session_touch_min_interval_seconds",
@@ -119,22 +136,65 @@ class SessionServiceUnitTest(unittest.TestCase):
         self.assertFalse(touched)
         db.flush.assert_not_called()
 
-    def test_touch_session_uses_local_cache_when_allowed(self) -> None:
+    def test_touch_session_uses_redis_for_active_marker(self) -> None:
+        """touch_session_by_token_id calls _touch_session_active_in_redis (not local dict)."""
+        now = datetime(2026, 4, 8, 12, 0, tzinfo=UTC)
+        row = SimpleNamespace(
+            status="active",
+            expires_at=now + timedelta(minutes=10),
+            last_active_at=now - timedelta(seconds=45),
+            logout_time=None,
+            user_id=7,
+        )
         db = MagicMock()
 
         with (
-            patch.object(session_service, "_get_cached_active_session", return_value=True),
-            patch.object(session_service, "get_session_by_token_id") as get_session,
+            patch.object(session_service, "get_session_by_token_id", return_value=row),
+            patch.object(session_service, "_now_utc", return_value=now),
+            patch.object(
+                session_service,
+                "_get_session_active_from_redis",
+                return_value=(False, None),
+            ),
+            patch.object(
+                session_service.settings,
+                "session_touch_min_interval_seconds",
+                30,
+            ),
+            patch.object(session_service, "_touch_session_active_in_redis") as touch_redis,
+        ):
+            result_row, touched = session_service.touch_session_by_token_id(db, "sid-redis")
+
+        self.assertIs(result_row, row)
+        self.assertTrue(touched)
+        # Redis was called with correct positional args
+        touch_redis.assert_called_once()
+        call_args = touch_redis.call_args
+        self.assertEqual(call_args.args[0], "sid-redis")  # session_token_id (positional)
+        self.assertEqual(call_args.kwargs["user_id"], 7)
+        self.assertGreater(call_args.kwargs["ttl_seconds"], 0)
+
+    def test_touch_session_deletes_redis_key_on_session_not_found(self) -> None:
+        """When session not in DB, Redis key must be deleted."""
+        db = MagicMock()
+        db.execute.return_value.scalars.return_value.first.return_value = None
+
+        with (
+            patch.object(
+                session_service,
+                "_get_session_active_from_redis",
+                return_value=(True, 99),
+            ),
+            patch.object(session_service, "get_session_by_token_id", return_value=None),
+            patch.object(session_service, "_delete_session_active_in_redis") as delete_redis,
         ):
             result_row, touched = session_service.touch_session_by_token_id(
-                db,
-                "sid-cached",
-                allow_cached_active=True,
+                db, "sid-missing",
             )
 
-        self.assertEqual(result_row.status, "active")
+        self.assertIsNone(result_row)
         self.assertFalse(touched)
-        get_session.assert_not_called()
+        delete_redis.assert_called_once_with("sid-missing")
 
     def test_create_user_session_does_not_flush_immediately(self) -> None:
         now = datetime(2026, 4, 8, 12, 0, tzinfo=UTC)
@@ -307,6 +367,7 @@ class SessionServiceUnitTest(unittest.TestCase):
             expires_at=now + timedelta(seconds=4),
             last_active_at=now - timedelta(seconds=60),
             logout_time=None,
+            user_id=7,
         )
         db = MagicMock()
 
@@ -314,11 +375,16 @@ class SessionServiceUnitTest(unittest.TestCase):
             patch.object(session_service, "get_session_by_token_id", return_value=row),
             patch.object(session_service, "_now_utc", return_value=now),
             patch.object(
+                session_service,
+                "_get_session_active_from_redis",
+                return_value=(False, None),
+            ),
+            patch.object(
                 session_service.settings,
                 "session_touch_min_interval_seconds",
                 30,
             ),
-            patch.object(session_service, "remember_active_session_token") as remember,
+            patch.object(session_service, "_touch_session_active_in_redis") as touch_redis,
         ):
             result_row, touched = session_service.touch_session_by_token_id(
                 db,
@@ -327,8 +393,8 @@ class SessionServiceUnitTest(unittest.TestCase):
 
         self.assertIs(result_row, row)
         self.assertTrue(touched)
-        self.assertEqual(remember.call_count, 1)
-        ttl_seconds = remember.call_args.kwargs["ttl_seconds"]
+        self.assertEqual(touch_redis.call_count, 1)
+        ttl_seconds = touch_redis.call_args.kwargs["ttl_seconds"]
         self.assertLessEqual(ttl_seconds, 4)
         self.assertGreaterEqual(ttl_seconds, 1)
 
