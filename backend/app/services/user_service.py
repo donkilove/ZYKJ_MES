@@ -18,7 +18,7 @@ from app.core.rbac import (
     ROLE_SYSTEM_ADMIN,
 )
 from app.core.production_constants import SUB_ORDER_STATUS_IN_PROGRESS
-from app.core.security import get_password_hash, verify_password
+from app.core.security import get_password_hash, invalidate_password_cache, verify_password
 from app.models.process import Process
 from app.models.process_stage import ProcessStage
 from app.models.production_order_process import ProductionOrderProcess
@@ -1081,6 +1081,7 @@ def reset_user_password(
     user.password_hash = get_password_hash(new_password)
     user.must_change_password = True
     user.password_changed_at = now
+    invalidate_password_cache(user.id)
     db.commit()
     db.refresh(user)
     return (
@@ -1110,6 +1111,7 @@ def change_user_password(
     pwd_error = validate_password(new_password)
     if pwd_error:
         return False, pwd_error
+    invalidate_password_cache(user.id)
     user.password_hash = get_password_hash(new_password)
     user.must_change_password = False
     user.password_changed_at = _now_utc()

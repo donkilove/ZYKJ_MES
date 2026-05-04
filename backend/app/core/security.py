@@ -14,10 +14,21 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds
 _PASSWORD_VERIFY_LOCAL_CACHE: dict[str, float] = {}
 _PASSWORD_VERIFY_LOCAL_CACHE_LOCK = RLock()
 _PASSWORD_VERIFY_CACHE_TTL_SECONDS = 60
+_PASSWORD_VERIFY_USER_KEYS: dict[int, set[str]] = {}  # user_id → set of cache_keys
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
+
+
+def _extract_user_id_from_scope(cache_scope: str) -> int | None:
+    """Extract user_id from cache_scope like 'user:123'."""
+    if cache_scope.startswith("user:"):
+        try:
+            return int(cache_scope[5:])
+        except ValueError:
+            return None
+    return None
 
 
 def verify_password_cached(
@@ -39,7 +50,22 @@ def verify_password_cached(
     if verified:
         with _PASSWORD_VERIFY_LOCAL_CACHE_LOCK:
             _PASSWORD_VERIFY_LOCAL_CACHE[cache_key] = now_monotonic + max(1, ttl_seconds)
+            user_id = _extract_user_id_from_scope(cache_scope)
+            if user_id is not None:
+                _PASSWORD_VERIFY_USER_KEYS.setdefault(user_id, set()).add(cache_key)
     return verified
+
+
+def invalidate_password_cache(user_id: int) -> int:
+    """Remove all cached password verification results for a specific user.
+
+    Returns the number of cache entries removed.
+    """
+    with _PASSWORD_VERIFY_LOCAL_CACHE_LOCK:
+        keys_to_remove = _PASSWORD_VERIFY_USER_KEYS.pop(user_id, set())
+        for key in keys_to_remove:
+            _PASSWORD_VERIFY_LOCAL_CACHE.pop(key, None)
+        return len(keys_to_remove)
 
 
 def rehash_password_if_needed(plain_password: str, hashed_password: str) -> str | None:

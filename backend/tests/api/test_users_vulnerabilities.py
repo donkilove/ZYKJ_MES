@@ -811,66 +811,104 @@ class TestVulnerabilityJ_TC043_TC044:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestVulnerabilityK_TC045:
-    """verify_password_cached TTL=60s，密码重置后旧密码仍可登录。"""
+    """修复验证：密码重置后旧密码必须在缓存 TTL 内被拒绝。
 
-    def test_old_password_accepted_within_cache_ttl(
+    修复核心：
+      1. security.py 新增 invalidate_password_cache(user_id)，按 user_id 追踪并清除
+         _PASSWORD_VERIFY_LOCAL_CACHE 中该用户所有缓存条目（通过 _PASSWORD_VERIFY_USER_KEYS 反查）。
+      2. user_service.py 在 reset_user_password / change_user_password 执行后显式调用
+         invalidate_password_cache(user.id)，确保旧密码缓存立即失效。
+      3. 缓存键包含 user_id（在 cache_scope 中），追踪映射确保精准清理，无需全量扫描。
+
+    漏洞复现路径（修复前）：
+      - 用户登录 → verify_password_cached 缓存 SHA256("user:{id}|{old_hash}|{old_pwd}") = True
+      - 管理员重置密码 → password_hash 变化，但旧缓存条目未清除
+      - 攻击者立即用旧密码登录 → 旧缓存命中 → 登录成功（HTTP 200）
+
+    修复后行为：
+      - 重置密码后旧密码立即被 invalidate_password_cache 清除
+      - 旧密码登录 → 缓存未命中 → bcrypt 验证失败 → HTTP 401
+    """
+
+    def test_old_password_rejected_after_reset(
         self,
         client: TestClient,
         admin_headers: dict[str, str],
     ) -> None:
-        # Create a target user
+        # Create a stage first (operator role requires stage_id); correct path is /api/v1/craft/stages
         suffix = str(int(time.time() * 1000) % 100_000)
-        target_username = f"pwdtest_{suffix}"
-        target_password = "OldPwd@123"
+        stage_resp = client.post(
+            "/api/v1/craft/stages",
+            headers=admin_headers,
+            json={"code": f"kst{suffix}", "name": f"工段{suffix}", "is_enabled": True},
+        )
+        assert stage_resp.status_code == 201, stage_resp.text
+        stage_id = stage_resp.json()["data"]["id"]
+
+        # Create a target operator user (username max_length=10)
+        target_username = f"pt{suffix}"[:10]
+        old_password = "Pwd@123"
 
         create_resp = client.post(
             "/api/v1/users",
             headers=admin_headers,
             json={
                 "username": target_username,
-                "password": target_password,
+                "password": old_password,
                 "role_code": "operator",
+                "stage_id": stage_id,
                 "is_active": True,
             },
         )
-        assert create_resp.status_code == 201
+        assert create_resp.status_code == 201, (
+            f"User creation failed ({create_resp.status_code}): {create_resp.text}"
+        )
         user_id = create_resp.json()["data"]["id"]
 
-        # Confirm old password works
+        # Step 1: old password must work before reset (populates the cache)
         old_login = client.post(
             "/api/v1/auth/login",
-            data={"username": target_username, "password": target_password},
+            data={"username": target_username, "password": old_password},
         )
-        assert old_login.status_code == 200, "Old password should work before reset"
+        assert old_login.status_code == 200, (
+            "Precondition failed: old password should succeed before reset"
+        )
 
-        # Reset password (admin forces new password)
-        new_password = "NewPwd@456"
+        # Step 2: admin resets to a new password (UserResetPasswordRequest: password + remark)
+        new_password = "NewPwd@999"
         reset_resp = client.post(
             f"/api/v1/users/{user_id}/reset-password",
             headers=admin_headers,
-            json={"new_password": new_password},
+            json={"password": new_password, "remark": "密码重置测试"},
         )
         assert reset_resp.status_code == 200, reset_resp.text
 
-        # Immediately try old password — VULNERABILITY K: should fail but may succeed
-        old_login_after_reset = client.post(
+        # Step 3: new password must work immediately
+        new_login = client.post(
             "/api/v1/auth/login",
-            data={"username": target_username, "password": target_password},
+            data={"username": target_username, "password": new_password},
+        )
+        assert new_login.status_code == 200, (
+            f"New password should work immediately after reset. "
+            f"Got {new_login.status_code}: {new_login.text}"
         )
 
-        if old_login_after_reset.status_code == 200:
-            # VULNERABILITY K CONFIRMED: old password accepted within cache window
-            assert True, "VULNERABILITY K CONFIRMED: old password accepted during cache TTL"
-        else:
-            # Either cache expired already, or the cache key changed
-            # (The password hash was regenerated, so cache key = SHA256(user:id|new_hash|old_pwd) != old key)
-            # This means the vulnerability is partially mitigated by the hash-in-cache-key design,
-            # but the cache key uses the HASH, not the user_id alone.
-            # A separate test with same hash but changed password is needed.
-            pytest.skip(
-                "Old password rejected immediately — cache key uses new hash; "
-                "vulnerability requires old hash to still be cached from a previous login."
-            )
+        # Step 4: old password must be rejected immediately (within TTL)
+        old_login_after_reset = client.post(
+            "/api/v1/auth/login",
+            data={"username": target_username, "password": old_password},
+        )
+
+        # FIX ASSERTION: old password MUST be rejected
+        assert old_login_after_reset.status_code == 401, (
+            f"SECURITY REGRESSION: old password accepted after reset "
+            f"(status={old_login_after_reset.status_code}). "
+            f"invalidate_password_cache was not called or did not clear the cache entry."
+        )
+        detail = old_login_after_reset.json().get("detail", "")
+        assert "password" in detail.lower() or "incorrect" in detail.lower(), (
+            f"Expected password-error detail, got: '{detail}'"
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
