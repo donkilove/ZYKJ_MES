@@ -513,6 +513,19 @@ def create_or_reuse_user_session(
             login_type=login_type,
         )
 
+    # ── 安全策略：移动端（mobile_scan）登录永远创建新会话 ─────────────────
+    # 隐患 F 防护：若复用旧会话，其 login_ip / terminal_info 会被更新，
+    # 导致原会话的 Token 指纹校验失败（IP/UA 与新登录不一致）。
+    # 为移动端创建全新会话可以避免这一混淆，也符合移动设备经常切换网络的场景。
+    if login_type == "mobile_scan":
+        return _create_user_session_no_cache(
+            db,
+            user=user,
+            ip_address=ip_address,
+            terminal_info=terminal_info,
+            login_type=login_type,
+        )
+
     row = get_reusable_active_session(
         db,
         user_id=user.id,
@@ -620,15 +633,11 @@ def touch_session_by_token_id(
     """
     redis_active, redis_user_id = _get_session_active_from_redis(session_token_id)
 
-    # ── Fast path: Redis says active AND user_id matches ──────────────────
-    if redis_active and require_user_id is not None:
-        if redis_user_id != require_user_id:
-            # Stale Redis key or token mismatch — force DB lookup
-            pass
-        else:
-            return SessionStatusSnapshot(status="active", user_id=redis_user_id), False
-
-    # ── DB path (authoritative) ───────────────────────────────────────────
+    # ── DB path (authoritative) — always check DB for fingerprint & status ──
+    # IMPORTANT: even if Redis says "active", we must verify against DB because:
+    #   1. Redis may be stale (DB force-offline doesn't invalidate Redis key atomically)
+    #   2. SessionStatusSnapshot lacks login_ip/terminal_info for fingerprint validation
+    #   3. Auth decisions must never trust stale Redis alone
     row = get_session_by_token_id(db, session_token_id)
     if not row:
         _delete_session_active_in_redis(session_token_id)
@@ -645,6 +654,11 @@ def touch_session_by_token_id(
         db.flush()
         _delete_session_active_in_redis(session_token_id)
         return row, True
+
+    # Verify user_id if provided (prevents token hijacking across users)
+    if require_user_id is not None and row.user_id != require_user_id:
+        _delete_session_active_in_redis(session_token_id)
+        return SessionStatusSnapshot(status="invalidated", user_id=row.user_id), False
 
     min_touch_interval = _session_touch_interval_seconds()
     if row.last_active_at is not None:

@@ -2,31 +2,12 @@
 
 Architecture
 ────────────
-Tests use the **real PostgreSQL mes_db** with per-test explicit rollback and
-admin-account auto-recovery.
+All DB access is routed through an isolated transaction.  The `db_session` fixture
+owns the transaction; the `client` fixture shares the same transaction so data
+created via API calls is immediately visible to ORM queries via db_session.
 
-Each test runs against a shared production DB; the teardown hooks ensure the
-admin account is always re-activated so subsequent tests can still log in.
-
-State-isolation strategy
-─────────────────────────
-Three independent mechanisms cooperate to prevent cross-test pollution:
-
-1. autouse SETUP fixture  — runs BEFORE every test
-   • Restores admin password hash to the known-good seed value.
-     Handles the case where a previous pytest *session* committed a password
-     change (rollback cannot undo committed data).
-   • Pre-loads _PASSWORD_VERIFY_LOCAL_CACHE so the first login after a
-     stale-cache hit from a prior run also succeeds.
-
-2. client fixture teardown — runs AFTER every test
-   • Rolls back uncommitted (transaction-scoped) changes.
-   • Restores admin account (is_active=True, is_deleted=False).
-   • Clears ALL in-process caches: password verify cache, session-service
-     throttle-state dictionaries, login-log deduplication cache.
-
-3. db_session fixture — for tests that need raw SQLAlchemy access.
-   Provides an independent session; caller is responsible for rollback.
+Each function-scoped test gets its own dedicated DB connection with a SAVEPOINT
+that is always rolled back at test exit.  No test can commit to the real DB.
 """
 
 from __future__ import annotations
@@ -38,17 +19,18 @@ from typing import Generator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from app.db.session import SessionLocal  # noqa: F401
+from app.api import deps
+from app.main import app
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Known-good seed values
+# Session-level constants
 # ─────────────────────────────────────────────────────────────────────────────
 
 _ADMIN_USERNAME = "admin"
@@ -56,67 +38,11 @@ _ADMIN_PASSWORD = "Admin@123456"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Admin-account recovery helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _restore_admin_account_state(
-    db,
-    *,
-    ensure_active: bool = True,
-    ensure_password: bool = True,
-    original_password_hash: str | None = None,
-) -> None:
-    """Restore admin account to a known-good state.
-
-    Handles both committed-from-previous-run and uncommitted modifications:
-      • committed: direct UPDATE to the DB row (bypasses rollback)
-      • uncommitted: the outer transaction's rollback handles it naturally
-    """
-    from sqlalchemy import update
-    from app.core.security import get_password_hash
-    from app.models.user import User
-
-    updates: dict = {}
-    if ensure_active:
-        updates["is_active"] = True
-        updates["is_deleted"] = False
-        updates["deleted_at"] = None
-    if ensure_password and original_password_hash:
-        updates["password_hash"] = original_password_hash
-
-    if not updates:
-        return
-
-    stmt = (
-        update(User)
-        .where(User.username == _ADMIN_USERNAME)
-        .values(**updates)
-    )
-    db.execute(stmt)
-    db.commit()
-
-
-def _get_admin_password_hash(db) -> str | None:
-    from sqlalchemy import select
-    from app.models.user import User
-    row = db.execute(
-        select(User.password_hash).where(User.username == _ADMIN_USERNAME)
-    ).scalar_one_or_none()
-    return row
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Cache isolation helpers
+# Helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _clear_all_in_process_caches() -> None:
-    """Clear every module-level in-process cache used by the auth subsystem.
-
-    Must be called in the teardown of every test that may have called
-    any auth/session/online-status code — even if the test itself did not
-    modify state (a prior test's cache entry can poison a later one).
-    """
-    # ── Password-verify cache ────────────────────────────────────────────────
+    """Clear every module-level in-process cache used by the auth subsystem."""
     try:
         from app.core.security import (
             _PASSWORD_VERIFY_LOCAL_CACHE,
@@ -127,192 +53,151 @@ def _clear_all_in_process_caches() -> None:
             _PASSWORD_VERIFY_LOCAL_CACHE.clear()
             _PASSWORD_VERIFY_USER_KEYS.clear()
     except Exception:
-        pass  # module not loaded yet
+        pass
 
-    # ── Session-service throttling & deduplication caches ───────────────────
     try:
-        from app.services import session_service
-        session_service._LOGIN_LOG_CLEANUP_NEXT_AT = 0.0
-        session_service._SESSION_CLEANUP_NEXT_AT = 0.0
+        import app.services.session_service as session_service
         session_service._SUCCESS_LOGIN_LOG_LOCAL_CACHE.clear()
     except Exception:
         pass
 
-    # ── Login rate-limit Redis client state ─────────────────────────────────
     try:
         import app.services.login_ratelimit_service as login_ratelimit_service
-        import time as _time_module
         login_ratelimit_service._LOGIN_RATELIMIT_REDIS_CLIENT = None
         login_ratelimit_service._LOGIN_RATELIMIT_REDIS_INIT = False
-        # Reset backoff so the next test gets a fresh connection attempt
         login_ratelimit_service._LOGIN_RATELIMIT_REDIS_DISABLED_UNTIL = 0.0
     except Exception:
         pass
 
-    # ── Online-status cache (online_status_service uses Redis, no local cache) ──
-    #   Nothing to clear; Redis keys expire via TTL naturally.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Import the bridge class and isolated tx class from tests/conftest.py
+# ─────────────────────────────────────────────────────────────────────────────
+
+pytest_unittest_transaction_bridge = pytest.importorskip(
+    "tests.conftest"
+).pytest_unittest_transaction_bridge
+_IsolatedTransaction = pytest.importorskip("tests.conftest")._IsolatedTransaction
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Fixtures — SETUP (runs BEFORE every test, autouse=True)
+# db_session — yields a session factory bound to the isolated transaction
 # ─────────────────────────────────────────────────────────────────────────────
 
-@pytest.fixture(autouse=True)
-def _test_isolation_setup() -> Generator[None, None, None]:
-    """Runs before every test to guarantee a clean starting state.
+class _SessionFactoryResult:
+    """Holds the transaction + session factory for a test's lifetime."""
 
-    Actions (best-effort; failures are logged, not raised, to avoid masking
-    the test itself):
-      1. Restore admin account password to the known seed value.
-         Required because a *previous pytest session* may have committed a
-         password change — rollback cannot undo committed data.
-      2. Prime _PASSWORD_VERIFY_LOCAL_CACHE so the first login call in
-         this test is guaranteed a cache MISS (verified fresh) rather than
-         a potentially-poisoned cache HIT from a prior run.
-    """
-    from app.core.security import (
-        _PASSWORD_VERIFY_LOCAL_CACHE,
-        _PASSWORD_VERIFY_LOCAL_CACHE_LOCK,
-        get_password_hash,
-    )
-
-    db = SessionLocal()
-    try:
-        # ── 1. Ensure admin password is the known seed value ───────────────
-        current_hash = _get_admin_password_hash(db)
-        seed_hash = get_password_hash(_ADMIN_PASSWORD)
-        if current_hash != seed_hash:
-            _restore_admin_account_state(
-                db,
-                ensure_active=True,
-                ensure_password=True,
-                original_password_hash=seed_hash,
-            )
-
-        # ── 2. Prime password-verify cache with the correct hash ───────────
-        #    This prevents a stale cache entry (wrong pwd + correct hash or
-        #    correct pwd + wrong hash) from being hit by the first login.
-        import hashlib
-        import time as _time_module
-
-        cache_key = hashlib.sha256(
-            f"user:1|{seed_hash}|{_ADMIN_PASSWORD}".encode("utf-8")
-        ).hexdigest()
-        with _PASSWORD_VERIFY_LOCAL_CACHE_LOCK:
-            # Set TTL long enough to survive the test; teardown will clear it.
-            _PASSWORD_VERIFY_LOCAL_CACHE[cache_key] = (
-                _time_module.monotonic() + 3600
-            )
-
-    except Exception:
-        # Log but do not re-raise — the test itself should surface real errors
-        import logging
-        logging.getLogger(__name__).exception(
-            "[TEST-ISOLATION] Setup cleanup failed; test may be affected"
+    def __init__(self) -> None:
+        self.tx = _IsolatedTransaction()
+        self._factory = sessionmaker(
+            autocommit=False,
+            autoflush=False,
+            bind=self.tx._connection,
+            expire_on_commit=False,
         )
-    finally:
-        db.close()
 
-    yield  # test runs here
+    def session(self) -> Session:
+        return self._factory()
 
-    # Teardown (runs AFTER every test) — clean up in-process caches.
-    # Transaction rollback (in the `client` fixture) handles DB state;
-    # this handles the caches that live outside the transaction.
-    _clear_all_in_process_caches()
+    def close(self) -> None:
+        try:
+            self.tx.close()
+        except Exception:
+            pass
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Fixtures — standard test support
-# ─────────────────────────────────────────────────────────────────────────────
 
 @pytest.fixture(scope="function")
 def db_session() -> Generator[Session, None, None]:
-    """Standard SQLAlchemy session — caller is responsible for rollback."""
-    session = SessionLocal()
+    """SQLAlchemy session bound to the isolated transaction with SAVEPOINT active.
+
+    Yields a session with begin_nested() called so the app's db.commit() calls
+    only close/reopen the SAVEPOINT (not the outer transaction).
+    The after_transaction_end listener in tests/conftest.py re-creates the
+    SAVEPOINT automatically whenever it ends.
+
+    Teardown: rollback SAVEPOINT → close session → rollback outer tx.
+    """
+    result = _SessionFactoryResult()
+    session = result.session()
+    # Activate the nested transaction (SAVEPOINT) — this is the test sandbox.
+    session.begin_nested()
     try:
         yield session
     finally:
-        session.rollback()
-        session.close()
+        try:
+            session.close()
+        except Exception:
+            pass
+        result.close()
+        _clear_all_in_process_caches()
 
 
-def _restore_admin_account(
-    db,
-    *,
-    ensure_active: bool = True,
-    ensure_password: bool = True,
-    original_password_hash: str | None = None,
-) -> None:
-    """Ensure the admin account is active and has the seed password.
-
-    Called in client teardown and admin_token retry to handle the case where
-    a previous test committed changes to the admin account.
-    """
-    _restore_admin_account_state(
-        db,
-        ensure_active=ensure_active,
-        ensure_password=ensure_password,
-        original_password_hash=original_password_hash,
-    )
-
+# ─────────────────────────────────────────────────────────────────────────────
+# client — FastAPI TestClient sharing the same transaction as db_session
+# ─────────────────────────────────────────────────────────────────────────────
 
 @pytest.fixture(scope="function")
-def client() -> Generator[TestClient, None, None]:
-    """FastAPI TestClient backed by the real PostgreSQL mes_db.
+def client(db_session: Session) -> Generator[TestClient, None, None]:
+    """FastAPI TestClient whose request handlers use the same isolated transaction as db_session.
 
-    Override get_db BEFORE TestClient is created so lifespan/bootstrap
-    runs against the same DB connection pool as request handlers.
+    Uses a session factory so concurrent threads each get their own SQLAlchemy
+    session bound to the same connection + transaction, avoiding "Session is already flushing".
     """
-    from app.main import app
-    from app.api import deps
+    db_bind = db_session.get_bind()
 
-    def _get_db_factory():
-        db = SessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
+    # Get the _SessionFactoryResult that owns the transaction.
+    # We reach into the db_session's bind to find the owning transaction.
+    # The connection from get_bind() was obtained from _IsolatedTransaction._connection.
+    # We create a new sessionmaker on the same connection.
+    _session_factory = sessionmaker(
+        autocommit=False,
+        autoflush=False,
+        bind=db_bind,
+        expire_on_commit=False,
+    )
 
-    app.dependency_overrides[deps.get_db] = _get_db_factory
+    def _get_isolated_db():
+        yield _session_factory()
 
-    with TestClient(app) as c:
-        yield c
+    app.dependency_overrides[deps.get_db] = _get_isolated_db
 
-    # Rollback uncommitted changes from this test.
-    db = SessionLocal()
     try:
-        db.rollback()
+        with TestClient(app) as c:
+            yield c
     finally:
-        db.close()
-
-    # Restore admin in case a previous test committed its deactivation.
-    _restore_admin_account(db, ensure_active=True, ensure_password=False)
-
-    app.dependency_overrides.clear()
+        app.dependency_overrides.clear()
 
 
-# ── Auth helpers ─────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# Auth helper fixtures
+# ─────────────────────────────────────────────────────────────────────────────
 
 @pytest.fixture
-def admin_token(client: TestClient) -> str:
-    """Return a valid JWT for the seeded admin account.
-
-    If the admin account was deactivated by a previous test, re-activate it
-    and retry the login.
-    """
+def admin_token(client: TestClient, db_session: Session) -> str:
+    """Return a valid JWT for the seeded admin account."""
     response = client.post(
         "/api/v1/auth/login",
         data={"username": _ADMIN_USERNAME, "password": _ADMIN_PASSWORD},
     )
     if response.status_code == 403 and "disabled" in response.json().get("detail", "").lower():
-        _restore_admin_account_state(SessionLocal(), ensure_active=True, ensure_password=False)
+        # Fix within the isolated transaction — will be rolled back at test exit.
+        from sqlalchemy import update
+        from app.models.user import User
+        from app.core.security import get_password_hash
+
+        db_session.execute(
+            update(User)
+            .where(User.username == _ADMIN_USERNAME)
+            .values(is_active=True, password_hash=get_password_hash(_ADMIN_PASSWORD))
+        )
+        db_session.commit()
+
         response = client.post(
             "/api/v1/auth/login",
             data={"username": _ADMIN_USERNAME, "password": _ADMIN_PASSWORD},
         )
-    assert response.status_code == 200, (
-        f"Admin login failed: {response.status_code} — {response.text}"
-    )
+
+    assert response.status_code == 200, f"Admin login failed: {response.status_code} — {response.text}"
     return response.json()["data"]["access_token"]
 
 
@@ -323,10 +208,7 @@ def admin_headers(admin_token: str) -> dict[str, str]:
 
 @pytest.fixture
 def operator_token(client: TestClient, admin_headers: dict) -> tuple[str, str]:
-    """Create a stage + an operator user and return (token, username).
-
-    Both are rolled back automatically after the test.
-    """
+    """Create a stage + an operator user; return (token, username)."""
     suffix = int(time.time() * 1000) % 100_000
 
     stage_resp = client.post(
@@ -361,27 +243,11 @@ def operator_token(client: TestClient, admin_headers: dict) -> tuple[str, str]:
 
 @pytest.fixture
 def two_admin_tokens(client: TestClient) -> tuple[str, str]:
-    """Return (token_a, token_b) for two distinct admin sessions.
-
-    Creates a THIRD system_admin (admin_c) so that the guardrail (`remaining < 2`)
-    can trigger during concurrent deactivation:
-      - A deactivates B: remaining = 3-1=2 >= 2 → allows (200), B deactivated
-      - B deactivates A: B sees A already deactivated, remaining = 2-1 = 1 < 2 → rejects (400)
-    The winner's token remains valid; the loser's token is also valid
-    (skip_session_invalidation=True prevents force-offline).
-
-    All three admin accounts are rolled back automatically after the test.
-    """
+    """Return (token_a, token_b) for two distinct admin sessions."""
     token_a_resp = client.post(
         "/api/v1/auth/login",
         data={"username": _ADMIN_USERNAME, "password": _ADMIN_PASSWORD},
     )
-    if token_a_resp.status_code == 403 and "disabled" in token_a_resp.json().get("detail", "").lower():
-        _restore_admin_account_state(SessionLocal(), ensure_active=True, ensure_password=False)
-        token_a_resp = client.post(
-            "/api/v1/auth/login",
-            data={"username": _ADMIN_USERNAME, "password": _ADMIN_PASSWORD},
-        )
     assert token_a_resp.status_code == 200, (
         f"Admin A login failed: {token_a_resp.status_code} — {token_a_resp.text}"
     )
@@ -389,7 +255,6 @@ def two_admin_tokens(client: TestClient) -> tuple[str, str]:
 
     suffix = int(time.time() * 1000) % 100_000
 
-    # Admin B — primary test participant
     admin_b_username = f"adb{suffix:05d}"
     create_resp = client.post(
         "/api/v1/users",
@@ -412,8 +277,6 @@ def two_admin_tokens(client: TestClient) -> tuple[str, str]:
     )
     token_b = token_b_resp.json()["data"]["access_token"]
 
-    # Admin C — silent third admin; ensures the guardrail triggers after
-    # the winner's commit drives remaining from 2 down to 1 for the loser.
     admin_c_username = f"adc{suffix:05d}"
     create_c_resp = client.post(
         "/api/v1/users",
@@ -435,16 +298,7 @@ def tc040_isolated_count(
     client: TestClient,  # noqa: ARG001
     two_admin_tokens: tuple[str, str],
 ) -> None:
-    """Override the guardrail count for TC-040 to count ONLY the three fixture admins.
-
-    The production DB may have 30+ system_admin rows (perf seed, other tests, etc.).
-    The guardrail (`remaining < 2`) needs exactly 3 fixture admins (A, B, C) to trigger:
-      A deactivates B: remaining = 3-1 = 2 >= 2 → allows (200), B deactivated
-      B deactivates A: B sees A already deactivated, remaining = 2-1 = 1 < 2 → rejects (400)
-    This fixture patches the count function so TC-040 runs in isolation.
-
-    Automatically restores the original function after the test.
-    """
+    """Patch the guardrail counter so TC-040 runs with exactly 3 fixture admins."""
     import app.services.user_service as user_service_module
     from app.core.security import decode_access_token
     from sqlalchemy import func, select
@@ -455,7 +309,6 @@ def tc040_isolated_count(
     admin_a_id = int(decode_access_token(token_a)["sub"])
     admin_b_id = int(decode_access_token(token_b)["sub"])
 
-    # Get all three fixture admin IDs: A, B, and the most-recently-created adc% admin (C)
     db = SessionLocal()
     try:
         result = db.execute(
@@ -468,27 +321,26 @@ def tc040_isolated_count(
             ).order_by(User.id.desc()).limit(10)
         ).fetchall()
         fixture_ids = [row[0] for row in result]
-        # Should have A, B, C
         assert len(fixture_ids) >= 3, (
-            f"Expected at least 3 fixture admins (A={admin_a_id}, B={admin_b_id}, C=adc%), "
-            f"got {len(fixture_ids)}: {[r[1] for r in result]}"
+            f"Expected at least 3 fixture admins, got {len(fixture_ids)}"
         )
-        admin_ids = set(fixture_ids[:3])  # top 3 by ID (A, B, C)
+        admin_ids = set(fixture_ids[:3])
     finally:
         db.close()
 
     original = user_service_module._lock_and_count_active_system_admins_for_guardrail
 
-    def isolated_count(db, *, exclude_user_id: int) -> int:
-        # Count only the three fixture-created admins (A, B, C)
-        count = db.execute(
-            select(func.count(User.id)).where(
-                User.id.in_(admin_ids),
-                User.is_active.is_(True),
-                User.is_deleted.is_(False),
-            )
-        ).scalar_one()
-        return count - 1  # exclude the operator themselves
+    def isolated_count(db_inner, *, exclude_user_id: int) -> int:
+        return (
+            db_inner.execute(
+                select(func.count(User.id)).where(
+                    User.id.in_(admin_ids),
+                    User.is_active.is_(True),
+                    User.is_deleted.is_(False),
+                )
+            ).scalar_one()
+            - 1
+        )
 
     user_service_module._lock_and_count_active_system_admins_for_guardrail = isolated_count
 

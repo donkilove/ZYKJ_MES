@@ -37,13 +37,58 @@ from app.services.authz_service import ensure_role_permission_defaults  # noqa: 
 from app.services.user_service import approve_registration_request, update_user  # noqa: E402
 from app.services.user_export_task_service import ensure_user_export_runtime_dir  # noqa: E402
 
+# Bridge that coordinates the isolated DB transaction with tests/conftest.py.
+from tests.conftest import pytest_unittest_transaction_bridge as _bridge  # noqa: E402
+
+
+class _BridgeBoundSessionFactory:
+    """A drop-in replacement for SessionLocal that returns the bridge's session.
+
+    Monkey-patching SessionLocal to this class ensures that ALL ORM operations
+    in every test method — including direct SessionLocal() calls — are bound
+    to the same isolated transaction, so the savepoint rollback discards them.
+    """
+
+    __call__ = property(lambda self: lambda: _bridge.session())
+
 
 class UserModuleIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
+        _bridge.begin()
+
+        # Replace SessionLocal so every test method uses the bridge's session.
+        from app.db import session as _session_module
+
+        cls._original_SessionLocal = _session_module.SessionLocal
+        _session_module.SessionLocal = _BridgeBoundSessionFactory()
+
+        # Override get_db so TestClient request handlers also use the bridge.
+        from app.api import deps
+
+        def _get_isolated_db():
+            yield _bridge.session()
+
+        cls._original_get_db = deps.get_db
+        deps.get_db = _get_isolated_db
         cls.client = TestClient(app)
 
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.client.close()
+        from app.api import deps  # noqa: F401
+
+        deps.get_db = cls._original_get_db
+        # Restore original SessionLocal.
+        from app.db import session as _session_module
+
+        _session_module.SessionLocal = cls._original_SessionLocal
+        _bridge.end()
+
     def setUp(self) -> None:
+        # Roll back to the pre-test savepoint so each test starts clean.
+        _bridge.rollback_test_method()
+
         self.admin_token = self._login("admin", "Admin@123456")
         self.role_id: int | None = None
         self.role_code: str | None = None
@@ -59,106 +104,10 @@ class UserModuleIntegrationTest(unittest.TestCase):
         self.extra_registration_request_ids: list[int] = []
         self.extra_export_task_ids: list[int] = []
         self._registration_request_seq = 0
-        db = SessionLocal()
-        try:
-            UserExportTask.__table__.create(bind=db.get_bind(), checkfirst=True)
-        finally:
-            db.close()
 
     def tearDown(self) -> None:
-        db = SessionLocal()
-        try:
-            session_ids = {
-                session_id
-                for session_id in [self.user_session_id, *self.extra_session_ids]
-                if session_id
-            }
-            for session_id in session_ids:
-                db.execute(
-                    delete(UserSession).where(
-                        UserSession.session_token_id == session_id
-                    )
-                )
-                db.execute(
-                    delete(LoginLog).where(LoginLog.session_token_id == session_id)
-                )
-
-            usernames = {
-                username
-                for username in [self.username, *self.extra_usernames]
-                if username
-            }
-            for username in usernames:
-                db.execute(delete(AuditLog).where(AuditLog.target_name == username))
-                db.execute(delete(LoginLog).where(LoginLog.username == username))
-                user = db.query(User).filter(User.username == username).one_or_none()
-                if user is not None:
-                    user.roles.clear()
-                    db.flush()
-                    db.delete(user)
-
-            role_codes = {
-                role_code
-                for role_code in [self.role_code, *self.extra_role_codes]
-                if role_code
-            }
-            for role_code in role_codes:
-                db.execute(
-                    delete(AuthzChangeLogItem).where(
-                        AuthzChangeLogItem.role_code == role_code
-                    )
-                )
-                db.execute(
-                    delete(RolePermissionGrant).where(
-                        RolePermissionGrant.role_code == role_code
-                    )
-                )
-                db.execute(delete(AuditLog).where(AuditLog.target_name == role_code))
-                role = db.query(Role).filter(Role.code == role_code).one_or_none()
-                if role is not None:
-                    db.delete(role)
-
-            registration_request_ids = {
-                request_id
-                for request_id in [
-                    self.registration_request_id,
-                    *self.extra_registration_request_ids,
-                ]
-                if request_id is not None
-            }
-            for request_id in registration_request_ids:
-                db.execute(
-                    delete(RegistrationRequest).where(
-                        RegistrationRequest.id == request_id
-                    )
-                )
-            export_task_ids = {
-                task_id
-                for task_id in self.extra_export_task_ids
-                if task_id is not None
-            }
-            for task_id in export_task_ids:
-                task = (
-                    db.query(UserExportTask)
-                    .filter(UserExportTask.id == task_id)
-                    .one_or_none()
-                )
-                if task is None:
-                    continue
-                if task.storage_path:
-                    Path(task.storage_path).unlink(missing_ok=True)
-                db.delete(task)
-            if self.stage_id is not None:
-                stage = (
-                    db.query(ProcessStage)
-                    .filter(ProcessStage.id == self.stage_id)
-                    .one_or_none()
-                )
-                if stage is not None:
-                    db.delete(stage)
-            db.commit()
-        finally:
-            db.close()
+        # Roll back the savepoint — all data created by this test is discarded.
+        _bridge.rollback_test_method()
 
     def _headers(self, token: str | None = None) -> dict[str, str]:
         return {"Authorization": f"Bearer {token or self.admin_token}"}
@@ -222,34 +171,28 @@ class UserModuleIntegrationTest(unittest.TestCase):
             status=status,
             rejected_reason=rejected_reason,
         )
-        db = SessionLocal()
-        try:
-            db.add(request_row)
-            db.commit()
-            db.refresh(request_row)
-            self.extra_registration_request_ids.append(int(request_row.id))
-            return request_row
-        finally:
-            db.close()
+        db = _bridge.session()
+        db.add(request_row)
+        db.flush()
+        db.refresh(request_row)
+        self.extra_registration_request_ids.append(int(request_row.id))
+        return request_row
 
     def _create_enabled_stage_without_processes(self) -> int:
         suffix = str(int(time.time() * 1000) % 100000)
-        db = SessionLocal()
-        try:
-            stage = ProcessStage(
-                code=f"USTAGE{suffix}",
-                name=f"用户测试工段{suffix}",
-                sort_order=1,
-                is_enabled=True,
-                remark="用户模块回归测试工段",
-            )
-            db.add(stage)
-            db.commit()
-            db.refresh(stage)
-            self.stage_id = int(stage.id)
-            return self.stage_id
-        finally:
-            db.close()
+        db = _bridge.session()
+        stage = ProcessStage(
+            code=f"USTAGE{suffix}",
+            name=f"用户测试工段{suffix}",
+            sort_order=1,
+            is_enabled=True,
+            remark="用户模块回归测试工段",
+        )
+        db.add(stage)
+        db.flush()
+        db.refresh(stage)
+        self.stage_id = int(stage.id)
+        return self.stage_id
 
     def test_account_settings_stays_accessible_for_logged_in_user(self) -> None:
         self._create_role_and_user()
@@ -681,7 +624,7 @@ class UserModuleIntegrationTest(unittest.TestCase):
         deleted_list_response = self.client.get(
             "/api/v1/users",
             headers=self._headers(),
-            params={"deleted_scope": "deleted"},
+            params={"deleted_scope": "deleted", "page_size": 200},
         )
         self.assertEqual(
             deleted_list_response.status_code, 200, deleted_list_response.text
@@ -2909,6 +2852,309 @@ class UserModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(
             expired_session_response.json()["detail"], "Current session not found"
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 隐患 D & F 测试用例：TC-036/037/039
+# ─────────────────────────────────────────────────────────────────────────────
+
+    def _fingerprint_mismatch_request(
+        self,
+        token: str,
+        *,
+        different_ip: bool = False,
+        different_ua: bool = False,
+    ) -> None:
+        """Helper: replay a request with a mismatched IP/UA to trigger fingerprint rejection."""
+        # Import here to avoid circular import at module level
+        from starlette.datastructures import Address, Headers
+
+        original_host = "127.0.0.1"
+        spoofed_host = "10.0.0.99" if different_ip else original_host
+
+        original_ua = "TestClient/1.0"
+        spoofed_ua = "EvilBrowser/666.0" if different_ua else original_ua
+
+        def _patch_request(client_self: object, scope: dict) -> None:
+            """Patches the request scope to simulate different IP/UA."""
+            scope["client"] = (spoofed_host, 12345)
+            scope["headers"] = [
+                (b"user-agent", spoofed_ua.encode()),
+                (b"host", b"testserver"),
+            ]
+
+        import app.main as _app_main
+
+        _original = _app_main.app.root_path
+
+        # Use middleware-like approach: patch the request at the asgi scope level
+        # We achieve this by patching get_current_user's request object directly
+        original_get_current_user = __import__(
+            "app.api.deps", fromlist=["get_current_user"]
+        ).get_current_user
+
+        import app.api.deps as deps_module
+        import types
+
+        # We'll use a different approach: monkeypatch at the endpoint level
+        # by passing a pre-built request with spoofed attributes
+        from fastapi import Request
+        from starlette.testclient import ASGIAdapter, _Scope
+        from starlette.requests import Request as StarletteRequest
+
+        # Find the ASGI app
+        asgi_app = _app_main.app
+
+        def _build_spoofed_request(
+            token_str: str,
+            ip: str,
+            ua: str,
+        ) -> Request:
+            """Build a spoofed Request object for direct endpoint testing."""
+            from starlette.testclient import _Scope
+
+            scope: _Scope = {
+                "type": "http",
+                "method": "GET",
+                "path": "/api/v1/me/profile",
+                "query_string": b"",
+                "headers": [(b"authorization", f"Bearer {token_str}".encode())],
+                "client": (ip, 12345),
+                "server": ("testserver", 80),
+                "root_path": "/",
+            }
+            return StarletteRequest(scope)
+
+        spoofed_req = _build_spoofed_request(
+            token_str=token,
+            ip=spoofed_host,
+            ua=spoofed_ua,
+        )
+
+        # Directly call the dependency function with a spoofed request
+        from app.api import deps as deps_module
+
+        try:
+            deps_module.get_current_user(
+                token=token,
+                request=spoofed_req,
+                db=SessionLocal(),
+            )
+            self.fail("Expected 401 HTTPException for fingerprint mismatch")
+        except Exception as e:
+            status_code = getattr(e, "status_code", None)
+            if status_code == 401:
+                return  # Expected
+            # It might be a redirect (SQLAlchemy session issue)
+            raise
+
+    def test_tc036_token_stolen_and_replayed_on_different_user_agent(self) -> None:
+        """TC-036: Token replayed from a different User-Agent → 401 + forced logout.
+
+        隐患 F：设备指纹绑定 — 跨 UA 使用 Token 必须被拒绝。
+        """
+        self._create_role_and_user()
+        assert self.user_token is not None
+        assert self.user_session_id is not None
+        assert self.user_id is not None
+
+        from starlette.requests import Request
+
+        def _build_spoofed_request(token_str: str, ua: str) -> Request:
+            scope = {
+                "type": "http",
+                "method": "GET",
+                "path": "/api/v1/me/profile",
+                "query_string": b"",
+                "headers": [
+                    (b"authorization", f"Bearer {token_str}".encode()),
+                    (b"user-agent", ua.encode()),
+                ],
+                "client": ("127.0.0.1", 12345),
+                "server": ("testserver", 80),
+                "root_path": "/",
+            }
+            return Request(scope)
+
+        # Login UA is the default TestClient UA; spoof a different one
+        spoofed_req = _build_spoofed_request(
+            token_str=self.user_token,
+            ua="EvilBrowser/666.0",
+        )
+
+        db = SessionLocal()
+        try:
+            from app.api import deps as deps_module
+
+            with self.assertRaises(Exception) as ctx:
+                deps_module.get_current_user(
+                    token=self.user_token,
+                    request=spoofed_req,
+                    db=db,
+                )
+            exc = ctx.exception
+            status_code = getattr(exc, "status_code", None)
+            self.assertEqual(
+                status_code, 401,
+                f"Expected 401 but got {type(exc).__name__}: {exc}"
+            )
+        finally:
+            db.close()
+
+    def test_tc037_token_stolen_and_replayed_from_different_ip(self) -> None:
+        """TC-037: Token replayed from a different IP address → 401 + forced logout.
+
+        隐患 F：设备指纹绑定 — 跨 IP 使用 Token 必须被拒绝。
+        """
+        self._create_role_and_user()
+        assert self.user_token is not None
+        assert self.user_session_id is not None
+
+        from starlette.requests import Request
+
+        def _build_spoofed_request(token_str: str, client_ip: str) -> Request:
+            scope = {
+                "type": "http",
+                "method": "GET",
+                "path": "/api/v1/me/profile",
+                "query_string": b"",
+                "headers": [
+                    (b"authorization", f"Bearer {token_str}".encode()),
+                ],
+                "client": (client_ip, 54321),
+                "server": ("testserver", 80),
+                "root_path": "/",
+            }
+            return Request(scope)
+
+        # Login was from 'testclient' (TestClient default); replay from different IP
+        spoofed_req = _build_spoofed_request(
+            token_str=self.user_token,
+            client_ip="10.255.255.1",
+        )
+
+        db = SessionLocal()
+        try:
+            from app.api import deps as deps_module
+
+            with self.assertRaises(Exception) as ctx:
+                deps_module.get_current_user(
+                    token=self.user_token,
+                    request=spoofed_req,
+                    db=db,
+                )
+            exc = ctx.exception
+            status_code = getattr(exc, "status_code", None)
+            self.assertEqual(
+                status_code, 401,
+                f"Expected 401 (fingerprint mismatch) but got {type(exc).__name__}: {exc}"
+            )
+
+            # Verify the session was force-offlined in DB.
+            # Force a fresh read bypassing SQLAlchemy's identity map:
+            # use a new connection + raw SQL so we see the committed state.
+            from sqlalchemy import text
+            from app.db.session import engine
+
+            with engine.connect() as fresh_conn:
+                result = fresh_conn.execute(
+                    text(
+                        "SELECT status FROM sys_user_session "
+                        "WHERE session_token_id = :sid"
+                    ),
+                    {"sid": self.user_session_id},
+                ).fetchone()
+                if result is not None:
+                    db_status = result[0]
+                    self.assertIn(
+                        db_status,
+                        {"forced_offline", "logged_out"},
+                        f"Session should be force-offlined; got: {db_status!r}",
+                    )
+        finally:
+            db.close()
+
+    def test_tc039_mobile_scan_login_with_single_sign_on_kicks_all_other_sessions(
+        self,
+    ) -> None:
+        """TC-039: Mobile scan login with SSO enabled kicks all other sessions offline.
+
+        隐患 D：跨端互斥 — 移动端登录配置单点登录后，新登录踢掉旧端所有会话。
+        """
+        # Temporarily enable SSO for this test
+        import app.core.config as config_module
+
+        original_sso = config_module.settings.session_single_sign_on
+        config_module.settings.session_single_sign_on = True
+        try:
+            # Login via web (creates web session)
+            self._create_role_and_user()
+            assert self.user_token is not None
+            assert self.user_session_id is not None
+            assert self.username is not None
+
+            web_session_id = self.user_session_id
+
+            # Verify web session is active
+            profile_resp = self.client.get(
+                "/api/v1/me/profile",
+                headers=self._headers(self.user_token),
+            )
+            self.assertEqual(profile_resp.status_code, 200, profile_resp.text)
+
+            # Now login via mobile scan with SSO enabled
+            # Mobile scan login uses /api/v1/auth/mobile-scan-review-login
+            mobile_login_resp = self.client.post(
+                "/api/v1/auth/mobile-scan-review-login",
+                data={"username": self.username, "password": "Pwd@123"},
+                headers={"User-Agent": "MES-Mobile-Scanner/1.0"},
+            )
+            self.assertEqual(
+                mobile_login_resp.status_code, 200, mobile_login_resp.text
+            )
+            mobile_token = mobile_login_resp.json()["data"]["access_token"]
+
+            # Verify the old web session is now force-offlined
+            db = SessionLocal()
+            try:
+                old_web_session = (
+                    db.query(UserSession)
+                    .filter(UserSession.session_token_id == web_session_id)
+                    .one_or_none()
+                )
+                self.assertIsNotNone(old_web_session)
+                assert old_web_session is not None
+                self.assertEqual(
+                    old_web_session.status,
+                    "forced_offline",
+                    "Web session should have been force-offlined by mobile SSO login",
+                )
+                self.assertTrue(old_web_session.is_forced_offline)
+            finally:
+                db.close()
+
+            # The old web token should now be invalid (401)
+            old_web_profile_resp = self.client.get(
+                "/api/v1/me/profile",
+                headers=self._headers(self.user_token),
+            )
+            self.assertEqual(
+                old_web_profile_resp.status_code, 401,
+                "Old web token should be rejected after mobile SSO login"
+            )
+
+            # The new mobile token should work
+            new_mobile_profile_resp = self.client.get(
+                "/api/v1/me/profile",
+                headers=self._headers(mobile_token),
+            )
+            self.assertEqual(
+                new_mobile_profile_resp.status_code, 200,
+                "New mobile token should work"
+            )
+
+        finally:
+            config_module.settings.session_single_sign_on = original_sso
 
 
 if __name__ == "__main__":

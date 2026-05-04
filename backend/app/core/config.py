@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     online_status_ttl_seconds: int = 90
     session_touch_min_interval_seconds: int = 30
     session_max_seconds: int = 3600
+    session_single_sign_on: bool = False  # 隐患 D：单点登录，新端登录强制踢掉旧端所有会话
     login_log_retention_days: int = 30
     maintenance_auto_generate_enabled: bool = True
     maintenance_auto_generate_time: str = "00:05"

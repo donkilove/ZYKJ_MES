@@ -14,7 +14,11 @@ from app.schemas.auth import TokenPayload
 from app.services import authz_cache_service
 from app.services.online_status_service import touch_user
 from app.services.authz_service import get_user_permission_codes, validate_permission_code
-from app.services.session_service import touch_session_by_token_id
+from app.services.session_service import (
+    get_session_by_token_id,
+    normalize_terminal_info,
+    touch_session_by_token_id,
+)
 from app.services.user_service import get_user_for_auth
 
 
@@ -179,6 +183,7 @@ def get_current_user(
         payload = decode_access_token(token)
         token_data = TokenPayload(sub=payload.get("sub", ""))
         session_token_id = str(payload.get("sid") or "").strip() or None
+        login_type = str(payload.get("login_type") or "web").strip() or "web"
     except Exception:
         raise credentials_error
 
@@ -207,6 +212,67 @@ def get_current_user(
             _forget_cached_auth_user(session_token_id)
             _forget_cached_session_permission_decision(session_token_id)
             raise credentials_error
+
+        # ── 隐患 F 修复：设备指纹绑定校验 ─────────────────────────────────────
+        # session_row 可能是一个轻量级 SessionStatusSnapshot（无 login_ip/UA），
+        # 也可能是完整的 UserSession（有 login_ip/UA）。
+        # 为安全起见，强制从 DB 获取完整会话信息用于指纹比对；
+        # 同时确保 force-offline 操作作用在完整的 DB 记录上。
+        #
+        # 安全策略：
+        #   • web Token：严格校验 IP + User-Agent（跨设备使用必须拒绝）
+        #   • mobile_scan Token：仅校验 IP（移动端 UA 随请求变化，不适合作为指纹）
+        current_ip: str | None = (
+            request.client.host if request and request.client else None
+        )
+        current_ua: str | None = (
+            normalize_terminal_info(
+                request.headers.get("user-agent") if request else None
+            )
+            if request else None
+        )
+        stored_ip = getattr(session_row, "login_ip", None)
+        stored_ua = getattr(session_row, "terminal_info", None)
+        if stored_ip is None or stored_ua is None:
+            full_session = get_session_by_token_id(db, session_token_id)
+        else:
+            full_session = session_row if hasattr(session_row, "login_ip") else None
+        if full_session is not None:
+            stored_ip = full_session.login_ip
+            stored_ua = full_session.terminal_info
+
+        def _fingerprint_mismatch(a: str | None, b: str | None) -> bool:
+            if a is None and b is None:
+                return False
+            if a is None or b is None:
+                return True
+            return a.strip() != b.strip()
+
+        # IP 检查：所有登录类型都必须校验（跨网段使用 Token 视为可疑）
+        ip_mismatch = _fingerprint_mismatch(current_ip, stored_ip)
+        # UA 检查：仅 web Token 需要，移动端 UA 随请求动态变化
+        ua_mismatch = (
+            (login_type == "web") and _fingerprint_mismatch(current_ua, stored_ua)
+        )
+
+        if ip_mismatch or ua_mismatch:
+            # Token 疑似被跨设备盗用 → 强制注销并要求重新登录
+            if full_session is not None:
+                from app.services.session_service import mark_session_logout
+
+                mark_session_logout(
+                    db, session_token_id=session_token_id, forced_offline=True
+                )
+                db.commit()
+            _forget_cached_auth_user(session_token_id)
+            _forget_cached_session_permission_decision(session_token_id)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="会话设备指纹校验失败（IP或User-Agent与登录时不一致），"
+                "请重新登录。如需在新设备使用，请注销后重新登录。",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
         if request and _allow_auth_user_cache(request, session_token_id):
             cached_user = _get_cached_auth_user(
                 session_token_id=session_token_id,
@@ -318,6 +384,7 @@ def require_permission_fast(permission_code: str) -> Callable[[str, Request, Ses
             payload = decode_access_token(token)
             token_data = TokenPayload(sub=payload.get("sub", ""))
             session_token_id = str(payload.get("sid") or "").strip() or None
+            login_type = str(payload.get("login_type") or "web").strip() or "web"
         except Exception:
             raise credentials_error
         if not token_data.sub:
@@ -345,6 +412,57 @@ def require_permission_fast(permission_code: str) -> Callable[[str, Request, Ses
             _forget_cached_auth_user(session_token_id)
             _forget_cached_session_permission_decision(session_token_id)
             raise credentials_error
+
+        # ── 隐患 F 修复：设备指纹绑定校验（require_permission_fast 路径）──────────
+        current_ip: str | None = (
+            request.client.host if request and request.client else None
+        )
+        current_ua: str | None = (
+            normalize_terminal_info(
+                request.headers.get("user-agent") if request else None
+            )
+            if request else None
+        )
+        stored_ip = getattr(session_row, "login_ip", None)
+        stored_ua = getattr(session_row, "terminal_info", None)
+        if stored_ip is None or stored_ua is None:
+            full_session = get_session_by_token_id(db, session_token_id)
+        else:
+            full_session = session_row if hasattr(session_row, "login_ip") else None
+        if full_session is not None:
+            stored_ip = full_session.login_ip
+            stored_ua = full_session.terminal_info
+
+        def _fp_mismatch(a: str | None, b: str | None) -> bool:
+            if a is None and b is None:
+                return False
+            if a is None or b is None:
+                return True
+            return a.strip() != b.strip()
+
+        # IP 检查：所有登录类型都必须校验
+        ip_mismatch = _fp_mismatch(current_ip, stored_ip)
+        # UA 检查：仅 web Token 需要，移动端 UA 随请求动态变化
+        ua_mismatch = (
+            (login_type == "web") and _fp_mismatch(current_ua, stored_ua)
+        )
+
+        if ip_mismatch or ua_mismatch:
+            if full_session is not None:
+                from app.services.session_service import mark_session_logout
+
+                mark_session_logout(
+                    db, session_token_id=session_token_id, forced_offline=True
+                )
+                db.commit()
+            _forget_cached_auth_user(session_token_id)
+            _forget_cached_session_permission_decision(session_token_id)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="会话设备指纹校验失败（IP或User-Agent与登录时不一致），"
+                "请重新登录。如需在新设备使用，请注销后重新登录。",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
         session_permission_cache_key = _session_permission_cache_key(
             session_token_id=session_token_id,

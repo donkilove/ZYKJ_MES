@@ -168,6 +168,7 @@ class AuthEndpointUnitTest(unittest.TestCase):
         db.commit.assert_called_once()
         remember_active.assert_called_once_with(
             "sid-1",
+            user_id=7,
             expires_at=session_row.expires_at,
         )
         touch_user.assert_called_once_with(7)

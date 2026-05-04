@@ -446,13 +446,11 @@ class TestVulnerabilityF_TC039:
             },
         )
 
-        # VULNERABILITY F CONFIRMED: token accepted from different device
-        assert device_b_resp.status_code == 200, (
-            f"VULNERABILITY F NOT REPRODUCIBLE: token rejected from different device "
-            f"({device_b_resp.status_code}). Device binding exists."
+        # VULNERABILITY F FIXED: token rejected from different device (IP mismatch)
+        assert device_b_resp.status_code == 401, (
+            f"VULNERABILITY F STILL EXISTS: token accepted from different device "
+            f"({device_b_resp.status_code}). Device binding is not enforced."
         )
-        user_data = device_b_resp.json()["data"]
-        assert user_data["username"] == "admin"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -666,12 +664,11 @@ class TestVulnerabilityH_TC041:
         self,
         client: TestClient,
         admin_headers: dict[str, str],
-        db_session,  # noqa: ARG001
+        db_session: Session,  # noqa: ARG001
     ) -> None:
         import unittest.mock as mock
         from app.services import user_service
         from app.services import session_service
-        from app.db.session import SessionLocal
         from sqlalchemy import select
         from app.models.user import User
         from app.models.user_session import UserSession
@@ -749,67 +746,63 @@ class TestVulnerabilityH_TC041:
         )
 
         # ── FIX VERIFICATION: DB state and Redis state must be consistent ─────
-        db = SessionLocal()
-        try:
-            db_user = db.execute(
-                select(User).where(User.id == user_id)
-            ).scalars().first()
-            assert db_user is not None, "User should still exist in DB"
+        db_user = db_session.execute(
+            select(User).where(User.id == user_id)
+        ).scalars().first()
+        assert db_user is not None, "User should still exist in DB"
 
-            # Redis session check: active session should have been force-offlined
-            # if the final DB state is inactive
-            redis_store: dict[str, str] = {}
+        # Redis session check: active session should have been force-offlined
+        # if the final DB state is inactive
+        redis_store: dict[str, str] = {}
 
-            def _get_session_redis_client():
-                client_mock = mock.MagicMock()
-                client_mock.setex = mock.MagicMock(
-                    side_effect=lambda k, t, v: redis_store.update({k: v})
-                )
-                client_mock.get = mock.MagicMock(
-                    side_effect=lambda k: redis_store.get(k)
-                )
-                client_mock.exists = mock.MagicMock(
-                    side_effect=lambda k: 1 if k in redis_store else 0
-                )
-                client_mock.delete = mock.MagicMock(
-                    side_effect=lambda k: redis_store.pop(k, None) is not None
-                )
-                return client_mock
-
-            with mock.patch.object(
-                session_service,
-                "_get_session_redis_client",
-                _get_session_redis_client,
-            ):
-                # Check if user has active sessions in DB
-                active_sessions = db.execute(
-                    select(UserSession.session_token_id).where(
-                        UserSession.user_id == user_id,
-                        UserSession.status == "active",
-                    )
-                ).scalars().all()
-
-                # FIX ASSERTION: If DB shows user as inactive, there should be
-                # no active sessions in DB, and Redis should not have an online key.
-                if not db_user.is_active:
-                    assert len(active_sessions) == 0, (
-                        "FIX VULNERABILITY H: DB shows user inactive, "
-                        "but active sessions still exist in DB"
-                    )
-                else:
-                    # User is active — active sessions may or may not exist
-                    # (depends on timing), but Redis online key should be set
-                    # if user is truly online
-                    pass  # active state allows sessions, no invariant violation
-
-            # Core invariant: DB is_active must match the session state
-            active_sessions_count = len(active_sessions)
-            assert not (not db_user.is_active and active_sessions_count > 0), (
-                "FIX VULNERABILITY H: User is inactive in DB but has active sessions. "
-                "DB and session state must be consistent."
+        def _get_session_redis_client():
+            client_mock = mock.MagicMock()
+            client_mock.setex = mock.MagicMock(
+                side_effect=lambda k, t, v: redis_store.update({k: v})
             )
-        finally:
-            db.close()
+            client_mock.get = mock.MagicMock(
+                side_effect=lambda k: redis_store.get(k)
+            )
+            client_mock.exists = mock.MagicMock(
+                side_effect=lambda k: 1 if k in redis_store else 0
+            )
+            client_mock.delete = mock.MagicMock(
+                side_effect=lambda k: redis_store.pop(k, None) is not None
+            )
+            return client_mock
+
+        with mock.patch.object(
+            session_service,
+            "_get_session_redis_client",
+            _get_session_redis_client,
+        ):
+            # Check if user has active sessions in DB
+            active_sessions = db_session.execute(
+                select(UserSession.session_token_id).where(
+                    UserSession.user_id == user_id,
+                    UserSession.status == "active",
+                )
+            ).scalars().all()
+
+            # FIX ASSERTION: If DB shows user as inactive, there should be
+            # no active sessions in DB, and Redis should not have an online key.
+            if not db_user.is_active:
+                assert len(active_sessions) == 0, (
+                    "FIX VULNERABILITY H: DB shows user inactive, "
+                    "but active sessions still exist in DB"
+                )
+            else:
+                # User is active — active sessions may or may not exist
+                # (depends on timing), but Redis online key should be set
+                # if user is truly online
+                pass  # active state allows sessions, no invariant violation
+
+        # Core invariant: DB is_active must match the session state
+        active_sessions_count = len(active_sessions)
+        assert not (not db_user.is_active and active_sessions_count > 0), (
+            "FIX VULNERABILITY H: User is inactive in DB but has active sessions. "
+            "DB and session state must be consistent."
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

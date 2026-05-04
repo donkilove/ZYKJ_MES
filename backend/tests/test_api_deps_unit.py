@@ -31,7 +31,21 @@ class ApiDepsUnitTest(unittest.TestCase):
     def test_get_current_user_skips_commit_when_session_not_touched(self) -> None:
         db = MagicMock()
         user = SimpleNamespace(id=7, is_deleted=False, is_active=True)
-        session_row = SimpleNamespace(status="active", user_id=7)
+        # session_row must have login_ip/terminal_info so fingerprint validation
+        # doesn't trigger a DB lookup (get_session_by_token_id) during the test.
+        session_row = SimpleNamespace(
+            status="active",
+            user_id=7,
+            login_ip="127.0.0.1",
+            terminal_info="TestClient/1.0",
+        )
+        # Mock request so fingerprint check uses matching IP/UA.
+        mock_request = SimpleNamespace(
+            method="GET",
+            url=SimpleNamespace(path="/api/v1/some/path"),
+            client=SimpleNamespace(host="127.0.0.1"),
+            headers={"user-agent": "TestClient/1.0"},
+        )
 
         with (
             patch.object(deps, "decode_access_token", return_value={"sub": "7", "sid": "sid-1"}),
@@ -42,11 +56,12 @@ class ApiDepsUnitTest(unittest.TestCase):
             ) as touch_session,
             patch.object(deps, "get_user_for_auth", return_value=user) as get_user_for_auth,
             patch.object(deps, "touch_user") as touch_user,
+            patch.object(deps, "normalize_terminal_info", return_value="TestClient/1.0"),
         ):
-            result = deps.get_current_user(token="token", db=db)
+            result = deps.get_current_user(token="token", request=mock_request, db=db)
 
         self.assertIs(result, user)
-        touch_session.assert_called_once_with(db, "sid-1", allow_cached_active=True)
+        touch_session.assert_called_once_with(db, "sid-1", require_user_id=7)
         get_user_for_auth.assert_called_once_with(db, 7)
         db.commit.assert_not_called()
         touch_user.assert_called_once_with(7)
@@ -68,7 +83,7 @@ class ApiDepsUnitTest(unittest.TestCase):
                 deps.get_current_user(token="token", db=db)
 
         self.assertEqual(context.exception.status_code, 401)
-        touch_session.assert_called_once_with(db, "sid-1", allow_cached_active=True)
+        touch_session.assert_called_once_with(db, "sid-1", require_user_id=7)
         get_user_for_auth.assert_not_called()
         db.commit.assert_not_called()
 
@@ -80,15 +95,22 @@ class ApiDepsUnitTest(unittest.TestCase):
             is_active=True,
             roles=[SimpleNamespace(code="system_admin", is_enabled=True)],
         )
-        session_row = SimpleNamespace(status="active", user_id=7)
+        session_row = SimpleNamespace(
+            status="active",
+            user_id=7,
+            login_ip="127.0.0.1",
+            terminal_info="TestClient/1.0",
+        )
         request = SimpleNamespace(
             method="GET",
             url=SimpleNamespace(path="/api/v1/authz/permissions/catalog"),
+            client=SimpleNamespace(host="127.0.0.1"),
+            headers={"user-agent": "TestClient/1.0"},
         )
         dependency = deps.require_permission_fast(PERM_AUTHZ_PERMISSION_CATALOG_VIEW)
 
         with (
-            patch.object(deps, "decode_access_token", return_value={"sub": "7", "sid": "sid-1"}),
+            patch.object(deps, "decode_access_token", return_value={"sub": "7", "sid": "sid-1", "login_type": "web"}),
             patch.object(
                 deps,
                 "touch_session_by_token_id",
@@ -101,6 +123,7 @@ class ApiDepsUnitTest(unittest.TestCase):
                 return_value={PERM_AUTHZ_PERMISSION_CATALOG_VIEW},
             ) as get_user_permission_codes,
             patch.object(deps, "touch_user") as touch_user,
+            patch.object(deps, "normalize_terminal_info", return_value="TestClient/1.0"),
         ):
             dependency(token="token", request=request, db=db)
             dependency(token="token", request=request, db=db)

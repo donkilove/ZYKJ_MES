@@ -234,6 +234,18 @@ def _login_with_expiry(
             login_type="web",
         )
 
+    # ── 隐患 D 修复：移动端（Mobile Scan）登录强制踢下线逻辑 ─────────────────
+    # 当全局配置了单点登录（session_single_sign_on=True）时，
+    # 移动端新登录将把该用户在所有终端上的所有活跃会话踢下线；
+    # 否则仅踢掉其他移动端会话，保持 web 会话不受影响。
+    if login_type == "mobile_scan" and settings.session_single_sign_on:
+        # 强制下线该用户所有其他会话（web + mobile，不含当前新建的）
+        force_offline_user_sessions_except(
+            db,
+            user_id=user.id,
+            exclude_session_token_id=session_row.session_token_id,
+        )
+
     if should_record_success_login(
         user_id=user.id,
         ip_address=ip_address,
