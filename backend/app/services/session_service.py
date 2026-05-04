@@ -434,24 +434,59 @@ def get_reusable_active_session(
     user_id: int,
     ip_address: str | None,
     terminal_info: str | None,
+    login_type: str,
 ) -> UserSession | None:
+    """Find an active session that can be reused.
+
+    Uses a raw SQL query to bypass SQLAlchemy's ORM identity map: if a session
+    was recently marked as `forced_offline` in memory but not yet flushed to the
+    DB, the ORM identity map would return that stale object. Raw SQL always reads
+    from the database.
+    """
     terminal_info = normalize_terminal_info(terminal_info)
     now = _now_utc()
-    stmt = (
-        select(UserSession)
-        .where(
-            UserSession.user_id == user_id,
-            UserSession.status == "active",
-            UserSession.is_forced_offline.is_(False),
-            UserSession.expires_at > now,
-        )
-        .order_by(UserSession.last_active_at.desc(), UserSession.id.desc())
+
+    from sqlalchemy import text
+
+    sql = text("""
+        SELECT id, session_token_id, user_id, status, is_forced_offline,
+               login_time, last_active_at, expires_at, logout_time,
+               login_ip, terminal_info, login_type
+        FROM sys_user_session
+        WHERE user_id = :user_id
+          AND status = 'active'
+          AND is_forced_offline = false
+          AND expires_at > :now_utc
+          AND login_type = :login_type
+        ORDER BY last_active_at DESC, id DESC
+        LIMIT 1
+    """)
+
+    row = db.execute(
+        sql,
+        {"user_id": user_id, "now_utc": now, "login_type": login_type},
+    ).fetchone()
+    if row is None:
+        return None
+
+    # Reconstruct ORM object from raw row (avoids identity map)
+    session = UserSession(
+        id=row.id,
+        session_token_id=row.session_token_id,
+        user_id=row.user_id,
+        status=row.status,
+        is_forced_offline=row.is_forced_offline,
+        login_time=row.login_time,
+        last_active_at=row.last_active_at,
+        expires_at=row.expires_at,
+        logout_time=row.logout_time,
+        login_ip=row.login_ip,
+        terminal_info=row.terminal_info,
+        login_type=row.login_type,
     )
-    if ip_address is not None:
-        stmt = stmt.where(UserSession.login_ip == ip_address)
-    if terminal_info is not None:
-        stmt = stmt.where(UserSession.terminal_info == terminal_info)
-    return db.execute(stmt).scalars().first()
+    # Merge into session so subsequent attribute assignments are tracked.
+    session = db.merge(session)
+    return session
 
 
 def create_or_reuse_user_session(
@@ -460,13 +495,30 @@ def create_or_reuse_user_session(
     user: User,
     ip_address: str | None,
     terminal_info: str | None,
+    login_type: str = "web",
 ) -> UserSession:
     terminal_info = normalize_terminal_info(terminal_info)
+
+    # Fast path: check Redis for any active session marker.
+    # If Redis says "active" for ANY session of this user, do NOT reuse —
+    # an active Redis key means the session was recently forced-offlined
+    # and a new login must create a fresh session.
+    if is_session_active_in_redis_for_user(user.id):
+        # Redis found a session that was marked active — always create new.
+        return _create_user_session_no_cache(
+            db,
+            user=user,
+            ip_address=ip_address,
+            terminal_info=terminal_info,
+            login_type=login_type,
+        )
+
     row = get_reusable_active_session(
         db,
         user_id=user.id,
         ip_address=ip_address,
         terminal_info=terminal_info,
+        login_type=login_type,
     )
     if row is not None:
         now = _now_utc()
@@ -475,13 +527,75 @@ def create_or_reuse_user_session(
         row.expires_at = _session_expire_at()
         row.login_ip = ip_address
         row.terminal_info = terminal_info
+        row.login_type = login_type
         return row
-    return create_user_session(
+    return _create_user_session_no_cache(
         db,
         user=user,
         ip_address=ip_address,
         terminal_info=terminal_info,
+        login_type=login_type,
     )
+
+
+def _create_user_session_no_cache(
+    db: Session,
+    *,
+    user: User,
+    ip_address: str | None,
+    terminal_info: str | None,
+    login_type: str = "web",
+) -> UserSession:
+    """Create a new session without checking for reusable sessions."""
+    terminal_info = normalize_terminal_info(terminal_info)
+    session_token_id = uuid4().hex
+    row = UserSession(
+        session_token_id=session_token_id,
+        user_id=user.id,
+        status="active",
+        is_forced_offline=False,
+        login_type=login_type,
+        login_time=_now_utc(),
+        last_active_at=_now_utc(),
+        expires_at=_session_expire_at(),
+        logout_time=None,
+        login_ip=ip_address,
+        terminal_info=terminal_info,
+    )
+    db.add(row)
+    return row
+
+
+def is_session_active_in_redis_for_user(user_id: int) -> bool:
+    """Check if any active session marker exists in Redis for the given user.
+
+    Returns True if a session-active key for any session of this user is found,
+    indicating the user has recently logged in and should not reuse that session.
+    """
+    redis_client = _get_session_redis_client()
+    if redis_client is None:
+        return True  # Redis unavailable — be conservative, don't allow session reuse
+    try:
+        pattern = f"{_SESSION_REDIS_KEY_PREFIX}:*"
+        cursor = 0
+        while True:
+            cursor, keys = redis_client.scan(cursor=cursor, match=pattern, count=100)
+            for key in keys:
+                val = redis_client.get(key)
+                if val is not None:
+                    try:
+                        parts = val.split(":")
+                        if len(parts) >= 1:
+                            uid = int(parts[0])
+                            if uid == user_id:
+                                return True
+                    except (ValueError, IndexError):
+                        pass
+            if cursor == 0:
+                break
+        return False
+    except RedisError:
+        return False
 
 
 def get_session_by_token_id(db: Session, session_token_id: str) -> UserSession | None:
@@ -792,10 +906,12 @@ def force_offline_user_sessions_except(
     *,
     user_id: int,
     exclude_session_token_id: str | None = None,
+    login_type: str | None = None,
 ) -> int:
     """强制下线指定用户的所有活跃会话（可排除指定session）。
 
-    用于web登录时的单会话并发控制。
+    login_type: 如果指定，只下线该类型的会话。
+    用于web登录时只强制下线web会话，移动端登录时只强制下线移动端会话。
     """
     now = _now_utc()
     stmt = select(UserSession).where(
@@ -805,6 +921,8 @@ def force_offline_user_sessions_except(
     )
     if exclude_session_token_id:
         stmt = stmt.where(UserSession.session_token_id != exclude_session_token_id)
+    if login_type:
+        stmt = stmt.where(UserSession.login_type == login_type)
 
     rows = db.execute(stmt).scalars().all()
     for row in rows:

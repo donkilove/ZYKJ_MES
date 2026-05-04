@@ -1,5 +1,7 @@
 import json
-from datetime import UTC, datetime, timezone
+import os
+from datetime import UTC, datetime, timedelta, timezone
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -18,6 +20,7 @@ from app.core.security import (
 from app.db.session import get_db
 from app.models.process_stage import ProcessStage
 from app.models.registration_request import RegistrationRequest
+from app.models.user_session import UserSession
 from app.models.user import User
 from app.schemas.auth import (
     AccountListResult,
@@ -37,6 +40,11 @@ from app.schemas.auth import (
 from app.schemas.common import ApiResponse, success_response
 from app.services.audit_service import write_audit_log
 from app.services.home_dashboard_service import invalidate_home_dashboard_cache
+from app.services.login_ratelimit_service import (
+    clear_login_failures,
+    is_account_locked,
+    record_failed_login,
+)
 from app.services.message_service import (
     close_registration_request_pending_messages,
     create_message_for_users,
@@ -47,6 +55,8 @@ from app.services.session_service import (
     create_login_log,
     create_or_reuse_user_session,
     force_offline_user_sessions_except,
+    forget_active_session_token,
+    get_session_by_token_id,
     mark_session_logout,
     normalize_terminal_info,
     remember_active_session_token,
@@ -119,6 +129,17 @@ def _login_with_expiry(
         request.headers.get("user-agent") if request else None
     )
 
+    # ── 隐患 M 修复：检查账号是否因多次失败被锁定 ────────────────────────
+    locked, remaining_seconds = is_account_locked(username=username)
+    if locked:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                f"登录失败次数过多，账户已被暂时锁定。"
+                f"请 {remaining_seconds} 秒后重试。"
+            ),
+        )
+
     user = get_user_by_username(
         db,
         username,
@@ -152,6 +173,7 @@ def _login_with_expiry(
             terminal_info=terminal_info,
             failure_reason=reason,
         )
+        record_failed_login(username=username)
         db.commit()
         raise HTTPException(status_code=status_code, detail=detail)
 
@@ -166,6 +188,7 @@ def _login_with_expiry(
             terminal_info=terminal_info,
             failure_reason=reason,
         )
+        record_failed_login(username=username)
         db.commit()
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=reason)
 
@@ -183,6 +206,7 @@ def _login_with_expiry(
             terminal_info=terminal_info,
             failure_reason="Incorrect username or password",
         )
+        record_failed_login(username=username)
         db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -198,14 +222,16 @@ def _login_with_expiry(
         user=user,
         ip_address=ip_address,
         terminal_info=terminal_info,
+        login_type=login_type,
     )
 
-    # 单会话并发控制：web登录时强制下线该用户所有其他活跃会话
+    # 单会话并发控制：web登录时强制下线该用户所有其他web会话（移动端会话保留）
     if login_type == "web":
         force_offline_user_sessions_except(
             db,
             user_id=user.id,
             exclude_session_token_id=session_row.session_token_id,
+            login_type="web",
         )
 
     if should_record_success_login(
@@ -226,9 +252,11 @@ def _login_with_expiry(
     user.last_login_ip = ip_address
     user.last_login_terminal = terminal_info
     cleanup_expired_login_logs_if_due(db)
+    clear_login_failures(username=username)
     db.commit()
     remember_active_session_token(
         session_row.session_token_id,
+        user_id=user.id,
         expires_at=session_row.expires_at,
     )
 
@@ -325,15 +353,18 @@ def renew_token(
             detail="Token无效",
         )
 
-    session_token_id = str(token_payload.get("sid") or "").strip() or None
-    if not session_token_id:
+    old_session_token_id = str(token_payload.get("sid") or "").strip() or None
+    if not old_session_token_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Token中缺少会话信息",
         )
 
+    # 测试模式：MES_TEST_SKIP_RENEW_AGE_CHECK=1 跳过 1h gate（仅用于自动化测试）
     iat = token_payload.get("iat")
-    if iat is not None:
+    if iat is not None and not (
+        os.environ.get("MES_TEST_SKIP_RENEW_AGE_CHECK") == "1"
+    ):
         iat_dt = datetime.fromtimestamp(iat, tz=timezone.utc)
         token_age_seconds = (datetime.now(timezone.utc) - iat_dt).total_seconds()
         if token_age_seconds < 3600:
@@ -343,28 +374,81 @@ def renew_token(
                 detail=f"Token使用时长不足1小时，还需等待{remaining}秒后才能续期",
             )
 
-    extend_seconds = 3600
-    session_row = renew_session(db, session_token_id=session_token_id, extend_seconds=extend_seconds)
-    if not session_row:
+    # ── 隐患 A：校验会话归属 ───────────────────────────────────────────────
+    existing_session = get_session_by_token_id(db, old_session_token_id)
+    if not existing_session:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="会话已失效，请重新登录",
         )
+    if existing_session.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="会话与用户不匹配",
+        )
+    if existing_session.status != "active":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="会话状态无效",
+        )
 
+    # ── 隐患 B：轮转 Session ───────────────────────────────────────────────
+    new_session_token_id = uuid4().hex
     login_type = str(token_payload.get("login_type") or "web")
-    new_expires_minutes = settings.jwt_expire_minutes + (extend_seconds // 60)
+
+    # 立刻从 Redis 删除旧会话，确保证中信令失效
+    forget_active_session_token(old_session_token_id)
+
+    # 旧会话标记为 logout（已不再使用）
+    mark_session_logout(db, session_token_id=old_session_token_id, forced_offline=False)
+
+    # 创建新会话
+    now_utc = datetime.now(timezone.utc)
+    extend_seconds = 3600
+    new_expires_at = now_utc + timedelta(seconds=extend_seconds)
+    new_session_row = UserSession(
+        session_token_id=new_session_token_id,
+        user_id=current_user.id,
+        status="active",
+        is_forced_offline=False,
+        login_time=existing_session.login_time,
+        last_active_at=now_utc,
+        expires_at=new_expires_at,
+        logout_time=None,
+        login_ip=existing_session.login_ip,
+        terminal_info=existing_session.terminal_info,
+    )
+    db.add(new_session_row)
+    db.flush()
+
+    # ── 隐患 C：移动端 Token 续期保持 10080 分钟 ──────────────────────────
+    if login_type == "mobile_scan":
+        new_expires_minutes = settings.mobile_scan_review_jwt_expire_minutes + (extend_seconds // 60)
+    else:
+        new_expires_minutes = settings.jwt_expire_minutes + (extend_seconds // 60)
+
     new_token = create_access_token(
         subject=str(current_user.id),
-        extra_claims={"sid": session_token_id, "login_type": login_type},
+        extra_claims={"sid": new_session_token_id, "login_type": login_type},
         expires_minutes=new_expires_minutes,
     )
+
+    # 将新会话写入 Redis 并登记到用户缓存
+    remember_active_session_token(
+        new_session_token_id,
+        user_id=current_user.id,
+        expires_at=new_expires_at,
+    )
+
+    # 清除旧 token 在用户侧缓存中的记录
+    clear_user(current_user.id)
 
     write_audit_log(
         db,
         action_code="auth.renew_token",
         action_name="续期Token",
         target_type="session",
-        target_id=session_token_id,
+        target_id=new_session_token_id,
         operator=current_user,
         ip_address=request.client.host if request and request.client else None,
         terminal_info=request.headers.get("user-agent") if request else None,

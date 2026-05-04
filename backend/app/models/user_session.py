@@ -29,6 +29,12 @@ class UserSession(Base):
         default=False,
         server_default=text("false"),
     )
+    login_type: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="web",
+        server_default=text("'web'"),
+    )
     login_time: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
