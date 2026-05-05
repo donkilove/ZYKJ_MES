@@ -249,6 +249,78 @@ void main() {
         expect(items.single.expiresAt, DateTime.parse('2026-04-23T12:00:00Z'));
       },
     );
+
+    test('supports active announcement query and offline action', () async {
+      final server = await TestHttpServer.start({
+        'GET /messages/announcements/active': (request) {
+          expect(request.uri.queryParameters['page'], '1');
+          expect(request.uri.queryParameters['page_size'], '50');
+          expect(request.uri.queryParameters['priority'], 'important');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'items': [
+                  {
+                    'id': 21,
+                    'message_type': 'announcement',
+                    'priority': 'important',
+                    'title': '当前生效公告',
+                    'summary': '用于公告管理页',
+                    'content': '公告正文',
+                    'source_module': 'message',
+                    'source_type': 'announcement',
+                    'source_code': 'roles',
+                    'target_page_code': null,
+                    'target_tab_code': null,
+                    'target_route_payload_json': null,
+                    'status': 'active',
+                    'inactive_reason': null,
+                    'published_at': '2026-05-01T09:00:00Z',
+                    'expires_at': '2026-05-31T09:00:00Z',
+                    'is_read': false,
+                    'read_at': null,
+                    'delivered_at': null,
+                    'delivery_status': 'pending',
+                    'delivery_attempt_count': 0,
+                    'last_push_at': null,
+                    'next_retry_at': null,
+                  },
+                ],
+                'total': 1,
+                'page': 1,
+                'page_size': 50,
+              },
+            },
+          );
+        },
+        'POST /messages/announcements/21/offline': (_) => TestResponse.json(
+          200,
+          body: {
+            'data': {'message_id': 21, 'status': 'offline'},
+          },
+        ),
+      });
+      addTearDown(server.close);
+
+      final service = MessageService(
+        AppSession(baseUrl: server.baseUrl, accessToken: 'msg-token'),
+      );
+
+      final result = await service.getActiveAnnouncements(
+        page: 1,
+        pageSize: 50,
+        priority: 'important',
+      );
+      final offlineResult = await service.offlineAnnouncement(21);
+
+      expect(result.items, hasLength(1));
+      expect(result.items.single.title, '当前生效公告');
+      expect(result.total, 1);
+      expect(result.pageSize, 50);
+      expect(offlineResult.messageId, 21);
+      expect(offlineResult.status, 'offline');
+    });
   });
 
   group('MessageWsService', () {

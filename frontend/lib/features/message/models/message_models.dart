@@ -289,6 +289,23 @@ class AnnouncementPublishResult {
   }
 }
 
+class AnnouncementOfflineResult {
+  const AnnouncementOfflineResult({
+    required this.messageId,
+    required this.status,
+  });
+
+  final int messageId;
+  final String status;
+
+  factory AnnouncementOfflineResult.fromJson(Map<String, dynamic> json) {
+    return AnnouncementOfflineResult(
+      messageId: (json['message_id'] as int?) ?? 0,
+      status: json['status'] as String? ?? '',
+    );
+  }
+}
+
 class MessageMaintenanceResult {
   const MessageMaintenanceResult({
     required this.pendingCompensated,
