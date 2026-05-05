@@ -118,7 +118,6 @@ class ProductParameterListResult(BaseModel):
 class ProductParameterUpdateRequest(BaseModel):
     remark: str = Field(min_length=1, max_length=512)
     items: list[ProductParameterInputItem] = Field(default_factory=list)
-    confirmed: bool = False
 
 
 class ProductParameterUpdateResult(BaseModel):

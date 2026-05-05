@@ -1472,7 +1472,6 @@ def update_product_version_parameters(
     items: list[tuple[str, str, str, str, str]],
     remark: str,
     operator: User,
-    confirmed: bool = False,
 ) -> list[str]:
     revision, current_parameters = get_product_version_parameters(
         db,
@@ -1485,20 +1484,6 @@ def update_product_version_parameters(
     normalized_remark = remark.strip()
     if not normalized_remark:
         raise ValueError("Remark is required")
-
-    if (
-        product.lifecycle_status == PRODUCT_LIFECYCLE_ACTIVE
-        and product.effective_version == revision.version
-    ):
-        impact = analyze_product_impact(
-            db,
-            product=product,
-            operation="update_parameters",
-        )
-        if impact.requires_confirmation and not confirmed:
-            raise ValueError(
-                "Impact confirmation required before updating active product"
-            )
 
     normalized_items = _normalize_parameter_items(items)
     normalized_by_name = {str(item["name"]): item for item in normalized_items}
@@ -1574,7 +1559,6 @@ def update_product_parameters(
     items: list[tuple[str, str, str, str, str]],
     remark: str,
     operator: User,
-    confirmed: bool = False,
 ) -> list[str]:
     current_revision = get_current_revision(db, product=product)
     if current_revision is None:
@@ -1586,7 +1570,6 @@ def update_product_parameters(
         items=items,
         remark=remark,
         operator=operator,
-        confirmed=confirmed,
     )
     db.commit()
     return changed_keys

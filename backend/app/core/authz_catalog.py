@@ -328,6 +328,7 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
         "product_management",
     ),
     ("product.products.create", "创建产品", AUTHZ_MODULE_PRODUCT, "product_management"),
+    ("product.products.update", "编辑产品", AUTHZ_MODULE_PRODUCT, "product_management"),
     ("product.products.delete", "删除产品", AUTHZ_MODULE_PRODUCT, "product_management"),
     (
         "product.parameters.view",
@@ -372,10 +373,34 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
         "product_management",
     ),
     (
-        "product.versions.manage",
-        "管理产品版本（新建/复制/生效/停用/删除）",
+        "product.versions.create",
+        "新建产品版本",
         AUTHZ_MODULE_PRODUCT,
-        "product_management",
+        "product_version_management",
+    ),
+    (
+        "product.versions.copy",
+        "复制产品版本",
+        AUTHZ_MODULE_PRODUCT,
+        "product_version_management",
+    ),
+    (
+        "product.versions.disable",
+        "停用产品版本",
+        AUTHZ_MODULE_PRODUCT,
+        "product_version_management",
+    ),
+    (
+        "product.versions.delete",
+        "删除产品版本",
+        AUTHZ_MODULE_PRODUCT,
+        "product_version_management",
+    ),
+    (
+        "product.versions.note.update",
+        "更新产品版本备注",
+        AUTHZ_MODULE_PRODUCT,
+        "product_version_management",
     ),
     (
         "product.versions.activate",

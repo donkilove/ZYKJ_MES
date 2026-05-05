@@ -645,7 +645,7 @@ def update_product_api(
     product_id: int,
     payload: ProductUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("product.products.create")),
+    current_user: User = Depends(require_permission("product.products.update")),
 ) -> ApiResponse[ProductItem]:
     product = get_product_by_id(db, product_id)
     if not product:
@@ -890,7 +890,6 @@ def update_parameters(
             ],
             remark=payload.remark,
             operator=current_user,
-            confirmed=payload.confirmed,
         )
     except (ValueError, ValidationError) as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
@@ -949,7 +948,6 @@ def update_product_version_parameters_api(
             ],
             remark=payload.remark,
             operator=current_user,
-            confirmed=payload.confirmed,
         )
     except (ValueError, ValidationError) as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
@@ -1163,7 +1161,7 @@ def get_product_versions(
 def create_product_version_api(
     product_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("product.versions.manage")),
+    current_user: User = Depends(require_permission("product.versions.create")),
 ) -> ApiResponse[ProductVersionItem]:
     product = get_product_by_id(db, product_id)
     if not product:
@@ -1215,7 +1213,7 @@ def copy_product_version_api(
     version: int,
     payload: ProductVersionCopyRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("product.versions.manage")),
+    current_user: User = Depends(require_permission("product.versions.copy")),
 ) -> ApiResponse[ProductVersionItem]:
     product = get_product_by_id(db, product_id)
     if not product:
@@ -1344,7 +1342,7 @@ def disable_product_version_api(
     product_id: int,
     version: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("product.versions.manage")),
+    current_user: User = Depends(require_permission("product.versions.disable")),
 ) -> ApiResponse[ProductVersionItem]:
     product = get_product_by_id(db, product_id)
     if not product:
@@ -1392,7 +1390,7 @@ def delete_product_version_api(
     product_id: int,
     version: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("product.versions.manage")),
+    current_user: User = Depends(require_permission("product.versions.delete")),
 ) -> ApiResponse[dict[str, bool]]:
     product = get_product_by_id(db, product_id)
     if not product:
@@ -1428,7 +1426,7 @@ def update_product_version_note_api(
     version: int,
     body: ProductVersionNoteUpdateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("product.versions.manage")),
+    current_user: User = Depends(require_permission("product.versions.note.update")),
 ) -> ApiResponse[ProductVersionItem]:
     product = get_product_by_id(db, product_id)
     if not product:

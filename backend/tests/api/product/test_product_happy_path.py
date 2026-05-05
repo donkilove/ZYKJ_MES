@@ -346,6 +346,64 @@ def test_parameter_query_and_parameter_version_filters_cover_effective_contract(
     assert inactive_row is not None and inactive_row.lifecycle_status == "inactive"
 
 
+def test_current_parameters_compat_endpoint_and_parameter_export_keep_contract(
+    client: TestClient,
+    db_session: Session,
+    admin_headers: dict[str, str],
+) -> None:
+    product = create_product(client, admin_headers, suffix="compat")
+    product_id = int(product["id"])
+    current_version = int(product["current_version"])
+
+    current_parameters_response = client.get(
+        f"/api/v1/products/{product_id}/parameters",
+        headers=admin_headers,
+    )
+    assert current_parameters_response.status_code == 200, current_parameters_response.text
+    current_parameters = current_parameters_response.json()["data"]
+    assert current_parameters["parameter_scope"] == "version"
+    assert current_parameters["version"] == current_version
+    assert current_parameters["version_label"] == "V1.0"
+
+    updated = False
+    for item in current_parameters["items"]:
+        if item["name"] == "产品芯片":
+            item["value"] = "COMPAT-CHIP"
+            updated = True
+            break
+    assert updated is True
+
+    update_response = client.put(
+        f"/api/v1/products/{product_id}/parameters",
+        headers=admin_headers,
+        json={
+            "remark": "兼容口径更新当前版本参数",
+            "items": current_parameters["items"],
+        },
+    )
+    assert update_response.status_code == 200, update_response.text
+    update_payload = update_response.json()["data"]
+    assert update_payload["parameter_scope"] == "version"
+    assert update_payload["version"] == current_version
+    assert "产品芯片" in update_payload["changed_keys"]
+
+    current_rows = get_current_parameter_rows(db_session, product_id)
+    assert any(
+        row.param_key == "产品芯片" and row.param_value == "COMPAT-CHIP"
+        for row in current_rows
+    )
+
+    export_response = client.get(
+        "/api/v1/products/parameters/export",
+        headers=admin_headers,
+        params={"keyword": product["name"]},
+    )
+    assert export_response.status_code == 200, export_response.text
+    export_text = export_response.content.decode("utf-8-sig")
+    assert product["name"] in export_text
+    assert "COMPAT-CHIP" in export_text
+
+
 def test_product_detail_history_and_version_export_expose_real_change_trace(
     client: TestClient,
     db_session: Session,

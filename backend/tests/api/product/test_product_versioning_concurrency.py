@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from tests.api.product.product_test_helpers import (
     activate_version,
     auth_headers,
+    create_order_row,
     create_product,
     find_parameter_value,
     get_history_rows,
@@ -251,3 +252,156 @@ def test_version_activation_stale_write_is_rejected_and_db_state_remains_consist
     effective_payload = effective_parameters.json()["data"]
     assert effective_payload["version"] == 2
     assert find_parameter_value(effective_payload, "产品芯片") == "CONCURRENCY-V2"
+
+
+def test_version_management_endpoints_cover_note_compare_impact_disable_history_and_rollback(
+    client: TestClient,
+    db_session: Session,
+    admin_headers: dict[str, str],
+) -> None:
+    product = create_product(client, admin_headers, suffix="version-flow")
+    product_id = int(product["id"])
+    v1 = int(product["current_version"])
+
+    update_version_parameter_value(
+        client,
+        admin_headers,
+        product_id=product_id,
+        version=v1,
+        parameter_name="产品芯片",
+        parameter_value="CHAIN-V1",
+        remark="初始化版本 V1.0",
+    )
+    activate_response = activate_version(
+        client,
+        admin_headers,
+        product_id=product_id,
+        version=v1,
+        expected_effective_version=0,
+    )
+    assert activate_response.status_code == 200, activate_response.text
+
+    create_version_response = client.post(
+        f"/api/v1/products/{product_id}/versions",
+        headers=admin_headers,
+        json={},
+    )
+    assert create_version_response.status_code == 201, create_version_response.text
+    created_version = create_version_response.json()["data"]
+    v2 = int(created_version["version"])
+    assert created_version["version_label"] == "V1.1"
+    assert created_version["lifecycle_status"] == "draft"
+
+    update_note_response = client.patch(
+        f"/api/v1/products/{product_id}/versions/{v2}/note",
+        headers=admin_headers,
+        json={"note": "版本备注已更新"},
+    )
+    assert update_note_response.status_code == 200, update_note_response.text
+    assert update_note_response.json()["data"]["note"] == "版本备注已更新"
+
+    update_version_parameter_value(
+        client,
+        admin_headers,
+        product_id=product_id,
+        version=v2,
+        parameter_name="产品芯片",
+        parameter_value="CHAIN-V2",
+        remark="编辑版本 V1.1",
+    )
+
+    compare_response = client.get(
+        f"/api/v1/products/{product_id}/versions/compare",
+        headers=admin_headers,
+        params={"from_version": v1, "to_version": v2},
+    )
+    assert compare_response.status_code == 200, compare_response.text
+    compare_payload = compare_response.json()["data"]
+    assert compare_payload["from_version"] == v1
+    assert compare_payload["to_version"] == v2
+    assert compare_payload["changed_items"] >= 1
+    assert any(item["key"] == "参数:产品芯片" for item in compare_payload["items"])
+
+    pending_order = create_order_row(
+        db_session,
+        product_id=product_id,
+        product_version=v1,
+        status="pending",
+    )
+    impact_response = client.get(
+        f"/api/v1/products/{product_id}/impact-analysis",
+        headers=admin_headers,
+        params={"operation": "rollback", "target_version": v1},
+    )
+    assert impact_response.status_code == 200, impact_response.text
+    impact_payload = impact_response.json()["data"]
+    assert impact_payload["requires_confirmation"] is True
+    assert impact_payload["pending_orders"] == 1
+    assert impact_payload["items"][0]["order_code"] == pending_order.order_code
+
+    version_history_response = client.get(
+        f"/api/v1/products/{product_id}/versions/{v2}/parameter-history",
+        headers=admin_headers,
+        params={"page": 1, "page_size": 20},
+    )
+    assert version_history_response.status_code == 200, version_history_response.text
+    version_history_payload = version_history_response.json()["data"]
+    assert version_history_payload["version"] == v2
+    assert version_history_payload["version_label"] == "V1.1"
+    assert version_history_payload["total"] >= 2
+
+    rollback_without_confirmation = client.post(
+        f"/api/v1/products/{product_id}/rollback",
+        headers=admin_headers,
+        json={
+            "target_version": v1,
+            "confirmed": False,
+            "note": "未确认回滚",
+        },
+    )
+    assert rollback_without_confirmation.status_code == 400, rollback_without_confirmation.text
+    assert "Impact confirmation required before rollback" in rollback_without_confirmation.json()["detail"]
+
+    rollback_response = client.post(
+        f"/api/v1/products/{product_id}/rollback",
+        headers=admin_headers,
+        json={
+            "target_version": v1,
+            "confirmed": True,
+            "note": "回滚到 V1.0",
+        },
+    )
+    assert rollback_response.status_code == 200, rollback_response.text
+    rollback_payload = rollback_response.json()["data"]
+    assert rollback_payload["product"]["current_version"] == 3
+    assert rollback_payload["product"]["effective_version"] == 3
+    assert "产品芯片" in rollback_payload["changed_keys"]
+
+    versions_response = client.get(
+        f"/api/v1/products/{product_id}/versions",
+        headers=admin_headers,
+    )
+    assert versions_response.status_code == 200, versions_response.text
+    versions_payload = versions_response.json()["data"]
+    assert versions_payload["total"] == 3
+    assert versions_payload["items"][0]["action"] == "rollback"
+    assert versions_payload["items"][0]["note"] == "回滚到 V1.0"
+    assert versions_payload["items"][1]["version"] == v2
+
+    disable_response = client.post(
+        f"/api/v1/products/{product_id}/versions/{v1}/disable",
+        headers=admin_headers,
+        json={},
+    )
+    assert disable_response.status_code == 200, disable_response.text
+    assert disable_response.json()["data"]["lifecycle_status"] == "disabled"
+
+    revision_rows = get_revision_rows(db_session, product_id)
+    revision_map = {row.version: row for row in revision_rows}
+    assert revision_map[1].lifecycle_status == "disabled"
+    assert revision_map[3].lifecycle_status == "effective"
+
+    product_row = get_product_row(db_session, product_id)
+    assert product_row is not None
+    assert product_row.current_version == 3
+    assert product_row.effective_version == 3

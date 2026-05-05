@@ -169,7 +169,6 @@ def update_version_parameter_value(
         headers=headers,
         json={
             "remark": remark,
-            "confirmed": False,
             "items": payload["items"],
         },
     )

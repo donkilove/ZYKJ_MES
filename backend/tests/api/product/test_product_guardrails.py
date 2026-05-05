@@ -8,6 +8,8 @@ from tests.api.product.product_test_helpers import (
     activate_version,
     create_order_row,
     create_product,
+    get_current_parameter_rows,
+    get_history_rows,
     get_product_row,
     get_revision_rows,
 )
@@ -195,3 +197,55 @@ def test_lifecycle_transition_requires_reason_and_keeps_db_state_consistent(
     assert still_inactive_row is not None
     assert still_inactive_row.lifecycle_status == "inactive"
     assert still_inactive_row.effective_version == 0
+
+
+
+
+def test_update_current_parameters_rejects_effective_version_write_and_keeps_db_clean(
+    client: TestClient,
+    db_session: Session,
+    admin_headers: dict[str, str],
+) -> None:
+    product = create_product(client, admin_headers, suffix="update-guard")
+    product_id = int(product["id"])
+    version = int(product["current_version"])
+
+    activate_response = activate_version(
+        client,
+        admin_headers,
+        product_id=product_id,
+        version=version,
+        expected_effective_version=0,
+    )
+    assert activate_response.status_code == 200, activate_response.text
+
+    current_parameters_response = client.get(
+        f"/api/v1/products/{product_id}/parameters",
+        headers=admin_headers,
+    )
+    assert current_parameters_response.status_code == 200, current_parameters_response.text
+    payload = current_parameters_response.json()["data"]
+    for item in payload["items"]:
+        if item["name"] == "产品芯片":
+            item["value"] = "BLOCKED-UPDATE"
+            break
+
+    blocked_update = client.put(
+        f"/api/v1/products/{product_id}/parameters",
+        headers=admin_headers,
+        json={
+            "remark": "effective 版本参数写入应被拒绝",
+            "items": payload["items"],
+        },
+    )
+    assert blocked_update.status_code == 400, blocked_update.text
+    assert "只有草稿版本可以维护参数" in blocked_update.json()["detail"]
+
+    current_rows = get_current_parameter_rows(db_session, product_id)
+    assert all(
+        not (row.param_key == "产品芯片" and row.param_value == "BLOCKED-UPDATE")
+        for row in current_rows
+    )
+
+    history_rows = get_history_rows(db_session, product_id)
+    assert all(row.remark != "effective 版本参数写入应被拒绝" for row in history_rows)
