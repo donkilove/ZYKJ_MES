@@ -1218,6 +1218,22 @@ void main() {
   );
 
   testWidgets(
+    'message center 无公告发布权限时继续隐藏执行维护入口',
+    (tester) async {
+      final service = _FakeMessageService();
+
+      await _pumpMessageCenterPage(
+        tester,
+        service: service,
+        canPublishAnnouncement: false,
+      );
+
+      expect(find.text('发布公告'), findsNothing);
+      expect(find.text('执行维护'), findsNothing);
+    },
+  );
+
+  testWidgets(
     'message center supports filters, preview, read actions and jumps',
     (tester) async {
       final service = _FakeMessageService();

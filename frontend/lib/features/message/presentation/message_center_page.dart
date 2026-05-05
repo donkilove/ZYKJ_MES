@@ -457,6 +457,7 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
                           nowText: _formatDateTime(effectiveNow),
                           errorText: _error,
                           loading: _loading,
+                          canPublishAnnouncement: widget.canPublishAnnouncement,
                           onRefresh: () => _load(),
                           onMaintenance: () => _runMaintenance(),
                           onMarkAllRead: () => _markAllRead(),
