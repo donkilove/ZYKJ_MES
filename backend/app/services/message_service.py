@@ -603,6 +603,34 @@ def _to_public_announcement_item(msg: Message) -> MessageItem:
     )
 
 
+def _to_announcement_management_item(msg: Message) -> MessageItem:
+    return MessageItem(
+        id=msg.id,
+        message_type=msg.message_type,
+        priority=msg.priority,
+        title=msg.title,
+        summary=msg.summary,
+        content=msg.content,
+        source_module=msg.source_module,
+        source_type=msg.source_type,
+        source_code=msg.source_code,
+        target_page_code=msg.target_page_code,
+        target_tab_code=msg.target_tab_code,
+        target_route_payload_json=msg.target_route_payload_json,
+        status=msg.status,
+        inactive_reason=None,
+        published_at=msg.published_at,
+        expires_at=msg.expires_at,
+        is_read=None,
+        read_at=None,
+        delivered_at=None,
+        delivery_status=None,
+        delivery_attempt_count=None,
+        last_push_at=None,
+        next_retry_at=None,
+    )
+
+
 def _to_detail(
     msg: Message,
     recipient: MessageRecipient,
@@ -667,6 +695,7 @@ def _write_message_state_audit_log(
     previous_status: str,
     current_status: str,
     reason: str,
+    operator: User | None = None,
 ) -> None:
     write_audit_log(
         db,
@@ -675,6 +704,7 @@ def _write_message_state_audit_log(
         target_type="message",
         target_id=str(getattr(message, "id", "")),
         target_name=getattr(message, "title", None),
+        operator=operator,
         before_data={
             "status": previous_status,
             "source_module": getattr(message, "source_module", None),
@@ -862,7 +892,7 @@ def list_active_announcements(
         .limit(page_size)
     )
     rows = db.execute(data_stmt).scalars().all()
-    items = [_to_public_announcement_item(row) for row in rows]
+    items = [_to_announcement_management_item(row) for row in rows]
     return items, total
 
 
@@ -1676,11 +1706,12 @@ def offline_announcement(
     _write_message_state_audit_log(
         db,
         message=announcement,
-        action_code="message.announcement_offline",
+        action_code="message.announcements.offline",
         action_name="公告下线",
         previous_status=previous_status,
         current_status=announcement.status,
         reason=(reason or "").strip() or f"announcement_offline_by_{operator.id}",
+        operator=operator,
     )
     db.flush()
     return AnnouncementOfflineResult(

@@ -375,7 +375,7 @@ class MessageServiceUnitTest(unittest.TestCase):
             source_module="message",
             source_id="3",
         )
-        operator = SimpleNamespace(id=5)
+        operator = SimpleNamespace(id=5, username="reviewer")
         db = MagicMock()
         db.execute.return_value = _FakeScalarResult(one=announcement)
 
@@ -392,6 +392,11 @@ class MessageServiceUnitTest(unittest.TestCase):
         self.assertEqual(result.status, "offline")
         db.flush.assert_called_once()
         write_audit_log.assert_called_once()
+        audit_kwargs = write_audit_log.call_args.kwargs
+        self.assertEqual(
+            audit_kwargs["action_code"], "message.announcements.offline"
+        )
+        self.assertIs(audit_kwargs["operator"], operator)
 
     def test_get_message_jump_target_returns_missing_target_for_blank_page(self):
         msg = SimpleNamespace(
@@ -693,6 +698,9 @@ class MessageServiceUnitTest(unittest.TestCase):
         self.assertEqual(items[0].id, 61)
         self.assertEqual(items[0].status, "active")
         self.assertEqual(items[0].source_code, "all")
+        self.assertIsNone(items[0].is_read)
+        self.assertIsNone(items[0].delivery_status)
+        self.assertIsNone(items[0].delivery_attempt_count)
 
         count_stmt = db.execute.call_args_list[0].args[0]
         data_stmt = db.execute.call_args_list[1].args[0]

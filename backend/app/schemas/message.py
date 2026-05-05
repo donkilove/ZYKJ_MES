@@ -24,12 +24,12 @@ class MessageItem(BaseModel):
     inactive_reason: str | None = None
     published_at: datetime | None
     expires_at: datetime | None = None
-    # 收件记录字段
-    is_read: bool
+    # 收件记录字段；公告管理列表等不关联具体收件人时允许为空
+    is_read: bool | None
     read_at: datetime | None
     delivered_at: datetime | None
-    delivery_status: str
-    delivery_attempt_count: int
+    delivery_status: str | None
+    delivery_attempt_count: int | None
     last_push_at: datetime | None
     next_retry_at: datetime | None
 
