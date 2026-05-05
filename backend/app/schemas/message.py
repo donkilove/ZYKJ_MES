@@ -127,6 +127,11 @@ class AnnouncementPublishResult(BaseModel):
     recipient_count: int
 
 
+class AnnouncementOfflineResult(BaseModel):
+    message_id: int
+    status: str
+
+
 class MessageMaintenanceResult(BaseModel):
     pending_compensated: int
     failed_retried: int

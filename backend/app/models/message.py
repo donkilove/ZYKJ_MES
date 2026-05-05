@@ -37,7 +37,7 @@ class Message(Base, TimestampMixin):
     target_route_payload_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 去重键，防止同一事件重复创建消息；非空时全局唯一
     dedupe_key: Mapped[str | None] = mapped_column(String(256), nullable=True)
-    # 消息状态：active=有效 / source_unavailable=来源失效 / archived=已归档
+    # 消息状态：active=有效 / offline=公告下线 / source_unavailable=来源失效 / archived=已归档
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active", index=True)
     published_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True

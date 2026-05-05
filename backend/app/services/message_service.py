@@ -29,6 +29,7 @@ from app.models.role import Role
 from app.models.user import User
 from app.models.user_session import UserSession
 from app.schemas.message import (
+    AnnouncementOfflineResult,
     AnnouncementPublishRequest,
     AnnouncementPublishResult,
     MessageCreateRequest,
@@ -514,6 +515,8 @@ def _resolve_message_status(
 ) -> tuple[str, str | None]:
     if msg.status == "archived":
         return "archived", "archived"
+    if msg.status == "offline":
+        return "offline", "offline"
     if msg.status in {
         _MESSAGE_STATUS_SOURCE_UNAVAILABLE,
         _PUBLIC_MESSAGE_STATUS_SOURCE_UNAVAILABLE,
@@ -805,6 +808,46 @@ def list_public_announcements(
     if priority:
         base_stmt = base_stmt.where(Message.priority == priority)
 
+    count_stmt = select(func.count()).select_from(base_stmt.subquery())
+    total: int = db.execute(count_stmt).scalar_one()
+
+    priority_order = case(
+        (Message.priority == "urgent", 0),
+        (Message.priority == "important", 1),
+        else_=2,
+    )
+    data_stmt = (
+        base_stmt.order_by(priority_order, Message.published_at.desc(), Message.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    rows = db.execute(data_stmt).scalars().all()
+    items = [_to_public_announcement_item(row) for row in rows]
+    return items, total
+
+
+def list_active_announcements(
+    db: Session,
+    *,
+    page: int,
+    page_size: int,
+    public_only: bool = False,
+    priority: str | None = None,
+) -> tuple[list[MessageItem], int]:
+    now = datetime.now(UTC)
+    filters = [
+        Message.message_type == "announcement",
+        Message.source_type == "announcement",
+        Message.status == "active",
+        or_(Message.expires_at.is_(None), Message.expires_at > now),
+    ]
+    if public_only:
+        filters.append(Message.source_code == "all")
+    normalized_priority = (priority or "").strip().lower()
+    if normalized_priority:
+        filters.append(Message.priority == normalized_priority)
+
+    base_stmt = select(Message).where(*filters)
     count_stmt = select(func.count()).select_from(base_stmt.subquery())
     total: int = db.execute(count_stmt).scalar_one()
 
@@ -1606,4 +1649,41 @@ def publish_announcement(
     return AnnouncementPublishResult(
         message_id=message.id,
         recipient_count=len(recipient_user_ids),
+    )
+
+
+def offline_announcement(
+    db: Session,
+    *,
+    announcement_id: int,
+    operator: User,
+    reason: str | None = None,
+) -> AnnouncementOfflineResult:
+    announcement = db.execute(
+        select(Message).where(
+            Message.id == announcement_id,
+            Message.message_type == "announcement",
+            Message.source_type == "announcement",
+        )
+    ).scalar_one_or_none()
+    if announcement is None:
+        raise ValueError("公告不存在")
+    if announcement.status != "active":
+        raise ValueError("仅生效中的公告允许下线")
+
+    previous_status = announcement.status
+    announcement.status = "offline"
+    _write_message_state_audit_log(
+        db,
+        message=announcement,
+        action_code="message.announcement_offline",
+        action_name="公告下线",
+        previous_status=previous_status,
+        current_status=announcement.status,
+        reason=(reason or "").strip() or f"announcement_offline_by_{operator.id}",
+    )
+    db.flush()
+    return AnnouncementOfflineResult(
+        message_id=announcement.id,
+        status=announcement.status,
     )
