@@ -822,7 +822,7 @@ class MessageModuleIntegrationTest(unittest.TestCase):
             json={
                 "title": "生效公告",
                 "content": f"{self.case_token} 需要出现在生效列表",
-                "priority": "important",
+                "priority": "urgent",
                 "range_type": "all",
                 "role_codes": [],
                 "user_ids": [],
@@ -833,21 +833,21 @@ class MessageModuleIntegrationTest(unittest.TestCase):
         active_message_id = active_response.json()["data"]["message_id"]
         self.message_ids.append(active_message_id)
 
-        self._create_message(
+        archived_message_id = self._create_message(
             message_type="announcement",
             priority="urgent",
             title="已归档公告",
             status="archived",
         )
-        self._create_message(
+        expired_message_id = self._create_message(
             message_type="announcement",
-            priority="normal",
+            priority="urgent",
             title="已过期公告",
             expires_at=datetime.now(UTC) - timedelta(minutes=5),
         )
 
         list_response = self.client.get(
-            f"/api/v1/messages/announcements/active?keyword={self.case_token}",
+            "/api/v1/messages/announcements/active?page=1&page_size=100",
             headers=self._headers(),
         )
         self.assertEqual(list_response.status_code, 200, list_response.text)
@@ -856,8 +856,8 @@ class MessageModuleIntegrationTest(unittest.TestCase):
         self.assertIn(active_message_id, item_by_id)
         self.assertEqual(item_by_id[active_message_id]["status"], "active")
         self.assertEqual(item_by_id[active_message_id]["title"], "生效公告")
-        self.assertNotIn("已归档公告", [item["title"] for item in payload["items"]])
-        self.assertNotIn("已过期公告", [item["title"] for item in payload["items"]])
+        self.assertNotIn(archived_message_id, item_by_id)
+        self.assertNotIn(expired_message_id, item_by_id)
 
         offline_response = self.client.post(
             f"/api/v1/messages/announcements/{active_message_id}/offline",
@@ -870,14 +870,16 @@ class MessageModuleIntegrationTest(unittest.TestCase):
         )
 
         list_after_offline = self.client.get(
-            f"/api/v1/messages/announcements/active?keyword={self.case_token}",
+            "/api/v1/messages/announcements/active?page=1&page_size=100",
             headers=self._headers(),
         )
         self.assertEqual(
             list_after_offline.status_code, 200, list_after_offline.text
         )
-        after_items = list_after_offline.json()["data"]["items"]
-        self.assertNotIn(active_message_id, [item["id"] for item in after_items])
+        after_item_by_id = {
+            item["id"]: item for item in list_after_offline.json()["data"]["items"]
+        }
+        self.assertNotIn(active_message_id, after_item_by_id)
 
     def test_message_module_exposes_announcement_management_catalog_and_capability(
         self,
