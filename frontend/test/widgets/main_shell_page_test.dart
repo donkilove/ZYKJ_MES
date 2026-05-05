@@ -6,7 +6,7 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/models/authz_models.dart';
 import 'package:mes_client/core/models/current_user.dart';
 import 'package:mes_client/features/message/models/message_models.dart';
-import 'package:mes_client/features/message/presentation/message_center_page.dart';
+import 'package:mes_client/features/message/presentation/message_page.dart';
 import 'package:mes_client/core/services/effective_clock.dart';
 import 'package:mes_client/core/models/page_catalog_models.dart';
 import 'package:mes_client/features/plugin_host/models/plugin_catalog_item.dart';
@@ -125,6 +125,14 @@ List<PageCatalogItem> _buildCatalog() {
       parentCode: 'message',
       alwaysVisible: false,
       sortOrder: 81,
+    ),
+    PageCatalogItem(
+      code: 'announcement_management',
+      name: '公告管理',
+      pageType: 'tab',
+      parentCode: 'message',
+      alwaysVisible: false,
+      sortOrder: 82,
     ),
   ];
 }
@@ -621,7 +629,8 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
     }
 
     await pumpUserPage(selectedPageCode: 'user');
@@ -686,7 +695,8 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
     }
 
     await pumpProductionPage(selectedPageCode: 'production');
@@ -765,24 +775,15 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
     }
 
     await pumpMessagePage(selectedPageCode: 'message');
-    expect(
-      tester
-          .widget<MessageCenterPage>(find.byType(MessageCenterPage))
-          .pollingEnabled,
-      isTrue,
-    );
+    expect(find.byType(MessagePage), findsOneWidget);
 
     await pumpMessagePage(selectedPageCode: 'user');
-    expect(
-      tester
-          .widget<MessageCenterPage>(find.byType(MessageCenterPage))
-          .pollingEnabled,
-      isFalse,
-    );
+    expect(find.byType(MessagePage), findsOneWidget);
   });
 
   testWidgets('点击软件设置入口后显示软件设置页面说明', (tester) async {
@@ -1715,6 +1716,47 @@ void main() {
     expect(find.text('7'), findsOneWidget);
   });
 
+  testWidgets('主壳中的消息模块可见公告管理页签并支持切换', (tester) async {
+    await _pumpMainShellPage(
+      tester,
+      authService: _TestShellAuthService(),
+      authzService: _TestShellAuthzService(
+        snapshot: _buildSnapshot(
+          visibleSidebarCodes: const ['message'],
+          tabCodesByParent: const {
+            'message': ['message_center', 'announcement_management'],
+          },
+          moduleItems: [
+            _buildModuleItem(
+              'message',
+              capabilityCodes: const [
+                'feature.message.detail.view',
+                'feature.message.announcement.publish',
+              ],
+            ),
+          ],
+        ),
+      ),
+      pageCatalogService: _TestShellPageCatalogService(),
+      messageService: _TestShellMessageService(),
+      onLogout: ({String? reason}) {},
+    );
+
+    await tester.tap(find.byKey(const ValueKey('main-shell-menu-message')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.text('公告管理'), findsWidgets);
+    expect(find.text('统一查看系统消息、待办与跳转入口。'), findsOneWidget);
+
+    await tester.tap(find.text('公告管理').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.text('管理当前生效公告并执行下线。'), findsOneWidget);
+    expect(find.text('发布公告'), findsOneWidget);
+  });
+
   testWidgets('从消息中心跳转时会落到父模块并带上目标页签和载荷', (tester) async {
     final message = _buildMessageItem();
 
@@ -1784,12 +1826,14 @@ void main() {
     );
 
     await tester.tap(find.byKey(const ValueKey('main-shell-menu-message')));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.text('请处理账号设置'), findsWidgets);
 
     await tester.tap(find.byKey(const ValueKey('message-center-jump-301')));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
 
     expect(
       find.text(
@@ -1849,7 +1893,8 @@ void main() {
     );
 
     await tester.tap(find.byKey(const ValueKey('main-shell-menu-message')));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
 
     expect(
       find.byKey(const ValueKey('main-shell-content-message')),
@@ -1857,7 +1902,8 @@ void main() {
     );
 
     await tester.tap(find.byKey(const ValueKey('message-center-jump-301')));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.text('您没有访问该页面的权限'), findsOneWidget);
     expect(

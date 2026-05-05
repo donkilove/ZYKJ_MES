@@ -12,7 +12,6 @@ import 'package:mes_client/features/message/presentation/widgets/message_center_
 import 'package:mes_client/features/message/presentation/widgets/message_center_list_section.dart';
 import 'package:mes_client/features/message/presentation/widgets/message_center_message_card.dart';
 import 'package:mes_client/features/message/presentation/widgets/message_center_preview_panel.dart';
-import 'package:mes_client/features/message/presentation/widgets/message_center_action_dialogs.dart';
 import 'package:mes_client/features/message/services/message_service.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 
@@ -333,17 +332,6 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
     }
   }
 
-  Future<void> _publishAnnouncement() async {
-    final published = await showMessageCenterPublishDialog(
-      context: context,
-      userService: _userService,
-      service: _service,
-    );
-    if (published && mounted) {
-      await _load(reset: false);
-    }
-  }
-
   Future<void> _runMaintenance() async {
     try {
       final result = await _service.runMaintenance();
@@ -469,10 +457,8 @@ class _MessageCenterPageState extends State<MessageCenterPage> {
                           nowText: _formatDateTime(effectiveNow),
                           errorText: _error,
                           loading: _loading,
-                          canPublishAnnouncement: widget.canPublishAnnouncement,
                           onRefresh: () => _load(),
                           onMaintenance: () => _runMaintenance(),
-                          onPublishAnnouncement: () => _publishAnnouncement(),
                           onMarkAllRead: () => _markAllRead(),
                           onMarkBatchRead: () => _markBatchRead(),
                           batchReadCount: _selectedIds.length,

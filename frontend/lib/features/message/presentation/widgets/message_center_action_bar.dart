@@ -5,20 +5,16 @@ class MessageCenterActionBar extends StatelessWidget {
   const MessageCenterActionBar({
     super.key,
     required this.loading,
-    required this.canPublishAnnouncement,
     required this.onRefresh,
     required this.onMaintenance,
-    required this.onPublishAnnouncement,
     required this.onMarkAllRead,
     required this.onMarkBatchRead,
     required this.batchReadCount,
   });
 
   final bool loading;
-  final bool canPublishAnnouncement;
   final VoidCallback onRefresh;
   final VoidCallback onMaintenance;
-  final VoidCallback onPublishAnnouncement;
   final VoidCallback onMarkAllRead;
   final VoidCallback onMarkBatchRead;
   final int batchReadCount;
@@ -41,22 +37,13 @@ class MessageCenterActionBar extends StatelessWidget {
             label: '刷新',
             isPrimary: false,
           ),
-          if (canPublishAnnouncement) ...[
-            _buildGlassButton(
-              theme: theme,
-              onPressed: loading ? null : onMaintenance,
-              icon: Icons.build_circle_outlined,
-              label: '执行维护',
-              isPrimary: false,
-            ),
-            _buildGlassButton(
-              theme: theme,
-              onPressed: loading ? null : onPublishAnnouncement,
-              icon: Icons.campaign_rounded,
-              label: '发布公告',
-              isPrimary: true,
-            ),
-          ],
+          _buildGlassButton(
+            theme: theme,
+            onPressed: loading ? null : onMaintenance,
+            icon: Icons.build_circle_outlined,
+            label: '执行维护',
+            isPrimary: false,
+          ),
           _buildGlassButton(
             theme: theme,
             onPressed: loading ? null : onMarkAllRead,
