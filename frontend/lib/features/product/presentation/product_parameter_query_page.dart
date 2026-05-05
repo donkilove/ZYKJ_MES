@@ -68,7 +68,7 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
   void didUpdateWidget(covariant ProductParameterQueryPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.isCurrentTabVisible && !oldWidget.isCurrentTabVisible) {
-      unawaited(_loadProducts());
+      _retryVisibleEmptyProductsOnTabVisible();
     }
     final command = widget.jumpCommand;
     if (command == null) {
@@ -120,8 +120,24 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
     return null;
   }
 
-  Future<void> _loadProducts() async {
+  void _reloadProductsFromUserAction() {
     _scheduledVisibleEmptyRetry = false;
+    unawaited(_loadProducts());
+  }
+
+  void _retryVisibleEmptyProductsOnTabVisible() {
+    if (!widget.isCurrentTabVisible ||
+        _loading ||
+        _products.isNotEmpty ||
+        _message.trim().isNotEmpty ||
+        _scheduledVisibleEmptyRetry) {
+      return;
+    }
+    _scheduledVisibleEmptyRetry = true;
+    unawaited(_loadProducts());
+  }
+
+  Future<void> _loadProducts() async {
     setState(() {
       _loading = true;
       _message = '';
@@ -312,28 +328,10 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
   }
 
   Widget _buildListView() {
-    if (widget.isCurrentTabVisible &&
-        !_loading &&
-        _products.isEmpty &&
-        _message.trim().isEmpty &&
-        !_scheduledVisibleEmptyRetry) {
-      _scheduledVisibleEmptyRetry = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted ||
-            !widget.isCurrentTabVisible ||
-            _loading ||
-            _products.isNotEmpty ||
-            _message.trim().isNotEmpty) {
-          return;
-        }
-        unawaited(_loadProducts());
-      });
-    }
-
     return MesCrudPageScaffold(
       header: ProductParameterQueryPageHeader(
         loading: _loading,
-        onRefresh: _loadProducts,
+        onRefresh: _reloadProductsFromUserAction,
       ),
       filters: ProductParameterQueryFilterSection(
         keywordController: _keywordController,
@@ -345,9 +343,9 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
           setState(() {
             _selectedCategoryFilter = value;
           });
-          _loadProducts();
+          _reloadProductsFromUserAction();
         },
-        onSearch: _loadProducts,
+        onSearch: _reloadProductsFromUserAction,
         onExport: _exportParameters,
       ),
       banner: _message.isEmpty
