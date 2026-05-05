@@ -8,8 +8,10 @@ import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 
 class _FakeAnnouncementMessageService extends MessageService {
-  _FakeAnnouncementMessageService()
-    : super(AppSession(baseUrl: '', accessToken: ''));
+  _FakeAnnouncementMessageService({
+    List<MessageItem>? items,
+  }) : _items = items ?? <MessageItem>[_buildAnnouncementItem(201, '停机维护公告')],
+       super(AppSession(baseUrl: '', accessToken: ''));
 
   int activeAnnouncementLoadCount = 0;
   int offlineCount = 0;
@@ -18,33 +20,7 @@ class _FakeAnnouncementMessageService extends MessageService {
   int lastRequestedPage = 0;
   int lastRequestedPageSize = 0;
 
-  List<MessageItem> _items = <MessageItem>[
-    MessageItem.fromJson({
-      'id': 201,
-      'message_type': 'announcement',
-      'priority': 'important',
-      'title': '停机维护公告',
-      'summary': '今晚维护',
-      'content': '今晚 20:00 至 21:00 维护。',
-      'source_module': 'message',
-      'source_type': 'announcement',
-      'source_code': 'all',
-      'target_page_code': null,
-      'target_tab_code': null,
-      'target_route_payload_json': null,
-      'status': 'active',
-      'inactive_reason': null,
-      'published_at': '2026-05-01T08:00:00Z',
-      'expires_at': '2026-05-02T08:00:00Z',
-      'is_read': false,
-      'read_at': null,
-      'delivered_at': null,
-      'delivery_status': 'pending',
-      'delivery_attempt_count': 0,
-      'last_push_at': null,
-      'next_retry_at': null,
-    }),
-  ];
+  List<MessageItem> _items;
 
   @override
   Future<MessageListResult> getActiveAnnouncements({
@@ -55,8 +31,12 @@ class _FakeAnnouncementMessageService extends MessageService {
     activeAnnouncementLoadCount += 1;
     lastRequestedPage = page;
     lastRequestedPageSize = pageSize;
+    final start = (page - 1) * pageSize;
+    final pagedItems = start >= _items.length
+        ? const <MessageItem>[]
+        : _items.skip(start).take(pageSize).toList();
     return MessageListResult(
-      items: List<MessageItem>.from(_items),
+      items: pagedItems,
       total: _items.length,
       page: page,
       pageSize: pageSize,
@@ -78,6 +58,34 @@ class _FakeAnnouncementMessageService extends MessageService {
     publishCount += 1;
     return const AnnouncementPublishResult(messageId: 999, recipientCount: 2);
   }
+}
+
+MessageItem _buildAnnouncementItem(int id, String title) {
+  return MessageItem.fromJson({
+    'id': id,
+    'message_type': 'announcement',
+    'priority': 'important',
+    'title': title,
+    'summary': '今晚维护',
+    'content': '今晚 20:00 至 21:00 维护。',
+    'source_module': 'message',
+    'source_type': 'announcement',
+    'source_code': 'all',
+    'target_page_code': null,
+    'target_tab_code': null,
+    'target_route_payload_json': null,
+    'status': 'active',
+    'inactive_reason': null,
+    'published_at': '2026-05-01T08:00:00Z',
+    'expires_at': '2026-05-02T08:00:00Z',
+    'is_read': false,
+    'read_at': null,
+    'delivered_at': null,
+    'delivery_status': 'pending',
+    'delivery_attempt_count': 0,
+    'last_push_at': null,
+    'next_retry_at': null,
+  });
 }
 
 class _FakeAnnouncementUserService extends UserService {
@@ -190,6 +198,41 @@ void main() {
     expect(service.lastOfflineMessageId, 201);
     expect(service.activeAnnouncementLoadCount, 2);
     expect(find.text('停机维护公告'), findsNothing);
+  });
+
+  testWidgets('最后一页最后一条公告下线后回退到有效页', (tester) async {
+    final service = _FakeAnnouncementMessageService(
+      items: List<MessageItem>.generate(
+        21,
+        (index) => _buildAnnouncementItem(
+          300 + index,
+          index == 20 ? '最后一页公告' : '公告 ${index + 1}',
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(_buildTestApp(messageService: service));
+    await tester.pumpAndSettle();
+
+    expect(find.text('第 1 / 2 页'), findsOneWidget);
+    await tester.tap(find.text('下一页'));
+    await tester.pumpAndSettle();
+
+    expect(service.lastRequestedPage, 2);
+    expect(find.text('第 2 / 2 页'), findsOneWidget);
+    expect(find.text('最后一页公告'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('announcement-offline-320')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认下线'));
+    await tester.pumpAndSettle();
+
+    expect(service.offlineCount, 1);
+    expect(service.lastOfflineMessageId, 320);
+    expect(service.lastRequestedPage, 1);
+    expect(find.text('第 1 / 1 页'), findsOneWidget);
+    expect(find.text('最后一页公告'), findsNothing);
+    expect(find.text('公告 1'), findsOneWidget);
   });
 
   testWidgets('公告管理页复用发布公告弹窗入口', (tester) async {

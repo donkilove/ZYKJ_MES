@@ -127,10 +127,11 @@ class _AnnouncementManagementPageState extends State<AnnouncementManagementPage>
       if (!mounted) {
         return;
       }
+      final fallbackPage = _page > 1 && _items.length == 1 ? _page - 1 : _page;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('公告“${item.title}”已下线')));
-      await _loadAnnouncements(page: _page);
+      await _loadAnnouncements(page: fallbackPage);
     } on ApiException catch (error) {
       if (!mounted) {
         return;
