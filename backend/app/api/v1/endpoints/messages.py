@@ -12,6 +12,7 @@ from fastapi import (
     WebSocketDisconnect,
     status,
 )
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_active_user, require_permission
@@ -20,6 +21,8 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
 from app.schemas.message import (
+    AnnouncementManagementItem,
+    AnnouncementOfflineResult,
     AnnouncementPublishRequest,
     AnnouncementPublishResult,
     MessageBatchReadRequest,
@@ -37,11 +40,13 @@ from app.services.message_service import (
     get_message_jump_target,
     get_message_summary,
     get_unread_count,
+    list_active_announcements,
     list_public_announcements,
     list_messages,
     mark_all_read,
     mark_messages_read_batch,
     mark_message_read,
+    offline_announcement,
     publish_announcement,
     run_message_delivery_maintenance_once,
 )
@@ -50,6 +55,13 @@ from app.services.user_service import get_user_by_id
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+class AnnouncementManagementListResult(BaseModel):
+    items: list[AnnouncementManagementItem]
+    total: int
+    page: int
+    page_size: int
 
 
 @router.get("/public-announcements", response_model=ApiResponse[MessageListResult])
@@ -277,6 +289,64 @@ def api_publish_announcement(
             "recipient_count": result.recipient_count,
         },
     )
+    db.commit()
+    return success_response(result)
+
+
+@router.get(
+    "/announcements/active",
+    response_model=ApiResponse[AnnouncementManagementListResult],
+)
+def api_list_active_announcements(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    priority: str | None = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("message.announcements.view")),
+) -> ApiResponse[AnnouncementManagementListResult]:
+    _ = current_user
+    items, total = list_active_announcements(
+        db,
+        page=page,
+        page_size=page_size,
+        priority=priority,
+    )
+    return success_response(
+        AnnouncementManagementListResult(
+            items=items,
+            total=total,
+            page=page,
+            page_size=page_size,
+        )
+    )
+
+
+@router.post(
+    "/announcements/{message_id}/offline",
+    response_model=ApiResponse[AnnouncementOfflineResult],
+)
+def api_offline_announcement(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("message.announcements.offline")),
+) -> ApiResponse[AnnouncementOfflineResult]:
+    try:
+        result = offline_announcement(
+            db,
+            announcement_id=message_id,
+            operator=current_user,
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+                if detail == "公告不存在"
+                else status.HTTP_400_BAD_REQUEST
+            ),
+            detail=detail,
+        ) from exc
+
     db.commit()
     return success_response(result)
 

@@ -555,6 +555,7 @@ MODULE_NAME_FALLBACK_ZH_BY_CODE = {
     "craft": "工艺管理",
     "quality": "质量管理",
     "production": "生产管理",
+    "message": "消息中心",
 }
 
 PAGE_NAME_FALLBACK_ZH_BY_CODE = {
@@ -586,6 +587,9 @@ PAGE_NAME_FALLBACK_ZH_BY_CODE = {
     "process_management": "工段工序管理",
     "production_process_config": "生产工序配置",
     "craft_kanban": "工艺看板",
+    "message": "消息模块",
+    "message_center": "消息中心",
+    "announcement_management": "公告管理",
 }
 
 CAPABILITY_NAME_FALLBACK_ZH_BY_CODE = {
@@ -662,6 +666,8 @@ CAPABILITY_NAME_FALLBACK_ZH_BY_CODE = {
     "feature.message.detail.view": "查看消息详情",
     "feature.message.jump.use": "使用消息来源跳转",
     "feature.message.announcement.publish": "发布站内公告",
+    "feature.message.announcement.view": "查看公告管理",
+    "feature.message.announcement.offline": "下线生效公告",
 }
 
 CAPABILITY_GROUP_META_BY_CODE = {
@@ -1001,6 +1007,16 @@ CAPABILITY_GROUP_META_BY_CODE = {
         "message.center",
         "消息中心",
         "发布站内公告并生成收件记录",
+    ),
+    "feature.message.announcement.view": (
+        "message.announcement",
+        "公告管理",
+        "查看当前生效公告列表",
+    ),
+    "feature.message.announcement.offline": (
+        "message.announcement",
+        "公告管理",
+        "下线当前生效公告",
     ),
 }
 

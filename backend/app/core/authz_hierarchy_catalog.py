@@ -890,6 +890,21 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
         action_permission_codes=("message.announcements.publish",),
         dependency_permission_codes=("feature.message.center.view",),
     ),
+    FeatureDefinition(
+        permission_code="feature.message.announcement.view",
+        permission_name="查看公告管理",
+        module_code="message",
+        page_code="announcement_management",
+        action_permission_codes=("message.announcements.view",),
+    ),
+    FeatureDefinition(
+        permission_code="feature.message.announcement.offline",
+        permission_name="下线生效公告",
+        module_code="message",
+        page_code="announcement_management",
+        action_permission_codes=("message.announcements.offline",),
+        dependency_permission_codes=("feature.message.announcement.view",),
+    ),
 )
 
 
