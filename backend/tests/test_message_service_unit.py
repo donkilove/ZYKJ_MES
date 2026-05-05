@@ -12,7 +12,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from app.schemas.message import MessageCreateRequest
+from app.schemas.message import AnnouncementManagementItem, MessageCreateRequest
 from app.services import message_service
 
 
@@ -695,12 +695,13 @@ class MessageServiceUnitTest(unittest.TestCase):
 
         self.assertEqual(total, 1)
         self.assertEqual(len(items), 1)
+        self.assertIsInstance(items[0], AnnouncementManagementItem)
         self.assertEqual(items[0].id, 61)
         self.assertEqual(items[0].status, "active")
         self.assertEqual(items[0].source_code, "all")
-        self.assertIsNone(items[0].is_read)
-        self.assertIsNone(items[0].delivery_status)
-        self.assertIsNone(items[0].delivery_attempt_count)
+        self.assertFalse(hasattr(items[0], "is_read"))
+        self.assertFalse(hasattr(items[0], "delivery_status"))
+        self.assertFalse(hasattr(items[0], "delivery_attempt_count"))
 
         count_stmt = db.execute.call_args_list[0].args[0]
         data_stmt = db.execute.call_args_list[1].args[0]

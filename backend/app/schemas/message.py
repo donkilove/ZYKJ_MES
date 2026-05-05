@@ -24,14 +24,33 @@ class MessageItem(BaseModel):
     inactive_reason: str | None = None
     published_at: datetime | None
     expires_at: datetime | None = None
-    # 收件记录字段；公告管理列表等不关联具体收件人时允许为空
-    is_read: bool | None
+    # 收件记录字段
+    is_read: bool
     read_at: datetime | None
     delivered_at: datetime | None
-    delivery_status: str | None
-    delivery_attempt_count: int | None
+    delivery_status: str
+    delivery_attempt_count: int
     last_push_at: datetime | None
     next_retry_at: datetime | None
+
+
+class AnnouncementManagementItem(BaseModel):
+    id: int
+    message_type: str
+    priority: str
+    title: str
+    summary: str | None
+    content: str | None = None
+    source_module: str | None
+    source_type: str | None
+    source_code: str | None
+    target_page_code: str | None
+    target_tab_code: str | None
+    target_route_payload_json: str | None
+    status: str
+    inactive_reason: str | None = None
+    published_at: datetime | None
+    expires_at: datetime | None = None
 
 
 class MessageListResult(BaseModel):

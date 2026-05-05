@@ -29,6 +29,7 @@ from app.models.role import Role
 from app.models.user import User
 from app.models.user_session import UserSession
 from app.schemas.message import (
+    AnnouncementManagementItem,
     AnnouncementOfflineResult,
     AnnouncementPublishRequest,
     AnnouncementPublishResult,
@@ -603,8 +604,8 @@ def _to_public_announcement_item(msg: Message) -> MessageItem:
     )
 
 
-def _to_announcement_management_item(msg: Message) -> MessageItem:
-    return MessageItem(
+def _to_announcement_management_item(msg: Message) -> AnnouncementManagementItem:
+    return AnnouncementManagementItem(
         id=msg.id,
         message_type=msg.message_type,
         priority=msg.priority,
@@ -621,13 +622,6 @@ def _to_announcement_management_item(msg: Message) -> MessageItem:
         inactive_reason=None,
         published_at=msg.published_at,
         expires_at=msg.expires_at,
-        is_read=None,
-        read_at=None,
-        delivered_at=None,
-        delivery_status=None,
-        delivery_attempt_count=None,
-        last_push_at=None,
-        next_retry_at=None,
     )
 
 
@@ -863,7 +857,7 @@ def list_active_announcements(
     page_size: int,
     public_only: bool = False,
     priority: str | None = None,
-) -> tuple[list[MessageItem], int]:
+) -> tuple[list[AnnouncementManagementItem], int]:
     now = datetime.now(UTC)
     filters = [
         Message.message_type == "announcement",
