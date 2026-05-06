@@ -5,12 +5,12 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
-import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/production_order_detail_page.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_pipeline_instances_page_header.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 
 class ProductionPipelineInstancesPage extends StatefulWidget {
@@ -140,9 +140,9 @@ class _ProductionPipelineInstancesPageState
     if (rawSubOrderId.isNotEmpty) {
       subOrderId = int.tryParse(rawSubOrderId);
       if (subOrderId == null || subOrderId <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('子订单ID必须为大于 0 的数字')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('子订单ID必须为大于 0 的数字')));
         setState(() {
           _loading = false;
         });
@@ -188,9 +188,9 @@ class _ProductionPipelineInstancesPageState
         return;
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('加载失败：${_errorMessage(error)}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('加载失败：${_errorMessage(error)}')));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -206,7 +206,11 @@ class _ProductionPipelineInstancesPageState
 
   Widget _buildHeader() {
     final title = _standaloneMode ? '并行实例追踪' : '并行实例 - ${widget.orderCode}';
-    return MesRefreshPageHeader(title: title, onRefresh: _loading ? null : _load);
+    return ProductionPipelineInstancesPageHeader(
+      title: title,
+      loading: _loading,
+      onRefresh: _load,
+    );
   }
 
   Widget _buildFilters() {
@@ -484,8 +488,7 @@ class _ProductionPipelineInstancesPageState
                       cells: [
                         DataCell(Text('${item.id}')),
                         DataCell(Text('${item.subOrderId}')),
-                        if (_standaloneMode)
-                          DataCell(Text(item.orderCode)),
+                        if (_standaloneMode) DataCell(Text(item.orderCode)),
                         DataCell(Text(item.processDisplayText)),
                         DataCell(
                           Tooltip(
@@ -544,10 +547,7 @@ class _ProductionPipelineInstancesPageState
   Widget _buildBanner() {
     return Row(
       children: [
-        Text(
-          '总数：$_total',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
+        Text('总数：$_total', style: Theme.of(context).textTheme.titleMedium),
       ],
     );
   }
@@ -568,7 +568,9 @@ class _ProductionPipelineInstancesPageState
     if (!_standaloneMode) {
       return Scaffold(
         appBar: AppBar(
-          title: Text(_standaloneMode ? '并行实例追踪' : '并行实例 - ${widget.orderCode}'),
+          title: Text(
+            _standaloneMode ? '并行实例追踪' : '并行实例 - ${widget.orderCode}',
+          ),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () => Navigator.of(context).pop(),

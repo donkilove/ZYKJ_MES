@@ -7,10 +7,10 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
-import 'package:mes_client/core/widgets/crud_list_table_section.dart';
-import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
+import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_data_page_header.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 
 enum ProductionDataSection { processStats, todayRealtime, operatorStats }
@@ -644,9 +644,10 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
   @override
   Widget build(BuildContext context) {
     return MesCrudPageScaffold(
-      header: MesRefreshPageHeader(
+      header: ProductionDataPageHeader(
         title: _pageTitle,
-        onRefresh: _anyLoading ? null : _reloadAll,
+        loading: _anyLoading,
+        onRefresh: _reloadAll,
       ),
       banner: _buildOverviewCards(),
       content: _buildSectionBody(),
