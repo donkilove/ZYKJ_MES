@@ -4,7 +4,6 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
-import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 
@@ -326,11 +325,27 @@ class _CraftReferenceAnalysisPageState
   }
 
   Widget _buildHeader() {
-    return MesRefreshPageHeader(onRefresh: _loadingBase ? null : _loadBaseData);
-  }
-
-  Widget _buildFilters() {
-    return _buildModeTab(Theme.of(context));
+    return KeyedSubtree(
+      key: const ValueKey('craft-reference-analysis-header'),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _buildModeTab(Theme.of(context)),
+          const Spacer(),
+          Tooltip(
+            message: '刷新',
+            child: SizedBox(
+              width: 40,
+              height: 40,
+              child: IconButton(
+                onPressed: _loadingBase ? null : _loadBaseData,
+                icon: const Icon(Icons.refresh),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildRefTypeChip(String refType) {
@@ -758,27 +773,31 @@ class _CraftReferenceAnalysisPageState
   }
 
   Widget _buildModeTab(ThemeData theme) {
-    return SegmentedButton<_QueryMode>(
-      segments: const [
-        ButtonSegment(value: _QueryMode.stage, label: Text('工段')),
-        ButtonSegment(value: _QueryMode.process, label: Text('工序')),
-        ButtonSegment(value: _QueryMode.template, label: Text('模板')),
-        ButtonSegment(value: _QueryMode.product, label: Text('按产品')),
-      ],
-      selected: {_queryMode},
-      onSelectionChanged: (s) {
-        setState(() {
-          _queryMode = s.first;
-          _selectedStage = null;
-          _selectedProcess = null;
-          _selectedTemplate = null;
-          _selectedProduct = null;
-          _stageRefResult = null;
-          _processRefResult = null;
-          _templateRefResult = null;
-          _productRefResult = null;
-        });
-      },
+    return KeyedSubtree(
+      key: const ValueKey('craft-reference-analysis-mode-switch'),
+      child: SegmentedButton<_QueryMode>(
+        segments: const [
+          ButtonSegment(value: _QueryMode.stage, label: Text('工段')),
+          ButtonSegment(value: _QueryMode.process, label: Text('工序')),
+          ButtonSegment(value: _QueryMode.template, label: Text('模板')),
+          ButtonSegment(value: _QueryMode.product, label: Text('按产品')),
+        ],
+        selected: {_queryMode},
+        showSelectedIcon: false,
+        onSelectionChanged: (s) {
+          setState(() {
+            _queryMode = s.first;
+            _selectedStage = null;
+            _selectedProcess = null;
+            _selectedTemplate = null;
+            _selectedProduct = null;
+            _stageRefResult = null;
+            _processRefResult = null;
+            _templateRefResult = null;
+            _productRefResult = null;
+          });
+        },
+      ),
     );
   }
 
@@ -1016,7 +1035,6 @@ class _CraftReferenceAnalysisPageState
   Widget build(BuildContext context) {
     return MesCrudPageScaffold(
       header: _buildHeader(),
-      filters: _buildFilters(),
       content: _buildContent(),
     );
   }

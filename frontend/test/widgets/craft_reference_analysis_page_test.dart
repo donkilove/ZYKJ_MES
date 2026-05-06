@@ -177,6 +177,34 @@ class _FakeCraftService extends CraftService {
 }
 
 void main() {
+  testWidgets('引用分析模式切换按钮切换时宽度保持稳定', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CraftReferenceAnalysisPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            craftService: _FakeCraftService(),
+            onNavigate: ({required String moduleCode, String? jumpTarget}) {},
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final modeSwitch = find.byKey(
+      const ValueKey('craft-reference-analysis-mode-switch'),
+    );
+    final widthBefore = tester.getSize(modeSwitch).width;
+
+    await tester.tap(find.text('按产品'));
+    await tester.pumpAndSettle();
+
+    final widthAfter = tester.getSize(modeSwitch).width;
+    expect(widthAfter, equals(widthBefore));
+  });
+
   testWidgets('引用分析页展示编码字段并支持跳转', (tester) async {
     String? capturedModuleCode;
     String? capturedJumpTarget;
@@ -198,9 +226,26 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('craft-reference-analysis-header')),
+      findsOneWidget,
+    );
     expect(find.text('按工段、工序、模板和产品追踪下游引用与跳转来源。'), findsNothing);
     expect(find.byTooltip('刷新'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('craft-reference-analysis-header')),
+        matching: find.text('工段'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('craft-reference-analysis-header')),
+        matching: find.byTooltip('刷新'),
+      ),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('切割段'));
     await tester.pump();
