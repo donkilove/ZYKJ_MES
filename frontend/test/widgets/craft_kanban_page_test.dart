@@ -239,9 +239,35 @@ void main() {
     expect(find.text('平均工时'), findsOneWidget);
     expect(find.text('平均产能'), findsOneWidget);
     expect(find.text('异常样本'), findsOneWidget);
-    expect(find.byType(MesSectionCard), findsAtLeastNWidgets(3));
+    expect(find.byType(MesSectionCard), findsAtLeastNWidgets(2));
     expect(find.text('筛选控制台'), findsOneWidget);
-    expect(find.text('统计规则'), findsOneWidget);
+    expect(find.text('统计规则'), findsNothing);
+  });
+
+  testWidgets('工艺看板将统计规则文本上移到页眉并移除规则卡片', (tester) async {
+    final craftService = _FakeCraftService();
+    tester.view.physicalSize = const Size(1600, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await pumpCraftKanbanPage(
+      tester,
+      craftService: craftService,
+      productionService: _FakeProductionService(),
+    );
+
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(
+      find.text(
+        '仅统计已完成工序记录；工时=首件/生产记录最早时间到最后一次生产记录时间（分钟）；产能=产出数量/工时。红色柱体表示工时超过该工序样本均值的 130%。',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('快速识别异常工时与工序产能波动。'), findsNothing);
+    expect(find.text('统计规则'), findsNothing);
   });
 
   testWidgets('宽桌面下工序详情卡使用左右双栏图表', (tester) async {

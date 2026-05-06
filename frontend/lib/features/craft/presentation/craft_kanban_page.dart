@@ -341,7 +341,8 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
   Widget _buildHeader() {
     final busy = _loadingProducts || _loadingMetrics || _exporting;
     return MesRefreshPageHeader(
-      subtitle: '快速识别异常工时与工序产能波动。',
+      subtitle:
+          '仅统计已完成工序记录；工时=首件/生产记录最早时间到最后一次生产记录时间（分钟）；产能=产出数量/工时。红色柱体表示工时超过该工序样本均值的 130%。',
       onRefresh: busy ? null : _loadProducts,
       actionsBeforeRefresh: [
         if (busy)
@@ -488,15 +489,6 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
             ],
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildBanner() {
-    return const MesSectionCard(
-      title: '统计规则',
-      child: Text(
-        '仅统计已完成工序记录；工时=首件/生产记录最早时间到最后一次生产记录时间（分钟）；产能=产出数量/工时。红色柱体表示工时超过该工序样本均值的 130%。',
       ),
     );
   }
@@ -894,7 +886,6 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
     return MesCrudPageScaffold(
       header: _buildHeader(),
       filters: _buildFilterBar(),
-      banner: _buildBanner(),
       content: _buildContent(),
     );
   }
