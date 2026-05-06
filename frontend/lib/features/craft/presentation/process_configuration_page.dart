@@ -14,6 +14,7 @@ import 'package:mes_client/features/craft/presentation/widgets/template_detail_d
 import 'package:mes_client/features/craft/presentation/widgets/template_form_dialog.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
@@ -602,6 +603,32 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     await _copyFromSystemMaster();
   }
 
+  Future<void> _showSystemMasterManagementDialog() async {
+    if (!_canManageSystemMasterTemplate && !_canViewSystemMasterVersions) {
+      _showNoPermission();
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        final theme = Theme.of(dialogContext);
+        return MesDialog(
+          key: const ValueKey('process-configuration-system-master-dialog'),
+          title: const Text('系统母版管理'),
+          width: 1080,
+          scrollable: true,
+          content: _buildSystemMasterManagementContent(theme),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<bool> _confirmTemplateActionWithImpact({
     required CraftTemplateItem item,
     required String title,
@@ -1037,7 +1064,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     );
   }
 
-  Widget _buildSystemMasterManagementCard(ThemeData theme) {
+  Widget _buildSystemMasterManagementContent(ThemeData theme) {
     final master = _systemMasterTemplate;
     final hasMaster = master != null;
     List<Widget> buildSummaryMetrics() {
@@ -1085,193 +1112,123 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       ];
     }
 
-    return Card(
-      elevation: 0,
-      shadowColor: Colors.transparent,
-      surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ExpansionTile(
-        key: const PageStorageKey<String>('system-master-management-tile'),
-        initiallyExpanded: _systemMasterExpanded,
-        onExpansionChanged: (expanded) {
-          setState(() {
-            _systemMasterExpanded = expanded;
-          });
-        },
-        tilePadding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-        childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        collapsedShape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        title: Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final summaryWrap = Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: buildSummaryMetrics(),
+        );
+        final metaWrap = Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: buildMetaInfo(),
+        );
+
+        final actionWrap = Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.end,
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(12),
+            if (_canViewSystemMasterVersions)
+              OutlinedButton.icon(
+                onPressed: _loading ? null : _showSystemMasterVersionDialog,
+                icon: const Icon(Icons.history),
+                label: const Text('母版历史版本'),
               ),
-              child: Icon(
-                Icons.account_tree_outlined,
-                color: theme.colorScheme.onPrimaryContainer,
+            if (_canManageSystemMasterTemplate)
+              FilledButton.icon(
+                onPressed: _loading ? null : _showSystemMasterTemplateDialog,
+                icon: Icon(hasMaster ? Icons.edit_outlined : Icons.add_box),
+                label: Text(hasMaster ? '编辑系统母版' : '新建系统母版'),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '系统母版管理',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ],
-        ),
-        children: _systemMasterExpanded
-            ? [
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final summaryWrap = Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: buildSummaryMetrics(),
-                    );
-                    final metaWrap = Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: buildMetaInfo(),
-                    );
+        );
 
-                    final actionWrap = Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      alignment: WrapAlignment.end,
-                      children: [
-                        if (_canViewSystemMasterVersions)
-                          OutlinedButton.icon(
-                            onPressed: _loading
-                                ? null
-                                : _showSystemMasterVersionDialog,
-                            icon: const Icon(Icons.history),
-                            label: const Text('母版历史版本'),
-                          ),
-                        if (_canManageSystemMasterTemplate)
-                          FilledButton.icon(
-                            onPressed: _loading
-                                ? null
-                                : _showSystemMasterTemplateDialog,
-                            icon: Icon(
-                              hasMaster ? Icons.edit_outlined : Icons.add_box,
-                            ),
-                            label: Text(hasMaster ? '编辑系统母版' : '新建系统母版'),
-                          ),
-                      ],
-                    );
-
-                    final overviewCard = Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: theme.colorScheme.outlineVariant,
-                        ),
+        final overviewCard = Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+          ),
+          child: constraints.maxWidth < 1180
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '系统母版管理',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
                       ),
-                      child: constraints.maxWidth < 1180
-                          ? Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '系统母版管理',
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                summaryWrap,
-                                const SizedBox(height: 12),
-                                actionWrap,
-                              ],
-                            )
-                          : Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '系统母版管理',
-                                        style: theme.textTheme.titleMedium
-                                            ?.copyWith(
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                      ),
-                                      const SizedBox(height: 12),
-                                      summaryWrap,
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 24),
-                                ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 260,
-                                  ),
-                                  child: actionWrap,
-                                ),
-                              ],
+                    ),
+                    const SizedBox(height: 12),
+                    summaryWrap,
+                    const SizedBox(height: 12),
+                    actionWrap,
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '系统母版管理',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
                             ),
-                    );
-
-                    final metaCard = Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.surface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: theme.colorScheme.outlineVariant.withValues(
-                            alpha: 0.7,
                           ),
-                        ),
+                          const SizedBox(height: 12),
+                          summaryWrap,
+                        ],
                       ),
-                      child: metaWrap,
-                    );
-
-                    return Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 1120),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              key: const Key('system-master-summary-section'),
-                              child: overviewCard,
-                            ),
-                            const SizedBox(height: 12),
-                            Container(
-                              key: const Key('system-master-meta-section'),
-                              child: metaCard,
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
+                    ),
+                    const SizedBox(width: 24),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 260),
+                      child: actionWrap,
+                    ),
+                  ],
                 ),
-              ]
-            : const <Widget>[],
-      ),
+        );
+
+        final metaCard = Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.7),
+            ),
+          ),
+          child: metaWrap,
+        );
+
+        return Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1120),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  key: const Key('system-master-summary-section'),
+                  child: overviewCard,
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  key: const Key('system-master-meta-section'),
+                  child: metaCard,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1561,7 +1518,19 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     final templates = _filteredTemplates;
 
     return MesCrudPageScaffold(
-      header: MesRefreshPageHeader(onRefresh: _loading ? null : _loadData),
+      header: MesRefreshPageHeader(
+        onRefresh: _loading ? null : _loadData,
+        actionsBeforeRefresh: [
+          OutlinedButton.icon(
+            key: const ValueKey(
+              'process-configuration-system-master-button',
+            ),
+            onPressed: _loading ? null : _showSystemMasterManagementDialog,
+            icon: const Icon(Icons.account_tree_outlined),
+            label: const Text('系统母版管理'),
+          ),
+        ],
+      ),
       content: LayoutBuilder(
         builder: (context, constraints) {
           return SingleChildScrollView(
@@ -1571,8 +1540,6 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildJumpBanner(theme),
-                  const SizedBox(height: 12),
-                  _buildSystemMasterManagementCard(theme),
                   const SizedBox(height: 12),
                   constraints.maxWidth >= 1080
                       ? Row(

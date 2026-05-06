@@ -392,15 +392,27 @@ void main() {
     expect(find.text('未配置默认模板'), findsOneWidget);
   });
 
-  testWidgets('系统母版管理首次渲染时默认折叠', (tester) async {
+  testWidgets('页眉展示系统母版管理按钮且页面主体不再渲染旧卡片', (tester) async {
     await pumpPage(tester);
 
-    final tile = tester.widget<ExpansionTile>(
-      find.byKey(const PageStorageKey<String>('system-master-management-tile')),
-    );
-
-    expect(tile.initiallyExpanded, isFalse);
+    expect(find.widgetWithText(OutlinedButton, '系统母版管理'), findsOneWidget);
     expect(find.byKey(const Key('system-master-summary-section')), findsNothing);
+    expect(find.byKey(const Key('system-master-meta-section')), findsNothing);
+  });
+
+  testWidgets('点击页眉系统母版管理按钮后打开弹窗', (tester) async {
+    await pumpPage(tester);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '系统母版管理'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(
+      find.byKey(const ValueKey('process-configuration-system-master-dialog')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('system-master-summary-section')), findsOneWidget);
+    expect(find.byKey(const Key('system-master-meta-section')), findsOneWidget);
   });
 
   testWidgets('产品列表为可滚动区域且仍可切换到后续产品', (tester) async {
