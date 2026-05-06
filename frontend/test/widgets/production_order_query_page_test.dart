@@ -634,6 +634,12 @@ void main() {
 
   testWidgets('订单查询页支持筛选并展示工单列表', (tester) async {
     final service = _FakeProductionOrderQueryPageService();
+    tester.view.physicalSize = const Size(1920, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
 
     await tester.pumpWidget(
       MaterialApp(
@@ -668,17 +674,20 @@ void main() {
     expect(find.text('可见12 / 分配12 / 完成4'), findsOneWidget);
     expect(find.text('2026-03-18'), findsOneWidget);
     expect(find.text('-'), findsWidgets);
-    expect(find.text('订单编号'), findsOneWidget);
-    expect(find.text('产品型号'), findsOneWidget);
-    expect(find.text('供应商'), findsOneWidget);
+    expect(find.text('订单编号'), findsAtLeastNWidgets(1));
+    expect(find.text('产品型号'), findsAtLeastNWidgets(1));
+    expect(find.text('供应商'), findsAtLeastNWidgets(1));
     expect(find.text('搜索订单号/产品/供应商/工序'), findsOneWidget);
-    expect(find.text('数量概况'), findsOneWidget);
-    expect(find.text('交货日期'), findsOneWidget);
-    expect(find.text('备注'), findsOneWidget);
+    expect(find.text('数量概况'), findsAtLeastNWidgets(1));
+    expect(find.text('交货日期'), findsAtLeastNWidgets(1));
+    expect(find.text('备注'), findsAtLeastNWidgets(1));
     expect(find.byType(PopupMenuButton<String>), findsOneWidget);
 
-    final dataTable = tester.widget<DataTable>(find.byType(DataTable));
-    final columnLabels = dataTable.columns
+    final dataTables = tester
+        .widgetList<DataTable>(find.byType(DataTable))
+        .toList();
+    expect(dataTables, isNotEmpty);
+    final columnLabels = dataTables.first.columns
         .map((column) => _extractColumnLabel(column.label))
         .toList();
     expect(

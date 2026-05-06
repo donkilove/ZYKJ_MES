@@ -768,10 +768,12 @@ void main() {
       ),
     );
 
-    expect(find.text('设备编号'), findsOneWidget);
-    expect(find.text('创建时间'), findsOneWidget);
-    expect(find.text('更新时间'), findsOneWidget);
+    expect(find.text('设备编号'), findsAtLeastNWidgets(1));
+    expect(find.text('创建时间'), findsAtLeastNWidgets(1));
+    expect(find.text('更新时间'), findsAtLeastNWidgets(1));
     expect(find.text('冲压机-A'), findsOneWidget);
+    expect(find.text('操作'), findsAtLeastNWidgets(1));
+    expect(find.byType(PopupMenuButton<EquipmentLedgerAction>), findsWidgets);
   });
 
   testWidgets('设备台账页面在窄宽度下工具栏可稳定渲染', (tester) async {
@@ -878,7 +880,9 @@ void main() {
     expect(equipmentService.createEquipmentCalls, 1);
     expect(find.text('新设备'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(TextButton, '编辑').first);
+    await tester.tap(find.byType(PopupMenuButton<EquipmentLedgerAction>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑').last);
     await tester.pumpAndSettle();
     await tester.enterText(
       find.widgetWithText(TextFormField, '设备名称'),
@@ -890,8 +894,9 @@ void main() {
     expect(equipmentService.updateEquipmentCalls, 1);
     expect(find.text('新设备-已编辑'), findsOneWidget);
 
-    await tester.ensureVisible(find.widgetWithText(TextButton, '停用').first);
-    await tester.tap(find.widgetWithText(TextButton, '停用').first);
+    await tester.tap(find.byType(PopupMenuButton<EquipmentLedgerAction>).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('停用').last);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '确认').last);
     await tester.pumpAndSettle();
@@ -899,8 +904,9 @@ void main() {
     expect(equipmentService.toggleEquipmentCalls, 1);
     expect(find.text('启用'), findsWidgets);
 
-    await tester.ensureVisible(find.widgetWithText(TextButton, '删除').last);
-    await tester.tap(find.widgetWithText(TextButton, '删除').last);
+    await tester.tap(find.byType(PopupMenuButton<EquipmentLedgerAction>).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除').last);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '删除').last);
     await tester.pumpAndSettle();

@@ -7,10 +7,13 @@ import 'package:mes_client/features/equipment/presentation/widgets/equipment_led
 import 'package:mes_client/features/equipment/presentation/widgets/equipment_ledger_form_dialog.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
-import 'package:mes_client/core/widgets/crud_list_table_section.dart';
-import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
+import 'package:mes_client/core/widgets/crud_list_table_section.dart';
+import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
+
+enum EquipmentLedgerAction { detail, edit, toggle, delete }
 
 class EquipmentLedgerPage extends StatefulWidget {
   const EquipmentLedgerPage({
@@ -449,35 +452,51 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
                 DataCell(Text(_formatDateTime(item.createdAt))),
                 DataCell(Text(_formatDateTime(item.updatedAt))),
                 DataCell(
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextButton(
-                        onPressed: widget.canWrite
-                            ? () => _showEditDialog(item: item)
-                            : null,
-                        child: const Text('编辑'),
-                      ),
-                      const SizedBox(width: 8),
-                      TextButton(
-                        onPressed: widget.canWrite
-                            ? () => _toggleItem(item)
-                            : null,
-                        child: Text(item.isEnabled ? '停用' : '启用'),
-                      ),
-                      const SizedBox(width: 8),
-                      TextButton(
-                        onPressed: widget.canWrite
-                            ? () => _deleteItem(item)
-                            : null,
-                        child: const Text('删除'),
-                      ),
-                      const SizedBox(width: 8),
-                      TextButton(
-                        onPressed: () => _showDetailDialog(item),
-                        child: const Text('详情'),
-                      ),
-                    ],
+                  UnifiedListTableHeaderStyle.actionMenuButton<
+                    EquipmentLedgerAction
+                  >(
+                    theme: theme,
+                    onSelected: (action) {
+                      switch (action) {
+                        case EquipmentLedgerAction.edit:
+                          _showEditDialog(item: item);
+                          return;
+                        case EquipmentLedgerAction.toggle:
+                          _toggleItem(item);
+                          return;
+                        case EquipmentLedgerAction.delete:
+                          _deleteItem(item);
+                          return;
+                        case EquipmentLedgerAction.detail:
+                          _showDetailDialog(item);
+                          return;
+                      }
+                    },
+                    itemBuilder: (context) {
+                      final entries = <PopupMenuEntry<EquipmentLedgerAction>>[
+                        const PopupMenuItem(
+                          value: EquipmentLedgerAction.detail,
+                          child: Text('详情'),
+                        ),
+                      ];
+                      if (widget.canWrite) {
+                        entries.addAll([
+                          const PopupMenuItem(
+                            value: EquipmentLedgerAction.edit,
+                            child: Text('编辑'),
+                          ),
+                          PopupMenuItem(
+                            value: EquipmentLedgerAction.toggle,
+                            child: Text(item.isEnabled ? '停用' : '启用'),
+                          ),
+                          const PopupMenuItem(
+                            value: EquipmentLedgerAction.delete,
+                            child: Text('删除'),
+                          ),
+                        ]);
+                      }
+                      return entries;
+                    },
                   ),
                 ),
               ],
