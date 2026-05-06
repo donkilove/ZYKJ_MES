@@ -8,10 +8,10 @@ import 'package:mes_client/core/services/export_file_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
-import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
+import 'package:mes_client/features/quality/presentation/widgets/quality_data_page_header.dart';
 import 'package:mes_client/features/quality/presentation/widgets/quality_workbench_filter_panel.dart';
 import 'package:mes_client/features/quality/presentation/widgets/quality_workbench_summary_grid.dart';
 import 'package:mes_client/features/quality/services/quality_service.dart';
@@ -618,7 +618,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
     return DefaultTabController(
       length: 3,
       child: MesCrudPageScaffold(
-        header: MesRefreshPageHeader(onRefresh: _loading ? null : _loadStats),
+        header: QualityDataPageHeader(loading: _loading, onRefresh: _loadStats),
         filters: _buildFilterPanel(theme),
         banner: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
