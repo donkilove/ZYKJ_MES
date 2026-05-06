@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_detail_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 
@@ -6,7 +7,6 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
-import 'package:mes_client/core/widgets/adaptive_table_container.dart';
 
 enum ProductionOrderQueryDetailTab { process, subOrder, record, event }
 
@@ -454,15 +454,6 @@ class _ProductionOrderQueryDetailPageState
         Navigator.of(context).pop(_needsRefreshOnPop);
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: Text(
-            detail == null ? '工单详情' : '工单详情 - ${detail.order.orderCode}',
-          ),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.of(context).pop(_needsRefreshOnPop),
-          ),
-        ),
         body: Padding(
           padding: const EdgeInsets.all(16),
           child: _loading
@@ -492,6 +483,17 @@ class _ProductionOrderQueryDetailPageState
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    KeyedSubtree(
+                      key: const ValueKey(
+                        'production-order-query-detail-page-header',
+                      ),
+                      child: MesDetailPageHeader(
+                        title: '工单详情 - ${detail.order.orderCode}',
+                        onBack: () =>
+                            Navigator.of(context).pop(_needsRefreshOnPop),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     _buildActionBar(),
                     const SizedBox(height: 12),
                     Wrap(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
@@ -300,6 +301,11 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
+    expect(
+      find.byKey(const ValueKey('production-order-form-page-header')),
+      findsOneWidget,
+    );
+    expect(find.byType(MesPageHeader), findsOneWidget);
     expect(find.textContaining('手工调整优先'), findsOneWidget);
     expect(find.text('供应商'), findsOneWidget);
 
@@ -370,6 +376,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
+    expect(
+      find.byKey(const ValueKey('production-order-form-page-header')),
+      findsOneWidget,
+    );
     expect(find.text('停用供应商（已停用）'), findsOneWidget);
 
     await tester.enterText(find.widgetWithText(TextFormField, '数量'), '18');
@@ -436,6 +446,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
+    expect(
+      find.byKey(const ValueKey('production-order-form-page-header')),
+      findsOneWidget,
+    );
     await tester.tap(find.widgetWithText(FilledButton, '保存'));
     await tester.pumpAndSettle();
 
@@ -492,6 +506,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
+    expect(
+      find.byKey(const ValueKey('production-order-form-page-header')),
+      findsOneWidget,
+    );
     await tester.enterText(
       find.widgetWithText(TextFormField, '订单号'),
       'PO-DUP-001',

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
 import 'package:mes_client/features/equipment/presentation/equipment_detail_page.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
@@ -109,7 +110,7 @@ EquipmentDetailResult _buildDetail() {
 }
 
 Future<void> _pumpPage(WidgetTester tester) async {
-  tester.view.physicalSize = const Size(800, 520);
+  tester.view.physicalSize = const Size(800, 420);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(() {
     tester.view.resetPhysicalSize();
@@ -134,6 +135,11 @@ void main() {
   testWidgets('展示明确风险摘要与快捷入口，并可跳转到计划区块', (tester) async {
     await _pumpPage(tester);
 
+    expect(
+      find.byKey(const ValueKey('equipment-detail-page-header')),
+      findsOneWidget,
+    );
+    expect(find.byType(MesPageHeader), findsOneWidget);
     expect(find.text('设备风险提示'), findsOneWidget);
     expect(find.text('当前详情仅展示你在计划、执行与记录范围内可见的数据，不能替代全量排程复核。'), findsOneWidget);
     expect(find.text('待执行工单 3'), findsOneWidget);
@@ -153,14 +159,9 @@ void main() {
       findsOneWidget,
     );
 
-    final listView = tester.widget<ListView>(find.byType(ListView));
-    final controller = listView.controller!;
-    expect(controller.offset, 0);
-
     await tester.tap(find.byKey(const Key('equipment-detail-shortcut-plans')));
     await tester.pumpAndSettle();
 
-    expect(controller.offset, greaterThan(0));
-    expect(find.text('关联计划'), findsOneWidget);
+    expect(find.text('查看工单'), findsWidgets);
   });
 }

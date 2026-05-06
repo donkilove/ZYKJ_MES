@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/production_order_detail_page.dart';
@@ -100,6 +101,9 @@ void main() {
   testWidgets('production order detail page renders actions and tabs', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(1600, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     var editCalled = false;
     var pipelineCalled = false;
 
@@ -142,6 +146,11 @@ void main() {
     expect(find.text('事件'), findsOneWidget);
     expect(find.byType(CrudListTableSection), findsOneWidget);
     expect(find.byType(CustomScrollView), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('production-order-detail-page-header')),
+      findsOneWidget,
+    );
+    expect(find.byType(MesPageHeader), findsOneWidget);
 
     await tester.tap(find.text('编辑订单'));
     await tester.pump();

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_detail_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -508,7 +509,6 @@ class _ProductionFirstArticlePageState
     final order = widget.order;
 
     return Scaffold(
-      appBar: AppBar(title: Text('首件录入 - ${order.orderCode}')),
       body: _loading
           ? const MesLoadingState(label: '首件录入加载中...')
           : SafeArea(
@@ -520,6 +520,15 @@ class _ProductionFirstArticlePageState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        KeyedSubtree(
+                          key: const ValueKey(
+                            'production-first-article-page-header',
+                          ),
+                          child: MesDetailPageHeader(
+                            title: '首件录入 - ${order.orderCode}',
+                          ),
+                        ),
+                        const SizedBox(height: 16),
                         if (_message.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 12),

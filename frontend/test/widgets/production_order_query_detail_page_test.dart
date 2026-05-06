@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/production_order_query_detail_page.dart';
@@ -188,6 +189,9 @@ void main() {
   testWidgets('query detail page supports configurable initial history tab', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(1600, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     await tester.pumpWidget(
       MaterialApp(
         home: ProductionOrderQueryDetailPage(
@@ -222,6 +226,9 @@ void main() {
   testWidgets('production query detail page renders tabs and action buttons', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(1600, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     var firstCalled = false;
     var endCalled = false;
     var manualRepairCalled = false;
@@ -276,6 +283,11 @@ void main() {
     expect(find.text('事件'), findsOneWidget);
     expect(find.byType(CrudListTableSection), findsOneWidget);
     expect(find.byType(CustomScrollView), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('production-order-query-detail-page-header')),
+      findsOneWidget,
+    );
+    expect(find.byType(MesPageHeader), findsOneWidget);
     expect(find.text('订单号：PO-1'), findsOneWidget);
     expect(find.text('产品版本：3'), findsOneWidget);
     expect(find.text('模板名称/版本：标准模板 v5'), findsOneWidget);
@@ -309,6 +321,9 @@ void main() {
   testWidgets(
     'query detail page falls back to readonly when context not found',
     (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1600, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
       var firstCalled = false;
 
       await tester.pumpWidget(
@@ -353,6 +368,9 @@ void main() {
   testWidgets(
     'query detail page hides runtime-disabled repair and assist actions',
     (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1600, 1200));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
       final contextItem = _buildMyOrderItemWithRuntimeActions(
         canCreateManualRepair: false,
         canApplyAssist: false,

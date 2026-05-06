@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_detail_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
@@ -637,7 +638,6 @@ class _ProductionOrderFormPageState extends State<ProductionOrderFormPage> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: Text(_isEdit ? '编辑订单' : '创建订单')),
       body: SafeArea(
         child: _initializing
             ? const MesLoadingState(label: '订单表单初始化中...')
@@ -649,6 +649,15 @@ class _ProductionOrderFormPageState extends State<ProductionOrderFormPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        KeyedSubtree(
+                          key: const ValueKey(
+                            'production-order-form-page-header',
+                          ),
+                          child: MesDetailPageHeader(
+                            title: _isEdit ? '编辑订单' : '创建订单',
+                          ),
+                        ),
+                        const SizedBox(height: 16),
                         if (_message.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 12),

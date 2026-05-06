@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_detail_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_error_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
@@ -8,7 +9,6 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
-import 'package:mes_client/core/widgets/adaptive_table_container.dart';
 import 'package:mes_client/features/production/presentation/production_pipeline_instances_page.dart';
 
 class ProductionOrderDetailPage extends StatefulWidget {
@@ -432,15 +432,6 @@ class _ProductionOrderDetailPageState extends State<ProductionOrderDetailPage> {
         Navigator.of(context).pop(_needsRefreshOnPop);
       },
       child: Scaffold(
-        appBar: AppBar(
-          title: Text(
-            detail == null ? '订单详情' : '订单详情 - ${detail.order.orderCode}',
-          ),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => Navigator.of(context).pop(_needsRefreshOnPop),
-          ),
-        ),
         body: Padding(
           padding: const EdgeInsets.all(16),
           child: _loading
@@ -453,6 +444,17 @@ class _ProductionOrderDetailPageState extends State<ProductionOrderDetailPage> {
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    KeyedSubtree(
+                      key: const ValueKey(
+                        'production-order-detail-page-header',
+                      ),
+                      child: MesDetailPageHeader(
+                        title: '订单详情 - ${detail.order.orderCode}',
+                        onBack: () =>
+                            Navigator.of(context).pop(_needsRefreshOnPop),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     _buildActionBar(detail.order),
                     const SizedBox(height: 12),
                     MesSectionCard(

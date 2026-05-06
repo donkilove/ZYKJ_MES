@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_detail_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_error_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_inline_banner.dart';
@@ -183,9 +184,7 @@ class _EquipmentDetailPageState extends State<EquipmentDetailPage> {
                   color: const Color(0xFFFFEDD5),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Text(
-                  '当前详情仅展示你在计划、执行与记录范围内可见的数据，不能替代全量排程复核。',
-                ),
+                child: const Text('当前详情仅展示你在计划、执行与记录范围内可见的数据，不能替代全量排程复核。'),
               ),
             Wrap(
               spacing: 8,
@@ -285,7 +284,9 @@ class _EquipmentDetailPageState extends State<EquipmentDetailPage> {
                 for (final plan in detail.activePlans)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text('${plan.itemName} / ${plan.executionProcessName}'),
+                    title: Text(
+                      '${plan.itemName} / ${plan.executionProcessName}',
+                    ),
                     subtitle: Text(
                       '下次到期：${_formatDate(plan.nextDueDate)}｜默认执行人：${plan.defaultExecutorUsername ?? '-'}',
                     ),
@@ -375,7 +376,6 @@ class _EquipmentDetailPageState extends State<EquipmentDetailPage> {
   Widget build(BuildContext context) {
     final detail = _detail;
     return Scaffold(
-      appBar: AppBar(title: Text('设备详情 #${widget.equipmentId}')),
       body: _loading
           ? const MesLoadingState(label: '设备详情加载中...')
           : detail == null
@@ -387,6 +387,13 @@ class _EquipmentDetailPageState extends State<EquipmentDetailPage> {
               controller: _scrollController,
               padding: const EdgeInsets.all(16),
               children: [
+                KeyedSubtree(
+                  key: const ValueKey('equipment-detail-page-header'),
+                  child: MesDetailPageHeader(
+                    title: '设备详情 #${widget.equipmentId}',
+                  ),
+                ),
+                const SizedBox(height: 16),
                 _buildRiskOverview(detail),
                 const SizedBox(height: 16),
                 if (_message.isNotEmpty) ...[

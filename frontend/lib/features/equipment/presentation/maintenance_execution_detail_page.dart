@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_detail_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
@@ -136,10 +137,7 @@ class _MaintenanceExecutionDetailPageState
           _row('设备', detail.equipmentName),
           _row('来源计划', _nonEmptyOrDash(detail.sourcePlanSummary)),
           _row('设备快照', _nonEmptyOrDash(detail.sourceEquipmentName)),
-          _row(
-            '执行工段快照',
-            _nonEmptyOrDash(detail.sourceExecutionProcessCode),
-          ),
+          _row('执行工段快照', _nonEmptyOrDash(detail.sourceExecutionProcessCode)),
           if ((detail.sourceEquipmentCode ?? '').trim().isNotEmpty)
             _row('设备编号', detail.sourceEquipmentCode!),
           _row('项目', detail.itemName),
@@ -191,7 +189,6 @@ class _MaintenanceExecutionDetailPageState
   Widget build(BuildContext context) {
     final detail = _detail;
     return Scaffold(
-      appBar: AppBar(title: Text('保养执行详情 #${widget.workOrderId}')),
       body: _loading
           ? const MesLoadingState(label: '保养执行详情加载中...')
           : detail == null
@@ -203,7 +200,18 @@ class _MaintenanceExecutionDetailPageState
             )
           : ListView(
               padding: const EdgeInsets.all(16),
-              children: [_buildDetailCard(detail)],
+              children: [
+                KeyedSubtree(
+                  key: const ValueKey(
+                    'maintenance-execution-detail-page-header',
+                  ),
+                  child: MesDetailPageHeader(
+                    title: '保养执行详情 #${widget.workOrderId}',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _buildDetailCard(detail),
+              ],
             ),
     );
   }

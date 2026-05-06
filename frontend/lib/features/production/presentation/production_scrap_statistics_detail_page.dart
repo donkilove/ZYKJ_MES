@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_detail_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_error_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
@@ -128,7 +129,6 @@ class _ProductionScrapStatisticsDetailPageState
     final detail = _detail;
     final title = widget.orderCode ?? detail?.orderCode ?? '#${widget.scrapId}';
     return Scaffold(
-      appBar: AppBar(title: Text('报废详情 - $title')),
       body: _loading
           ? const MesLoadingState(label: '报废详情加载中...')
           : detail == null
@@ -140,6 +140,11 @@ class _ProductionScrapStatisticsDetailPageState
               padding: const EdgeInsets.all(16),
               child: ListView(
                 children: [
+                  KeyedSubtree(
+                    key: const ValueKey('production-scrap-detail-page-header'),
+                    child: MesDetailPageHeader(title: '报废详情 - $title'),
+                  ),
+                  const SizedBox(height: 16),
                   MesSectionCard(
                     title: '基础信息',
                     child: Column(
@@ -152,7 +157,10 @@ class _ProductionScrapStatisticsDetailPageState
                         _detailRow('报废原因', detail.scrapReason),
                         _detailRow('报废数量', '${detail.scrapQuantity}'),
                         _detailRow('进度', scrapProgressLabel(detail.progress)),
-                        _detailRow('最近报废时间', _formatDateTime(detail.lastScrapTime)),
+                        _detailRow(
+                          '最近报废时间',
+                          _formatDateTime(detail.lastScrapTime),
+                        ),
                         _detailRow('申请时间', _formatDateTime(detail.appliedAt)),
                         _detailRow('创建时间', _formatDateTime(detail.createdAt)),
                       ],
@@ -165,17 +173,19 @@ class _ProductionScrapStatisticsDetailPageState
                         ? const MesEmptyState(title: '暂无关联维修工单')
                         : Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            children: detail.relatedRepairOrders.map(
-                              (repair) => ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                title: Text(repair.repairOrderCode),
-                                subtitle: Text(
-                                  '${repairOrderStatusLabel(repair.status)} | 送修:${repair.repairQuantity} 已修:${repair.repairedQuantity} 报废:${repair.scrapQuantity}\n${_formatDateTime(repair.repairTime)}',
-                                ),
-                                trailing: const Icon(Icons.chevron_right),
-                                onTap: () => _openRepairDetail(repair),
-                              ),
-                            ).toList(),
+                            children: detail.relatedRepairOrders
+                                .map(
+                                  (repair) => ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    title: Text(repair.repairOrderCode),
+                                    subtitle: Text(
+                                      '${repairOrderStatusLabel(repair.status)} | 送修:${repair.repairQuantity} 已修:${repair.repairedQuantity} 报废:${repair.scrapQuantity}\n${_formatDateTime(repair.repairTime)}',
+                                    ),
+                                    trailing: const Icon(Icons.chevron_right),
+                                    onTap: () => _openRepairDetail(repair),
+                                  ),
+                                )
+                                .toList(),
                           ),
                   ),
                   const SizedBox(height: 16),
@@ -185,19 +195,21 @@ class _ProductionScrapStatisticsDetailPageState
                         ? const MesEmptyState(title: '暂无相关日志')
                         : Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            children: detail.relatedEventLogs.map(
-                              (event) => Padding(
-                                padding: const EdgeInsets.only(bottom: 6),
-                                child: Text(
-                                  '${_formatDateTime(event.createdAt)} | ${event.eventTitle}'
-                                  '${(event.eventDetail ?? '').trim().isEmpty ? '' : ' | ${event.eventDetail!.trim()}'}'
-                                  '${(event.orderCode ?? '').trim().isEmpty ? '' : ' | ${event.orderCode}'}'
-                                  '${(event.processCode ?? '').trim().isEmpty ? '' : ' | ${event.processCode}'}'
-                                  '${(event.orderStatus ?? '').trim().isEmpty ? '' : ' | ${event.orderStatus}'}'
-                                  '${(event.payloadJson ?? '').trim().isEmpty ? '' : '\n载荷：${event.payloadJson!.trim()}'}',
-                                ),
-                              ),
-                            ).toList(),
+                            children: detail.relatedEventLogs
+                                .map(
+                                  (event) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 6),
+                                    child: Text(
+                                      '${_formatDateTime(event.createdAt)} | ${event.eventTitle}'
+                                      '${(event.eventDetail ?? '').trim().isEmpty ? '' : ' | ${event.eventDetail!.trim()}'}'
+                                      '${(event.orderCode ?? '').trim().isEmpty ? '' : ' | ${event.orderCode}'}'
+                                      '${(event.processCode ?? '').trim().isEmpty ? '' : ' | ${event.processCode}'}'
+                                      '${(event.orderStatus ?? '').trim().isEmpty ? '' : ' | ${event.orderStatus}'}'
+                                      '${(event.payloadJson ?? '').trim().isEmpty ? '' : '\n载荷：${event.payloadJson!.trim()}'}',
+                                    ),
+                                  ),
+                                )
+                                .toList(),
                           ),
                   ),
                 ],

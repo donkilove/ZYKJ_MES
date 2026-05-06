@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/ui/patterns/mes_filter_bar.dart';
 import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
+import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
@@ -467,6 +468,13 @@ void main() {
       await tester.pump(const Duration(milliseconds: 200));
 
       expect(find.text('维修详情 - RW-1'), findsOneWidget);
+      expect(
+        find.byKey(
+          const ValueKey('production-repair-order-detail-page-header'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byType(MesPageHeader), findsOneWidget);
       expect(find.textContaining('毛刺'), findsWidgets);
       await tester.drag(find.byType(ListView), const Offset(0, -300));
       await tester.pumpAndSettle();
@@ -493,6 +501,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.text('报废详情 - PO-1'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('production-scrap-detail-page-header')),
+      findsOneWidget,
+    );
+    expect(find.byType(MesPageHeader), findsOneWidget);
     expect(find.text('刀具磨损'), findsOneWidget);
     expect(find.text('关联维修工单'), findsOneWidget);
     expect(find.text('RW-1'), findsOneWidget);

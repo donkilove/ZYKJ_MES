@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_detail_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_error_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
@@ -112,7 +113,8 @@ class _ProductionRepairOrderDetailPageState
     if (item.productionRecordId != null) {
       parts.add('报工记录#${item.productionRecordId}');
     }
-    if (item.productionRecordType != null && item.productionRecordType!.trim().isNotEmpty) {
+    if (item.productionRecordType != null &&
+        item.productionRecordType!.trim().isNotEmpty) {
       parts.add('类型${item.productionRecordType}');
     }
     if (item.productionRecordQuantity != null) {
@@ -135,7 +137,6 @@ class _ProductionRepairOrderDetailPageState
         detail?.repairOrderCode ??
         '#${widget.repairOrderId}';
     return Scaffold(
-      appBar: AppBar(title: Text('维修详情 - $title')),
       body: _loading
           ? const MesLoadingState(label: '维修详情加载中...')
           : detail == null
@@ -147,6 +148,13 @@ class _ProductionRepairOrderDetailPageState
               padding: const EdgeInsets.all(16),
               child: ListView(
                 children: [
+                  KeyedSubtree(
+                    key: const ValueKey(
+                      'production-repair-order-detail-page-header',
+                    ),
+                    child: MesDetailPageHeader(title: '维修详情 - $title'),
+                  ),
+                  const SizedBox(height: 16),
                   MesSectionCard(
                     title: '基础信息',
                     child: Column(
@@ -175,16 +183,18 @@ class _ProductionRepairOrderDetailPageState
                       title: '缺陷现象',
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: detail.defectRows.map(
-                          (item) => Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Text(
-                              _defectTraceText(item).isEmpty
-                                  ? '• ${item.phenomenon}（${item.quantity}件）'
-                                  : '• ${item.phenomenon}（${item.quantity}件）\n  关联${_defectTraceText(item)}',
-                            ),
-                          ),
-                        ).toList(),
+                        children: detail.defectRows
+                            .map(
+                              (item) => Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: Text(
+                                  _defectTraceText(item).isEmpty
+                                      ? '• ${item.phenomenon}（${item.quantity}件）'
+                                      : '• ${item.phenomenon}（${item.quantity}件）\n  关联${_defectTraceText(item)}',
+                                ),
+                              ),
+                            )
+                            .toList(),
                       ),
                     ),
                   ],
@@ -194,14 +204,16 @@ class _ProductionRepairOrderDetailPageState
                       title: '维修原因',
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: detail.causeRows.map(
-                          (item) => Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Text(
-                              '• ${item.phenomenon} → ${item.reason}（${item.quantity}件${item.isScrap ? '，报废' : ''}）',
-                            ),
-                          ),
-                        ).toList(),
+                        children: detail.causeRows
+                            .map(
+                              (item) => Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: Text(
+                                  '• ${item.phenomenon} → ${item.reason}（${item.quantity}件${item.isScrap ? '，报废' : ''}）',
+                                ),
+                              ),
+                            )
+                            .toList(),
                       ),
                     ),
                   ],
@@ -211,14 +223,16 @@ class _ProductionRepairOrderDetailPageState
                       title: '回流分配',
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: detail.returnRoutes.map(
-                          (item) => Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Text(
-                              '• ${item.targetProcessName}（${item.returnQuantity}件）',
-                            ),
-                          ),
-                        ).toList(),
+                        children: detail.returnRoutes
+                            .map(
+                              (item) => Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: Text(
+                                  '• ${item.targetProcessName}（${item.returnQuantity}件）',
+                                ),
+                              ),
+                            )
+                            .toList(),
                       ),
                     ),
                   ],
@@ -228,19 +242,21 @@ class _ProductionRepairOrderDetailPageState
                       title: '相关事件记录',
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: detail.eventLogs.map(
-                          (item) => Padding(
-                            padding: const EdgeInsets.only(bottom: 6),
-                            child: Text(
-                              '• ${_formatDateTime(item.createdAt)} | ${item.eventTitle}'
-                              '${(item.eventDetail ?? '').trim().isEmpty ? '' : ' | ${item.eventDetail}'}'
-                              '${(item.orderCode ?? '').trim().isEmpty ? '' : ' | ${item.orderCode}'}'
-                              '${(item.processCode ?? '').trim().isEmpty ? '' : ' | ${item.processCode}'}'
-                              '${(item.orderStatus ?? '').trim().isEmpty ? '' : ' | ${item.orderStatus}'}'
-                              '${(item.payloadJson ?? '').trim().isEmpty ? '' : '\n  载荷：${item.payloadJson}'}',
-                            ),
-                          ),
-                        ).toList(),
+                        children: detail.eventLogs
+                            .map(
+                              (item) => Padding(
+                                padding: const EdgeInsets.only(bottom: 6),
+                                child: Text(
+                                  '• ${_formatDateTime(item.createdAt)} | ${item.eventTitle}'
+                                  '${(item.eventDetail ?? '').trim().isEmpty ? '' : ' | ${item.eventDetail}'}'
+                                  '${(item.orderCode ?? '').trim().isEmpty ? '' : ' | ${item.orderCode}'}'
+                                  '${(item.processCode ?? '').trim().isEmpty ? '' : ' | ${item.processCode}'}'
+                                  '${(item.orderStatus ?? '').trim().isEmpty ? '' : ' | ${item.orderStatus}'}'
+                                  '${(item.payloadJson ?? '').trim().isEmpty ? '' : '\n  载荷：${item.payloadJson}'}',
+                                ),
+                              ),
+                            )
+                            .toList(),
                       ),
                     ),
                   ],
