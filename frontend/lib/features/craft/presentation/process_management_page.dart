@@ -674,24 +674,15 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
       header: ProcessManagementPageHeader(
         loading: _viewState.loading,
         canWrite: widget.canWrite,
+        activeView: _viewState.activeView,
+        onViewChanged: _pageState.setActiveView,
         onRefresh: _loadData,
         onCreateStage: _showStageDialog,
         onCreateProcess: _showProcessDialog,
       ),
-      filters: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ProcessManagementFeedbackBanner(
-            message: _viewState.message,
-            jumpNotice: _viewState.jumpNotice,
-          ),
-          const SizedBox(height: 12),
-          ProcessManagementViewSwitch(
-            activeView: _viewState.activeView,
-            onChanged: _pageState.setActiveView,
-          ),
-        ],
+      filters: ProcessManagementFeedbackBanner(
+        message: _viewState.message,
+        jumpNotice: _viewState.jumpNotice,
       ),
       content: _viewState.loading
           ? const MesLoadingState(label: '工艺视图加载中...')

@@ -7,11 +7,13 @@ class MesPageHeader extends StatelessWidget {
     super.key,
     this.title,
     this.subtitle,
+    this.actionsBeforeTitle = const <Widget>[],
     this.actions = const <Widget>[],
   });
 
   final String? title;
   final String? subtitle;
+  final List<Widget> actionsBeforeTitle;
   final List<Widget> actions;
 
   @override
@@ -20,11 +22,21 @@ class MesPageHeader extends StatelessWidget {
     final tokens = theme.extension<MesTokens>();
     final hasTitle = (title ?? '').trim().isNotEmpty;
     final hasSubtitle = (subtitle ?? '').trim().isNotEmpty;
+    final hasLeadActions = actionsBeforeTitle.isNotEmpty;
     return Row(
       crossAxisAlignment: hasTitle || hasSubtitle
           ? CrossAxisAlignment.start
           : CrossAxisAlignment.center,
       children: [
+        if (hasLeadActions) ...[
+          Wrap(
+            spacing: tokens?.spacing.sm ?? 12,
+            runSpacing: tokens?.spacing.sm ?? 12,
+            children: actionsBeforeTitle,
+          ),
+          if (hasTitle || hasSubtitle)
+            MesGap.horizontal(tokens?.spacing.md ?? 16),
+        ],
         if (hasTitle || hasSubtitle)
           Expanded(
             child: Column(

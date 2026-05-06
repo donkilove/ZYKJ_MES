@@ -3,11 +3,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
-import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/craft/presentation/process_management_page.dart';
 import 'package:mes_client/features/craft/presentation/widgets/process_item_panel.dart';
+import 'package:mes_client/features/craft/presentation/widgets/process_management_page_header.dart';
 import 'package:mes_client/features/craft/presentation/widgets/process_management_models.dart';
 import 'package:mes_client/features/craft/presentation/widgets/process_stage_panel.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
@@ -311,7 +311,7 @@ void main() {
     await _pumpProcessManagementPage(tester, size: const Size(1400, 1200));
 
     expect(tester.takeException(), isNull);
-    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.byType(ProcessManagementPageHeader), findsOneWidget);
     expect(find.text('统一维护工段、小工序及 jump 定位工作台。'), findsNothing);
     expect(find.byTooltip('刷新'), findsOneWidget);
     expect(
@@ -320,6 +320,13 @@ void main() {
     );
     expect(
       find.byKey(const ValueKey('process-management-view-switch')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(ProcessManagementPageHeader),
+        matching: find.byKey(const ValueKey('process-management-view-switch')),
+      ),
       findsOneWidget,
     );
     expect(find.text('工序列表'), findsNWidgets(2));
@@ -360,6 +367,47 @@ void main() {
       find.byKey(const ValueKey('process-stage-filter-bar')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('页眉左侧展示视图切换，右侧展示新建与刷新操作', (tester) async {
+    await _pumpProcessManagementPage(tester, size: const Size(1600, 1200));
+
+    final header = find.byType(ProcessManagementPageHeader);
+    final viewSwitch = find.byKey(
+      const ValueKey('process-management-view-switch'),
+    );
+    final createStageButton = find.byKey(
+      const ValueKey('process-management-create-stage-button'),
+    );
+    final createProcessButton = find.byKey(
+      const ValueKey('process-management-create-process-button'),
+    );
+    final refreshButton = find.byTooltip('刷新');
+
+    expect(find.descendant(of: header, matching: viewSwitch), findsOneWidget);
+    expect(
+      find.descendant(of: header, matching: createStageButton),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: header, matching: createProcessButton),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: header, matching: refreshButton),
+      findsOneWidget,
+    );
+
+    final switchLeft = tester.getTopLeft(viewSwitch).dx;
+    final createStageLeft = tester.getTopLeft(createStageButton).dx;
+    final switchTop = tester.getTopLeft(viewSwitch).dy;
+    final createStageTop = tester.getTopLeft(createStageButton).dy;
+    final refreshLeft = tester.getTopLeft(refreshButton).dx;
+
+    expect(switchLeft, lessThan(80));
+    expect(createStageLeft - switchLeft, greaterThan(500));
+    expect(refreshLeft, greaterThan(createStageLeft));
+    expect((switchTop - createStageTop).abs(), lessThan(4));
   });
 
   testWidgets('工序列表加载态与空态文案使用统一口径', (tester) async {
