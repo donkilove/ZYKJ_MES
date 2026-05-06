@@ -12,7 +12,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from app.schemas.message import MessageCreateRequest
+from app.schemas.message import AnnouncementManagementItem, MessageCreateRequest
 from app.services import message_service
 
 
@@ -341,6 +341,63 @@ class MessageServiceUnitTest(unittest.TestCase):
         db.flush.assert_called_once()
         write_audit_log.assert_called_once()
 
+    def test_offline_announcement_only_allows_active_announcement(self):
+        announcement = SimpleNamespace(
+            id=18,
+            title="保养停机公告",
+            status="draft",
+            message_type="announcement",
+            source_type="announcement",
+            source_module="message",
+            source_id="1",
+        )
+        operator = SimpleNamespace(id=9)
+        db = MagicMock()
+        db.execute.return_value = _FakeScalarResult(one=announcement)
+
+        with self.assertRaisesRegex(ValueError, "仅生效中的公告允许下线"):
+            message_service.offline_announcement(
+                db,
+                announcement_id=18,
+                operator=operator,
+                reason="手工下线",
+            )
+
+        db.flush.assert_not_called()
+
+    def test_offline_announcement_updates_status_to_offline(self):
+        announcement = SimpleNamespace(
+            id=19,
+            title="系统切换公告",
+            status="active",
+            message_type="announcement",
+            source_type="announcement",
+            source_module="message",
+            source_id="3",
+        )
+        operator = SimpleNamespace(id=5, username="reviewer")
+        db = MagicMock()
+        db.execute.return_value = _FakeScalarResult(one=announcement)
+
+        with patch.object(message_service, "write_audit_log") as write_audit_log:
+            result = message_service.offline_announcement(
+                db,
+                announcement_id=19,
+                operator=operator,
+                reason="公告结束",
+            )
+
+        self.assertEqual(announcement.status, "offline")
+        self.assertEqual(result.message_id, 19)
+        self.assertEqual(result.status, "offline")
+        db.flush.assert_called_once()
+        write_audit_log.assert_called_once()
+        audit_kwargs = write_audit_log.call_args.kwargs
+        self.assertEqual(
+            audit_kwargs["action_code"], "message.announcements.offline"
+        )
+        self.assertIs(audit_kwargs["operator"], operator)
+
     def test_get_message_jump_target_returns_missing_target_for_blank_page(self):
         msg = SimpleNamespace(
             id=17,
@@ -381,6 +438,22 @@ class MessageServiceUnitTest(unittest.TestCase):
 
         self.assertEqual(status_value, "source_unavailable")
         self.assertEqual(inactive_reason, "source_unavailable")
+
+    def test_resolve_message_status_supports_offline_announcement(self):
+        msg = SimpleNamespace(
+            status="offline",
+            expires_at=None,
+            target_page_code=None,
+        )
+
+        status_value, inactive_reason = message_service._resolve_message_status(
+            msg,
+            now=datetime.now(UTC),
+            user_permission_codes=None,
+        )
+
+        self.assertEqual(status_value, "offline")
+        self.assertEqual(inactive_reason, "offline")
 
     def test_retry_failed_message_deliveries_replays_due_records(self):
         recipient = SimpleNamespace(id=5, message_id=21, recipient_user_id=9)
@@ -583,6 +656,67 @@ class MessageServiceUnitTest(unittest.TestCase):
         self.assertEqual(items[0].delivery_status, "pending")
         self.assertFalse(items[0].is_read)
         self.assertEqual(items[0].expires_at, now + timedelta(days=1))
+
+    def test_list_active_announcements_only_returns_active_and_unexpired_items(self):
+        now = datetime.now(UTC)
+        db = MagicMock()
+        db.execute.side_effect = [
+            _FakeScalarResult(one=1),
+            _FakeScalarResult(
+                all_rows=[
+                    SimpleNamespace(
+                        id=61,
+                        message_type="announcement",
+                        priority="important",
+                        title="车间停电通知",
+                        summary="摘要",
+                        content="正文",
+                        source_module="message",
+                        source_type="announcement",
+                        source_code="all",
+                        target_page_code=None,
+                        target_tab_code=None,
+                        target_route_payload_json=None,
+                        status="active",
+                        published_at=now,
+                        expires_at=now + timedelta(hours=2),
+                    )
+                ]
+            ),
+        ]
+
+        items, total = message_service.list_active_announcements(
+            db,
+            page=1,
+            page_size=10,
+            public_only=True,
+            priority=" important ",
+        )
+
+        self.assertEqual(total, 1)
+        self.assertEqual(len(items), 1)
+        self.assertIsInstance(items[0], AnnouncementManagementItem)
+        self.assertEqual(items[0].id, 61)
+        self.assertEqual(items[0].status, "active")
+        self.assertEqual(items[0].source_code, "all")
+        self.assertFalse(hasattr(items[0], "is_read"))
+        self.assertFalse(hasattr(items[0], "delivery_status"))
+        self.assertFalse(hasattr(items[0], "delivery_attempt_count"))
+
+        count_stmt = db.execute.call_args_list[0].args[0]
+        data_stmt = db.execute.call_args_list[1].args[0]
+        count_sql = str(
+            count_stmt.compile(compile_kwargs={"literal_binds": True})
+        )
+        data_sql = str(
+            data_stmt.compile(compile_kwargs={"literal_binds": True})
+        )
+        self.assertIn("msg_message.status = 'active'", count_sql)
+        self.assertIn("msg_message.expires_at IS NULL", count_sql)
+        self.assertIn("msg_message.expires_at >", count_sql)
+        self.assertIn("msg_message.source_code = 'all'", count_sql)
+        self.assertIn("msg_message.priority = 'important'", count_sql)
+        self.assertIn("ORDER BY", data_sql)
 
     def test_get_unread_count_does_not_run_maintenance_by_default(self):
         db = MagicMock()

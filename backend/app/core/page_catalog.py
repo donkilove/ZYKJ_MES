@@ -56,6 +56,7 @@ PAGE_CRAFT_REFERENCE_ANALYSIS = "craft_reference_analysis"
 PAGE_PRODUCT_VERSION_MANAGEMENT = "product_version_management"
 PAGE_MESSAGE = "message"
 PAGE_MESSAGE_CENTER = "message_center"
+PAGE_ANNOUNCEMENT_MANAGEMENT = "announcement_management"
 
 
 PAGE_CATALOG = [
@@ -411,6 +412,14 @@ PAGE_CATALOG = [
         "always_visible": False,
         "sort_order": 81,
     },
+    {
+        "code": PAGE_ANNOUNCEMENT_MANAGEMENT,
+        "name": "公告管理",
+        "page_type": PAGE_TYPE_TAB,
+        "parent_code": PAGE_MESSAGE,
+        "always_visible": False,
+        "sort_order": 82,
+    },
 ]
 
 
@@ -469,6 +478,7 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_CRAFT_REFERENCE_ANALYSIS,
         PAGE_MESSAGE,
         PAGE_MESSAGE_CENTER,
+        PAGE_ANNOUNCEMENT_MANAGEMENT,
     },
     ROLE_PRODUCTION_ADMIN: {
         PAGE_HOME,
@@ -509,6 +519,7 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_CRAFT_REFERENCE_ANALYSIS,
         PAGE_MESSAGE,
         PAGE_MESSAGE_CENTER,
+        PAGE_ANNOUNCEMENT_MANAGEMENT,
     },
     ROLE_QUALITY_ADMIN: {
         PAGE_HOME,
@@ -532,6 +543,7 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_QUALITY_SUPPLIER_MANAGEMENT,
         PAGE_MESSAGE,
         PAGE_MESSAGE_CENTER,
+        PAGE_ANNOUNCEMENT_MANAGEMENT,
     },
     ROLE_OPERATOR: {
         PAGE_HOME,
@@ -544,6 +556,7 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_PRODUCTION_ORDER_QUERY,
         PAGE_MESSAGE,
         PAGE_MESSAGE_CENTER,
+        PAGE_ANNOUNCEMENT_MANAGEMENT,
     },
     ROLE_MAINTENANCE_STAFF: {
         PAGE_HOME,
@@ -554,6 +567,7 @@ DEFAULT_VISIBLE_PAGES_BY_ROLE = {
         PAGE_MAINTENANCE_RECORD,
         PAGE_MESSAGE,
         PAGE_MESSAGE_CENTER,
+        PAGE_ANNOUNCEMENT_MANAGEMENT,
     },
 }
 

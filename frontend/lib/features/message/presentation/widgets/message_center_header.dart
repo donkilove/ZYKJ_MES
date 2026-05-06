@@ -11,7 +11,6 @@ class MessageCenterHeader extends StatelessWidget {
     required this.canPublishAnnouncement,
     required this.onRefresh,
     required this.onMaintenance,
-    required this.onPublishAnnouncement,
     required this.onMarkAllRead,
     required this.onMarkBatchRead,
     required this.batchReadCount,
@@ -23,7 +22,6 @@ class MessageCenterHeader extends StatelessWidget {
   final bool canPublishAnnouncement;
   final VoidCallback onRefresh;
   final VoidCallback onMaintenance;
-  final VoidCallback onPublishAnnouncement;
   final VoidCallback onMarkAllRead;
   final VoidCallback onMarkBatchRead;
   final int batchReadCount;
@@ -56,7 +54,6 @@ class MessageCenterHeader extends StatelessWidget {
           canPublishAnnouncement: canPublishAnnouncement,
           onRefresh: onRefresh,
           onMaintenance: onMaintenance,
-          onPublishAnnouncement: onPublishAnnouncement,
           onMarkAllRead: onMarkAllRead,
           onMarkBatchRead: onMarkBatchRead,
           batchReadCount: batchReadCount,

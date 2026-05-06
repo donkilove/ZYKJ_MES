@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mes_client/core/models/page_catalog_models.dart';
 import 'package:mes_client/core/services/effective_clock.dart';
-import 'package:mes_client/features/message/presentation/message_center_page.dart';
+import 'package:mes_client/features/message/presentation/message_page.dart';
 import 'package:mes_client/features/message/services/message_service.dart';
 import 'package:mes_client/features/plugin_host/models/plugin_catalog_item.dart';
 import 'package:mes_client/features/plugin_host/presentation/plugin_host_controller.dart';
@@ -76,14 +77,14 @@ void main() {
     expect((widget as Text).data, 'override-user-page');
   });
 
-  test('消息模块会透传 refreshTick 与 routePayloadJson', () {
+  test('消息模块会返回 MessagePage 容器并透传页签与刷新参数', () {
     const registry = MainShellPageRegistry();
     final state = MainShellViewState(
       currentUser: buildCurrentUser(),
       authzSnapshot: buildSnapshot(
         visibleSidebarCodes: const ['message'],
         tabCodesByParent: const {
-          'message': ['message_center'],
+          'message': ['message_center', 'announcement_management'],
         },
         moduleItems: [
           buildModuleItem(
@@ -95,9 +96,19 @@ void main() {
           ),
         ],
       ),
-      catalog: buildCatalog(),
+      catalog: [
+        ...buildCatalog(),
+        const PageCatalogItem(
+          code: 'announcement_management',
+          name: '公告管理',
+          pageType: 'tab',
+          parentCode: 'message',
+          alwaysVisible: false,
+          sortOrder: 82,
+        ),
+      ],
       tabCodesByParent: const {
-        'message': ['message_center'],
+        'message': ['message_center', 'announcement_management'],
       },
       menus: const [
         MainShellMenuItem(
@@ -108,6 +119,7 @@ void main() {
       ],
       selectedPageCode: 'message',
       messageRefreshTick: 3,
+      preferredTabCode: 'announcement_management',
       preferredRoutePayloadJson: '{"preset":"todo_only"}',
     );
 
@@ -126,8 +138,13 @@ void main() {
       timeSyncController: timeSyncController,
     );
 
-    expect(widget, isA<MessageCenterPage>());
-    final messagePage = widget as MessageCenterPage;
+    expect(widget, isA<MessagePage>());
+    final messagePage = widget as MessagePage;
+    expect(messagePage.visibleTabCodes, [
+      'message_center',
+      'announcement_management',
+    ]);
+    expect(messagePage.preferredTabCode, 'announcement_management');
     expect(messagePage.refreshTick, 3);
     expect(messagePage.routePayloadJson, '{"preset":"todo_only"}');
     expect(

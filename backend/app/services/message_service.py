@@ -29,6 +29,8 @@ from app.models.role import Role
 from app.models.user import User
 from app.models.user_session import UserSession
 from app.schemas.message import (
+    AnnouncementManagementItem,
+    AnnouncementOfflineResult,
     AnnouncementPublishRequest,
     AnnouncementPublishResult,
     MessageCreateRequest,
@@ -514,6 +516,8 @@ def _resolve_message_status(
 ) -> tuple[str, str | None]:
     if msg.status == "archived":
         return "archived", "archived"
+    if msg.status == "offline":
+        return "offline", "offline"
     if msg.status in {
         _MESSAGE_STATUS_SOURCE_UNAVAILABLE,
         _PUBLIC_MESSAGE_STATUS_SOURCE_UNAVAILABLE,
@@ -600,6 +604,27 @@ def _to_public_announcement_item(msg: Message) -> MessageItem:
     )
 
 
+def _to_announcement_management_item(msg: Message) -> AnnouncementManagementItem:
+    return AnnouncementManagementItem(
+        id=msg.id,
+        message_type=msg.message_type,
+        priority=msg.priority,
+        title=msg.title,
+        summary=msg.summary,
+        content=msg.content,
+        source_module=msg.source_module,
+        source_type=msg.source_type,
+        source_code=msg.source_code,
+        target_page_code=msg.target_page_code,
+        target_tab_code=msg.target_tab_code,
+        target_route_payload_json=msg.target_route_payload_json,
+        status=msg.status,
+        inactive_reason=None,
+        published_at=msg.published_at,
+        expires_at=msg.expires_at,
+    )
+
+
 def _to_detail(
     msg: Message,
     recipient: MessageRecipient,
@@ -664,6 +689,7 @@ def _write_message_state_audit_log(
     previous_status: str,
     current_status: str,
     reason: str,
+    operator: User | None = None,
 ) -> None:
     write_audit_log(
         db,
@@ -672,6 +698,7 @@ def _write_message_state_audit_log(
         target_type="message",
         target_id=str(getattr(message, "id", "")),
         target_name=getattr(message, "title", None),
+        operator=operator,
         before_data={
             "status": previous_status,
             "source_module": getattr(message, "source_module", None),
@@ -820,6 +847,46 @@ def list_public_announcements(
     )
     rows = db.execute(data_stmt).scalars().all()
     items = [_to_public_announcement_item(row) for row in rows]
+    return items, total
+
+
+def list_active_announcements(
+    db: Session,
+    *,
+    page: int,
+    page_size: int,
+    public_only: bool = False,
+    priority: str | None = None,
+) -> tuple[list[AnnouncementManagementItem], int]:
+    now = datetime.now(UTC)
+    filters = [
+        Message.message_type == "announcement",
+        Message.source_type == "announcement",
+        Message.status == "active",
+        or_(Message.expires_at.is_(None), Message.expires_at > now),
+    ]
+    if public_only:
+        filters.append(Message.source_code == "all")
+    normalized_priority = (priority or "").strip().lower()
+    if normalized_priority:
+        filters.append(Message.priority == normalized_priority)
+
+    base_stmt = select(Message).where(*filters)
+    count_stmt = select(func.count()).select_from(base_stmt.subquery())
+    total: int = db.execute(count_stmt).scalar_one()
+
+    priority_order = case(
+        (Message.priority == "urgent", 0),
+        (Message.priority == "important", 1),
+        else_=2,
+    )
+    data_stmt = (
+        base_stmt.order_by(priority_order, Message.published_at.desc(), Message.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    rows = db.execute(data_stmt).scalars().all()
+    items = [_to_announcement_management_item(row) for row in rows]
     return items, total
 
 
@@ -1606,4 +1673,42 @@ def publish_announcement(
     return AnnouncementPublishResult(
         message_id=message.id,
         recipient_count=len(recipient_user_ids),
+    )
+
+
+def offline_announcement(
+    db: Session,
+    *,
+    announcement_id: int,
+    operator: User,
+    reason: str | None = None,
+) -> AnnouncementOfflineResult:
+    announcement = db.execute(
+        select(Message).where(
+            Message.id == announcement_id,
+            Message.message_type == "announcement",
+            Message.source_type == "announcement",
+        )
+    ).scalar_one_or_none()
+    if announcement is None:
+        raise ValueError("公告不存在")
+    if announcement.status != "active":
+        raise ValueError("仅生效中的公告允许下线")
+
+    previous_status = announcement.status
+    announcement.status = "offline"
+    _write_message_state_audit_log(
+        db,
+        message=announcement,
+        action_code="message.announcements.offline",
+        action_name="公告下线",
+        previous_status=previous_status,
+        current_status=announcement.status,
+        reason=(reason or "").strip() or f"announcement_offline_by_{operator.id}",
+        operator=operator,
+    )
+    db.flush()
+    return AnnouncementOfflineResult(
+        message_id=announcement.id,
+        status=announcement.status,
     )

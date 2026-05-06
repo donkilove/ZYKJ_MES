@@ -34,6 +34,25 @@ class MessageItem(BaseModel):
     next_retry_at: datetime | None
 
 
+class AnnouncementManagementItem(BaseModel):
+    id: int
+    message_type: str
+    priority: str
+    title: str
+    summary: str | None
+    content: str | None = None
+    source_module: str | None
+    source_type: str | None
+    source_code: str | None
+    target_page_code: str | None
+    target_tab_code: str | None
+    target_route_payload_json: str | None
+    status: str
+    inactive_reason: str | None = None
+    published_at: datetime | None
+    expires_at: datetime | None = None
+
+
 class MessageListResult(BaseModel):
     items: list[MessageItem]
     total: int
@@ -125,6 +144,11 @@ class AnnouncementPublishRequest(BaseModel):
 class AnnouncementPublishResult(BaseModel):
     message_id: int
     recipient_count: int
+
+
+class AnnouncementOfflineResult(BaseModel):
+    message_id: int
+    status: str
 
 
 class MessageMaintenanceResult(BaseModel):

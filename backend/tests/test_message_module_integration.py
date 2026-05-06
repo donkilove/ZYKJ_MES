@@ -33,11 +33,22 @@ from app.models.registration_request import RegistrationRequest  # noqa: E402
 from app.models.role import Role  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.core.security import get_password_hash  # noqa: E402
+from app.api.v1.endpoints import messages as message_endpoint  # noqa: E402
 from app.api.v1.endpoints.craft import (  # noqa: E402
     _notify_craft_template_published,
 )
 from app.api.v1.endpoints.products import (  # noqa: E402
     _notify_product_version_activated,
+)
+from app.core.authz_catalog import (  # noqa: E402
+    ACTION_PERMISSION_CATALOG,
+    PAGE_PERMISSION_CATALOG,
+)
+from app.core.authz_hierarchy_catalog import FEATURE_DEFINITIONS  # noqa: E402
+from app.core.page_catalog import PAGE_CATALOG  # noqa: E402
+from app.schemas.message import (  # noqa: E402
+    AnnouncementManagementItem,
+    AnnouncementOfflineResult,
 )
 from app.services.message_service import (  # noqa: E402
     _push_message_created_for_recipient,
@@ -45,6 +56,7 @@ from app.services.message_service import (  # noqa: E402
     retry_failed_message_deliveries,
     run_message_maintenance,
 )
+from app.services import authz_service  # noqa: E402
 
 
 class MessageModuleIntegrationTest(unittest.TestCase):
@@ -803,6 +815,165 @@ class MessageModuleIntegrationTest(unittest.TestCase):
         self.assertNotIn("角色公告不应公开", titles)
         self.assertNotIn("定向公告不应公开", titles)
 
+    def test_active_announcements_endpoint_and_offline_endpoint(self) -> None:
+        active_response = self.client.post(
+            "/api/v1/messages/announcements",
+            headers=self._headers(),
+            json={
+                "title": "生效公告",
+                "content": f"{self.case_token} 需要出现在生效列表",
+                "priority": "urgent",
+                "range_type": "all",
+                "role_codes": [],
+                "user_ids": [],
+                "expires_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+            },
+        )
+        self.assertEqual(active_response.status_code, 200, active_response.text)
+        active_message_id = active_response.json()["data"]["message_id"]
+        self.message_ids.append(active_message_id)
+
+        archived_message_id = self._create_message(
+            message_type="announcement",
+            priority="urgent",
+            title="已归档公告",
+            status="archived",
+        )
+        expired_message_id = self._create_message(
+            message_type="announcement",
+            priority="urgent",
+            title="已过期公告",
+            expires_at=datetime.now(UTC) - timedelta(minutes=5),
+        )
+
+        list_response = self.client.get(
+            "/api/v1/messages/announcements/active?page=1&page_size=100",
+            headers=self._headers(),
+        )
+        self.assertEqual(list_response.status_code, 200, list_response.text)
+        payload = list_response.json()["data"]
+        item_by_id = {item["id"]: item for item in payload["items"]}
+        self.assertIn(active_message_id, item_by_id)
+        self.assertEqual(item_by_id[active_message_id]["status"], "active")
+        self.assertEqual(item_by_id[active_message_id]["title"], "生效公告")
+        self.assertNotIn(archived_message_id, item_by_id)
+        self.assertNotIn(expired_message_id, item_by_id)
+
+        offline_response = self.client.post(
+            f"/api/v1/messages/announcements/{active_message_id}/offline",
+            headers=self._headers(),
+        )
+        self.assertEqual(offline_response.status_code, 200, offline_response.text)
+        self.assertEqual(
+            offline_response.json()["data"],
+            {"message_id": active_message_id, "status": "offline"},
+        )
+
+        list_after_offline = self.client.get(
+            "/api/v1/messages/announcements/active?page=1&page_size=100",
+            headers=self._headers(),
+        )
+        self.assertEqual(
+            list_after_offline.status_code, 200, list_after_offline.text
+        )
+        after_item_by_id = {
+            item["id"]: item for item in list_after_offline.json()["data"]["items"]
+        }
+        self.assertNotIn(active_message_id, after_item_by_id)
+
+    def test_message_module_exposes_announcement_management_catalog_and_capability(
+        self,
+    ) -> None:
+        page_by_code = {item["code"]: item for item in PAGE_CATALOG}
+        self.assertIn("announcement_management", page_by_code)
+        self.assertEqual(
+            page_by_code["announcement_management"]["parent_code"],
+            "message",
+        )
+
+        page_permission_by_code = {
+            item.permission_code: item for item in PAGE_PERMISSION_CATALOG
+        }
+        self.assertIn("page.announcement_management.view", page_permission_by_code)
+
+        action_permission_by_code = {
+            item.permission_code: item for item in ACTION_PERMISSION_CATALOG
+        }
+        self.assertIn("message.announcements.view", action_permission_by_code)
+        self.assertIn("message.announcements.offline", action_permission_by_code)
+        self.assertEqual(
+            action_permission_by_code[
+                "message.announcements.view"
+            ].parent_permission_code,
+            "page.announcement_management.view",
+        )
+        self.assertEqual(
+            action_permission_by_code[
+                "message.announcements.offline"
+            ].parent_permission_code,
+            "page.announcement_management.view",
+        )
+
+        feature_by_code = {
+            item.permission_code: item for item in FEATURE_DEFINITIONS
+        }
+        self.assertIn("feature.message.announcement.view", feature_by_code)
+        self.assertIn("feature.message.announcement.offline", feature_by_code)
+        self.assertEqual(
+            feature_by_code["feature.message.announcement.view"].page_code,
+            "announcement_management",
+        )
+        self.assertEqual(
+            set(
+                feature_by_code[
+                    "feature.message.announcement.view"
+                ].action_permission_codes
+            ),
+            {"message.announcements.view"},
+        )
+        self.assertEqual(
+            set(
+                feature_by_code[
+                    "feature.message.announcement.offline"
+                ].action_permission_codes
+            ),
+            {"message.announcements.offline"},
+        )
+        self.assertEqual(
+            feature_by_code[
+                "feature.message.announcement.offline"
+            ].dependency_permission_codes,
+            ("feature.message.announcement.view",),
+        )
+
+        db = SessionLocal()
+        try:
+            with patch.object(authz_service, "_ensure_authz_defaults_once"):
+                catalog = authz_service.get_capability_pack_catalog(
+                    db,
+                    module_code="message",
+                )
+        finally:
+            db.close()
+
+        capability_by_code = {
+            item["capability_code"]: item for item in catalog["capability_packs"]
+        }
+        self.assertIn("feature.message.announcement.view", capability_by_code)
+        self.assertIn("feature.message.announcement.offline", capability_by_code)
+        self.assertEqual(
+            capability_by_code["feature.message.announcement.view"]["page_code"],
+            "announcement_management",
+        )
+        self.assertEqual(
+            capability_by_code["feature.message.announcement.view"]["page_name"],
+            "公告管理",
+        )
+        self.assertEqual(
+            capability_by_code["feature.message.announcement.offline"]["group_name"],
+            "公告管理",
+        )
+
     def test_registration_approval_message_targets_change_password_section(
         self,
     ) -> None:
@@ -1252,6 +1423,175 @@ class MessageModuleIntegrationTest(unittest.TestCase):
 
         self.assertEqual(updated_status, "src_unavailable")
         self.assertGreaterEqual(stats["source_unavailable_updated"], 1)
+
+
+class MessageAnnouncementContractTest(unittest.TestCase):
+    def test_active_announcement_endpoint_calls_service_and_wraps_response(self) -> None:
+        expected_item = AnnouncementManagementItem(
+            id=101,
+            message_type="announcement",
+            priority="important",
+            title="公告 A",
+            summary="摘要",
+            content="正文",
+            source_module="message",
+            source_type="announcement",
+            source_code="all",
+            target_page_code=None,
+            target_tab_code=None,
+            target_route_payload_json=None,
+            status="active",
+            inactive_reason=None,
+            published_at=datetime.now(UTC),
+            expires_at=None,
+        )
+
+        with patch.object(
+            message_endpoint,
+            "list_active_announcements",
+            return_value=([expected_item], 1),
+            create=True,
+        ) as mocked_list:
+            response = message_endpoint.api_list_active_announcements(
+                page=2,
+                page_size=5,
+                priority="important",
+                db=MagicMock(),
+                current_user=SimpleNamespace(id=1),
+            )
+
+        mocked_list.assert_called_once()
+        self.assertEqual(response.code, 0)
+        self.assertEqual(response.data.total, 1)
+        self.assertEqual(response.data.page, 2)
+        self.assertEqual(response.data.page_size, 5)
+        self.assertEqual(response.data.items[0].id, 101)
+        self.assertEqual(response.data.items[0].title, "公告 A")
+
+    def test_offline_announcement_endpoint_calls_service_and_wraps_response(self) -> None:
+        expected_result = AnnouncementOfflineResult(message_id=101, status="offline")
+        db = MagicMock()
+
+        with (
+            patch.object(
+                message_endpoint,
+                "offline_announcement",
+                return_value=expected_result,
+                create=True,
+            ) as mocked_offline,
+        ):
+            response = message_endpoint.api_offline_announcement(
+                message_id=101,
+                db=db,
+                current_user=SimpleNamespace(id=1, username="admin"),
+            )
+
+        mocked_offline.assert_called_once()
+        db.commit.assert_called_once()
+        self.assertEqual(response.code, 0)
+        self.assertEqual(response.data.message_id, 101)
+        self.assertEqual(response.data.status, "offline")
+
+    def test_message_module_exposes_announcement_management_catalog_contract(
+        self,
+    ) -> None:
+        page_by_code = {item["code"]: item for item in PAGE_CATALOG}
+        self.assertIn("announcement_management", page_by_code)
+        self.assertEqual(
+            page_by_code["announcement_management"]["parent_code"],
+            "message",
+        )
+
+        page_permission_by_code = {
+            item.permission_code: item for item in PAGE_PERMISSION_CATALOG
+        }
+        self.assertIn("page.announcement_management.view", page_permission_by_code)
+
+        action_permission_by_code = {
+            item.permission_code: item for item in ACTION_PERMISSION_CATALOG
+        }
+        self.assertIn("message.announcements.view", action_permission_by_code)
+        self.assertIn("message.announcements.offline", action_permission_by_code)
+        self.assertEqual(
+            action_permission_by_code[
+                "message.announcements.view"
+            ].parent_permission_code,
+            "page.announcement_management.view",
+        )
+        self.assertEqual(
+            action_permission_by_code[
+                "message.announcements.offline"
+            ].parent_permission_code,
+            "page.announcement_management.view",
+        )
+
+        feature_by_code = {
+            item.permission_code: item for item in FEATURE_DEFINITIONS
+        }
+        self.assertIn("feature.message.announcement.view", feature_by_code)
+        self.assertIn("feature.message.announcement.offline", feature_by_code)
+        self.assertEqual(
+            feature_by_code["feature.message.announcement.view"].page_code,
+            "announcement_management",
+        )
+        self.assertEqual(
+            set(
+                feature_by_code[
+                    "feature.message.announcement.view"
+                ].action_permission_codes
+            ),
+            {"message.announcements.view"},
+        )
+        self.assertEqual(
+            set(
+                feature_by_code[
+                    "feature.message.announcement.offline"
+                ].action_permission_codes
+            ),
+            {"message.announcements.offline"},
+        )
+        self.assertEqual(
+            feature_by_code[
+                "feature.message.announcement.offline"
+            ].dependency_permission_codes,
+            ("feature.message.announcement.view",),
+        )
+
+        with (
+            patch.object(authz_service, "_ensure_authz_defaults_once"),
+            patch.object(
+                authz_service,
+                "_authz_read_revision_state",
+                return_value=({"message": 1}, "rev-message"),
+            ),
+            patch.object(
+                authz_service,
+                "_normalize_capability_pack_module_code",
+                return_value=("message", ["message"]),
+            ),
+        ):
+            catalog = authz_service.get_capability_pack_catalog(
+                MagicMock(),
+                module_code="message",
+            )
+
+        capability_by_code = {
+            item["capability_code"]: item for item in catalog["capability_packs"]
+        }
+        self.assertIn("feature.message.announcement.view", capability_by_code)
+        self.assertIn("feature.message.announcement.offline", capability_by_code)
+        self.assertEqual(
+            capability_by_code["feature.message.announcement.view"]["page_code"],
+            "announcement_management",
+        )
+        self.assertEqual(
+            capability_by_code["feature.message.announcement.view"]["page_name"],
+            "公告管理",
+        )
+        self.assertEqual(
+            capability_by_code["feature.message.announcement.offline"]["group_name"],
+            "公告管理",
+        )
 
 
 if __name__ == "__main__":

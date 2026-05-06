@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/message/presentation/message_center_page.dart';
+import 'package:mes_client/features/message/presentation/message_page.dart';
 import 'package:mes_client/features/message/services/message_service.dart';
 import 'package:mes_client/features/plugin_host/presentation/plugin_host_controller.dart';
 import 'package:mes_client/features/plugin_host/presentation/plugin_host_page.dart';
@@ -238,18 +239,15 @@ class MainShellPageRegistry {
               );
       case 'message':
         final messageCapabilityCodes = capabilityCodesFor('message');
-        return MessageCenterPage(
+        return MessagePage(
           session: session,
+          visibleTabCodes: tabCodesFor('message'),
+          capabilityCodes: messageCapabilityCodes,
           service: messageService,
           onLogout: onLogout,
-          pollingEnabled: moduleActiveFor('message'),
-          canPublishAnnouncement: messageCapabilityCodes.contains(
-            'feature.message.announcement.publish',
-          ),
-          canViewDetail: messageCapabilityCodes.contains(
-            'feature.message.detail.view',
-          ),
-          canUseJump: true,
+          moduleActive: moduleActiveFor('message'),
+          preferredTabCode: state.preferredTabCode,
+          routePayloadJson: state.preferredRoutePayloadJson,
           refreshTick: state.messageRefreshTick,
           onUnreadCountChanged: onUnreadCountChanged,
           onNavigateToPage: (pageCode, {tabCode, routePayloadJson}) {
@@ -259,7 +257,6 @@ class MainShellPageRegistry {
               routePayloadJson: routePayloadJson,
             );
           },
-          routePayloadJson: state.preferredRoutePayloadJson,
           nowProvider: timeSyncController.effectiveClock.now,
         );
       case softwareSettingsUtilityCode:

@@ -163,6 +163,7 @@ PAGE_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
     ("craft_kanban", "工艺看板", AUTHZ_MODULE_CRAFT, "craft"),
     ("message", "消息模块", AUTHZ_MODULE_MESSAGE, None),
     ("message_center", "消息中心", AUTHZ_MODULE_MESSAGE, "message"),
+    ("announcement_management", "公告管理", AUTHZ_MODULE_MESSAGE, "message"),
 ]
 
 PAGE_PERMISSION_BY_PAGE_CODE: dict[str, str] = {
@@ -1109,6 +1110,18 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
         "发布站内公告",
         AUTHZ_MODULE_MESSAGE,
         "message_center",
+    ),
+    (
+        "message.announcements.view",
+        "查看生效公告",
+        AUTHZ_MODULE_MESSAGE,
+        "announcement_management",
+    ),
+    (
+        "message.announcements.offline",
+        "下线公告",
+        AUTHZ_MODULE_MESSAGE,
+        "announcement_management",
     ),
 ]
 

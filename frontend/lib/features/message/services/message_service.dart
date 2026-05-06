@@ -125,6 +125,41 @@ class MessageService {
     return result.items;
   }
 
+  Future<MessageListResult> getActiveAnnouncements({
+    int page = 1,
+    int pageSize = 20,
+    String? priority,
+  }) async {
+    final params = <String, String>{
+      'page': '$page',
+      'page_size': '$pageSize',
+      if (priority != null && priority.isNotEmpty) 'priority': priority,
+    };
+    final uri = Uri.parse(
+      '$_base/announcements/active',
+    ).replace(queryParameters: params);
+    final resp = await http
+        .get(uri, headers: _headers)
+        .timeout(const Duration(seconds: 30));
+    _checkStatus(resp);
+    final body = jsonDecode(resp.body) as Map<String, dynamic>;
+    return MessageListResult.fromJson(
+      (body['data'] as Map<String, dynamic>?) ?? const {},
+    );
+  }
+
+  Future<AnnouncementOfflineResult> offlineAnnouncement(int messageId) async {
+    final uri = Uri.parse('$_base/announcements/$messageId/offline');
+    final resp = await http
+        .post(uri, headers: _headers)
+        .timeout(const Duration(seconds: 30));
+    _checkStatus(resp);
+    final body = jsonDecode(resp.body) as Map<String, dynamic>;
+    return AnnouncementOfflineResult.fromJson(
+      (body['data'] as Map<String, dynamic>?) ?? const {},
+    );
+  }
+
   Future<void> markRead(int messageId) async {
     final uri = Uri.parse('$_base/$messageId/read');
     final resp = await http

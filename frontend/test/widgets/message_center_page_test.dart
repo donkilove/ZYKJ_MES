@@ -1199,6 +1199,41 @@ void main() {
   });
 
   testWidgets(
+    'message center 页头不再显示发布公告入口',
+    (tester) async {
+      final service = _FakeMessageService();
+
+      await _pumpMessageCenterPage(
+        tester,
+        service: service,
+        canPublishAnnouncement: true,
+      );
+
+      expect(find.text('发布公告'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('announcement-publish-dialog')),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets(
+    'message center 无公告发布权限时继续隐藏执行维护入口',
+    (tester) async {
+      final service = _FakeMessageService();
+
+      await _pumpMessageCenterPage(
+        tester,
+        service: service,
+        canPublishAnnouncement: false,
+      );
+
+      expect(find.text('发布公告'), findsNothing);
+      expect(find.text('执行维护'), findsNothing);
+    },
+  );
+
+  testWidgets(
     'message center supports filters, preview, read actions and jumps',
     (tester) async {
       final service = _FakeMessageService();
@@ -1272,25 +1307,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(service.maintenanceRunCount, 1);
       expect(find.textContaining('维护完成：补偿2条，重试1条'), findsOneWidget);
-
-      await tester.tap(find.text('发布公告'));
-      await tester.pumpAndSettle();
-      expect(
-        find.byKey(const ValueKey('announcement-publish-dialog')),
-        findsOneWidget,
-      );
-      await tester.tap(find.text('指定用户'));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('可选用户 205 人'), findsOneWidget);
-      await tester.enterText(find.widgetWithText(TextField, '标题'), '系统公告');
-      await tester.enterText(find.widgetWithText(TextField, '正文'), '今晚发布公告');
-      await tester.tap(find.text('指定角色'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('系统管理员 (system_admin)'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('确认发布'));
-      await tester.pumpAndSettle();
-      expect(service.publishCount, 1);
 
       await tester.scrollUntilVisible(
         find.byKey(const ValueKey('message-center-tile-1')),
