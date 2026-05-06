@@ -5,11 +5,11 @@ import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
 import 'package:mes_client/features/equipment/presentation/widgets/maintenance_plan_action_dialogs.dart';
 import 'package:mes_client/features/equipment/presentation/widgets/maintenance_plan_form_dialog.dart';
+import 'package:mes_client/features/equipment/presentation/widgets/maintenance_plan_page_header.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
-import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 
@@ -551,10 +551,9 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
     );
 
     return MesCrudPageScaffold(
-      header: MesRefreshPageHeader(
-        onRefresh: _loading
-            ? null
-            : () => _loadAll(page: _page, reloadOptions: true),
+      header: MaintenancePlanPageHeader(
+        loading: _loading,
+        onRefresh: () => _loadAll(page: _page, reloadOptions: true),
       ),
       filters: filtersToolbar,
       banner: _message.isEmpty

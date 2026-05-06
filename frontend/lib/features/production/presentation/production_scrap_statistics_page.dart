@@ -7,13 +7,13 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/production_scrap_statistics_detail_page.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_scrap_statistics_page_header.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 import 'package:mes_client/features/quality/services/repair_scrap_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
-import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 import 'package:mes_client/features/quality/presentation/widgets/quality_workbench_filter_panel.dart';
@@ -488,7 +488,10 @@ class _ProductionScrapStatisticsPageState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return MesCrudPageScaffold(
-      header: MesRefreshPageHeader(onRefresh: _loading ? null : _loadItems),
+      header: ProductionScrapStatisticsPageHeader(
+        loading: _loading,
+        onRefresh: _loadItems,
+      ),
       filters: _buildFilterPanel(),
       banner: _message.isEmpty
           ? _buildSummarySection()

@@ -5,10 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_assist_record_detail_dialog.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_assist_records_page_header.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
-import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
@@ -363,7 +363,10 @@ class _ProductionAssistRecordsPageState
     ];
 
     return MesCrudPageScaffold(
-      header: MesRefreshPageHeader(onRefresh: _loading ? null : _loadRows),
+      header: ProductionAssistRecordsPageHeader(
+        loading: _loading,
+        onRefresh: _loadRows,
+      ),
       filters: filtersToolbar,
       banner: bannerWidgets.isEmpty
           ? null

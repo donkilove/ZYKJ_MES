@@ -7,6 +7,7 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/production_repair_order_detail_page.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_repair_complete_dialog.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_repair_orders_page_header.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_repair_phenomena_summary_dialog.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
@@ -14,7 +15,6 @@ import 'package:mes_client/features/production/services/production_service.dart'
 import 'package:mes_client/features/quality/services/repair_scrap_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
-import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
@@ -552,7 +552,10 @@ class _ProductionRepairOrdersPageState
     final theme = Theme.of(context);
 
     return MesCrudPageScaffold(
-      header: MesRefreshPageHeader(onRefresh: _loading ? null : _loadItems),
+      header: ProductionRepairOrdersPageHeader(
+        loading: _loading,
+        onRefresh: _loadItems,
+      ),
       filters: _buildFilterPanel(),
       banner: _message.isEmpty
           ? _buildSummarySection()
