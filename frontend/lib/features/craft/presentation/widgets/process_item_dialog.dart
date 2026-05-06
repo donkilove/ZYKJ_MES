@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
@@ -8,11 +10,15 @@ class ProcessItemDialog extends StatefulWidget {
     super.key,
     this.existing,
     required this.stages,
+    this.initialCodeSuffix,
+    this.resolveNextCodeSuffix,
     required this.onSubmit,
   });
 
   final CraftProcessItem? existing;
   final List<CraftStageItem> stages;
+  final String? initialCodeSuffix;
+  final Future<String?> Function(int stageId)? resolveNextCodeSuffix;
   final Future<void> Function({
     required String codeSuffix,
     required String name,
@@ -34,27 +40,34 @@ class _ProcessItemDialogState extends State<ProcessItemDialog> {
   late bool _isEnabled;
   bool _submitting = false;
   bool _legacyCodeInvalid = false;
+  String? _errorMessage;
+  int _nextCodeRequestId = 0;
   final _formKey = GlobalKey<FormState>();
 
   @override
   void initState() {
     super.initState();
     _stageId = widget.existing?.stageId ?? widget.stages.first.id;
-    final initialSerial = _buildInitialSerial();
+    final initialSerial = _buildInitialSerial(_stageId);
     _legacyCodeInvalid = widget.existing != null && initialSerial.isEmpty;
     _codeSuffixController = TextEditingController(text: initialSerial);
     _nameController = TextEditingController(text: widget.existing?.name ?? '');
-    _remarkController = TextEditingController(text: widget.existing?.remark ?? '');
+    _remarkController = TextEditingController(
+      text: widget.existing?.remark ?? '',
+    );
     _isEnabled = widget.existing?.isEnabled ?? true;
+    if (widget.existing == null && initialSerial.isEmpty) {
+      unawaited(_prefillNextCodeSuffix(stageId: _stageId));
+    }
   }
 
-  String _buildInitialSerial() {
+  String _buildInitialSerial(int stageId) {
     final existing = widget.existing;
     if (existing == null) {
-      return '';
+      return widget.initialCodeSuffix ?? '';
     }
     final stage = widget.stages.firstWhere(
-      (item) => item.id == existing.stageId,
+      (item) => item.id == stageId,
       orElse: () => widget.stages.first,
     );
     final prefix = '${stage.code}-';
@@ -80,17 +93,81 @@ class _ProcessItemDialogState extends State<ProcessItemDialog> {
     if (!_formKey.currentState!.validate()) {
       return;
     }
-    setState(() => _submitting = true);
-    await widget.onSubmit(
-      codeSuffix: _codeSuffixController.text.trim(),
-      name: _nameController.text.trim(),
-      stageId: _stageId,
-      remark: _remarkController.text.trim(),
-      isEnabled: _isEnabled,
-    );
-    if (mounted) {
-      Navigator.of(context).pop(true);
+    setState(() {
+      _submitting = true;
+      _errorMessage = null;
+    });
+    try {
+      await widget.onSubmit(
+        codeSuffix: _codeSuffixController.text.trim(),
+        name: _nameController.text.trim(),
+        stageId: _stageId,
+        remark: _remarkController.text.trim(),
+        isEnabled: _isEnabled,
+      );
+      if (mounted) {
+        Navigator.of(context).pop(true);
+      }
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      final resolvedMessage = await _resolveSubmitErrorMessage(error);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _submitting = false;
+        _errorMessage = resolvedMessage;
+      });
     }
+  }
+
+  Future<String> _resolveSubmitErrorMessage(Object error) async {
+    final text = error.toString().trim();
+    if (widget.existing == null &&
+        text.contains('Process code already exists')) {
+      final nextSuffix = await _loadNextCodeSuffix(stageId: _stageId);
+      if (nextSuffix != null) {
+        _applyCodeSuffix(nextSuffix);
+        return '当前工序编码已存在，已自动匹配到下一个可用序号 $nextSuffix。';
+      }
+      return '当前工序编码已存在，请更换其他序号。';
+    }
+    return text;
+  }
+
+  Future<void> _prefillNextCodeSuffix({
+    required int stageId,
+    bool force = false,
+  }) async {
+    final requestId = ++_nextCodeRequestId;
+    final nextSuffix = await _loadNextCodeSuffix(stageId: stageId);
+    if (!mounted || requestId != _nextCodeRequestId || nextSuffix == null) {
+      return;
+    }
+    final current = _codeSuffixController.text.trim();
+    if (!force && current.isNotEmpty) {
+      return;
+    }
+    setState(() {
+      _applyCodeSuffix(nextSuffix);
+    });
+  }
+
+  Future<String?> _loadNextCodeSuffix({required int stageId}) async {
+    final resolver = widget.resolveNextCodeSuffix;
+    if (resolver == null) {
+      return widget.initialCodeSuffix;
+    }
+    return resolver(stageId);
+  }
+
+  void _applyCodeSuffix(String value) {
+    _codeSuffixController.value = TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+    );
   }
 
   @override
@@ -130,9 +207,19 @@ class _ProcessItemDialogState extends State<ProcessItemDialog> {
                   }
                   setState(() {
                     _stageId = value;
-                    _codeSuffixController.clear();
+                    _errorMessage = null;
                     _legacyCodeInvalid = false;
+                    if (widget.existing != null) {
+                      _applyCodeSuffix(_buildInitialSerial(value));
+                    } else {
+                      _codeSuffixController.clear();
+                    }
                   });
+                  if (widget.existing == null) {
+                    unawaited(
+                      _prefillNextCodeSuffix(stageId: value, force: true),
+                    );
+                  }
                 },
               ),
               const SizedBox(height: 12),
@@ -144,7 +231,7 @@ class _ProcessItemDialogState extends State<ProcessItemDialog> {
                   border: OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.number,
-                onChanged: (_) => setState(() {}),
+                onChanged: (_) => setState(() => _errorMessage = null),
                 validator: (value) {
                   final serial = (value ?? '').trim();
                   if (serial.isEmpty) {
@@ -164,6 +251,15 @@ class _ProcessItemDialogState extends State<ProcessItemDialog> {
                 '完整编码预览：$fullCodePreview',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
+              if ((_errorMessage ?? '').isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _errorMessage!,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.red),
+                ),
+              ],
               if (_legacyCodeInvalid) ...[
                 const SizedBox(height: 8),
                 Text(
@@ -180,6 +276,7 @@ class _ProcessItemDialogState extends State<ProcessItemDialog> {
                   labelText: '小工序名称',
                   border: OutlineInputBorder(),
                 ),
+                onChanged: (_) => setState(() => _errorMessage = null),
                 validator: (value) =>
                     value == null || value.trim().isEmpty ? '请输入工序名称' : null,
               ),
@@ -209,7 +306,9 @@ class _ProcessItemDialogState extends State<ProcessItemDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: _submitting ? null : () => Navigator.of(context).pop(false),
+          onPressed: _submitting
+              ? null
+              : () => Navigator.of(context).pop(false),
           child: const Text('取消'),
         ),
         FilledButton(

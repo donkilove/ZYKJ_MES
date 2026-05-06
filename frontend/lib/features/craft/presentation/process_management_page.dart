@@ -184,6 +184,50 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
     return lastPage.items.first.sortOrder + 1;
   }
 
+  String? _nextProcessCodeSuffixFromItems(
+    Iterable<CraftProcessItem> items,
+    String stageCode,
+  ) {
+    final used = <int>{};
+    final prefix = '$stageCode-';
+    for (final item in items) {
+      final code = item.code.trim();
+      if (!code.startsWith(prefix)) {
+        continue;
+      }
+      final serial = code.substring(prefix.length);
+      final number = int.tryParse(serial);
+      if (serial.length == 2 && number != null && number > 0 && number <= 99) {
+        used.add(number);
+      }
+    }
+    for (var candidate = 1; candidate <= 99; candidate += 1) {
+      if (!used.contains(candidate)) {
+        return candidate.toString().padLeft(2, '0');
+      }
+    }
+    return null;
+  }
+
+  Future<String?> _resolveNextProcessCodeSuffix(int stageId) async {
+    final stage = _stageById(stageId);
+    final fallback = _nextProcessCodeSuffixFromItems(
+      _filteredProcesses.where((item) => item.stageId == stageId),
+      stage.code,
+    );
+    try {
+      final result = await _service.listProcesses(
+        page: 1,
+        pageSize: 500,
+        stageId: stageId,
+      );
+      return _nextProcessCodeSuffixFromItems(result.items, stage.code) ??
+          fallback;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
   Future<void> _showStageDialog({CraftStageItem? existing}) async {
     if (!widget.canWrite) {
       _showNoPermission();
@@ -260,6 +304,17 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
       builder: (_) => ProcessItemDialog(
         existing: existing,
         stages: _stages,
+        initialCodeSuffix: existing == null
+            ? _nextProcessCodeSuffixFromItems(
+                _filteredProcesses.where(
+                  (item) => item.stageId == _stages.first.id,
+                ),
+                _stages.first.code,
+              )
+            : null,
+        resolveNextCodeSuffix: existing == null
+            ? _resolveNextProcessCodeSuffix
+            : null,
         onSubmit:
             ({
               required String codeSuffix,

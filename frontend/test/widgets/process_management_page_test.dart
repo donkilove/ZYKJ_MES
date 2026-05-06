@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
@@ -81,6 +82,7 @@ class _FakeCraftService extends CraftService {
   bool? lastUpdatedProcessEnabled;
   CraftProcessItem? lastCreatedProcess;
   int? lastDeletedProcessId;
+  Object? createProcessError;
 
   @override
   Future<CraftStageListResult> listStages({
@@ -163,6 +165,9 @@ class _FakeCraftService extends CraftService {
     String remark = '',
   }) async {
     createProcessCalls += 1;
+    if (createProcessError != null) {
+      throw createProcessError!;
+    }
     final created = CraftProcessItem(
       id: 20,
       code: code,
@@ -620,6 +625,97 @@ void main() {
       craftService.lastCreatedProcess?.id,
     );
     expect(find.text('折弯'), findsNothing);
+  });
+
+  testWidgets('新建工序弹窗默认带出下一个可用序号', (tester) async {
+    final craftService = _FakeCraftService();
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProcessManagementPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canWrite: true,
+            craftService: craftService,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(
+      find.byKey(const ValueKey('process-management-create-process-button')),
+    );
+    await tester.pumpAndSettle();
+
+    final codeField = tester.widget<TextFormField>(
+      find.widgetWithText(TextFormField, '工序编码序号（两位）'),
+    );
+
+    expect(codeField.controller?.text, '02');
+  });
+
+  testWidgets('新建工序编码重复时不会卡死并自动跳到下一个序号', (tester) async {
+    final craftService = _FakeCraftService()
+      ..createProcessError = ApiException('Process code already exists', 400);
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProcessManagementPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canWrite: true,
+            craftService: craftService,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(
+      find.byKey(const ValueKey('process-management-create-process-button')),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '工序编码序号（两位）'),
+      '01',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, '小工序名称'),
+      '重复编码测试',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, '保存'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(tester.takeException(), isNull);
+    expect(find.widgetWithText(FilledButton, '保存'), findsOneWidget);
+    expect(find.textContaining('已自动匹配到下一个可用序号 02'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextFormField>(
+            find.widgetWithText(TextFormField, '工序编码序号（两位）'),
+          )
+          .controller
+          ?.text,
+      '02',
+    );
   });
 
   testWidgets('新建工段弹窗默认带出下一个排序号', (tester) async {
