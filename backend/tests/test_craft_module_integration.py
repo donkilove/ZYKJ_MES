@@ -140,6 +140,13 @@ class CraftModuleIntegrationTest(unittest.TestCase):
         self.stage_ids.append(int(row["id"]))
         return row
 
+    def test_create_stage_auto_assigns_next_sort_order_when_payload_is_zero(self) -> None:
+        first = self._create_stage("AUTOA")
+        second = self._create_stage("AUTOB")
+
+        self.assertGreaterEqual(int(first["sort_order"]), 1)
+        self.assertEqual(int(second["sort_order"]), int(first["sort_order"]) + 1)
+
     def _create_process(self, *, stage_id: int, stage_code: str, suffix: str) -> dict:
         response = self.client.post(
             "/api/v1/craft/processes",

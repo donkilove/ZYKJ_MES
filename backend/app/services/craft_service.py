@@ -296,6 +296,13 @@ def list_stages(
     return int(total), rows
 
 
+def get_next_stage_sort_order(db: Session) -> int:
+    current_max = db.execute(select(func.max(ProcessStage.sort_order))).scalar_one()
+    if current_max is None:
+        return 1
+    return int(current_max) + 1
+
+
 def create_stage(
     db: Session,
     *,
@@ -315,11 +322,14 @@ def create_stage(
     )
     if existing_name:
         raise ValueError("Stage name already exists")
+    normalized_sort_order = (
+        get_next_stage_sort_order(db) if sort_order <= 0 else int(sort_order)
+    )
 
     row = ProcessStage(
         code=normalized_code,
         name=normalized_name,
-        sort_order=sort_order,
+        sort_order=normalized_sort_order,
         is_enabled=True,
         remark=_normalize_remark(remark),
     )

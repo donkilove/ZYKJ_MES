@@ -161,16 +161,53 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
     return _stages.firstWhere((item) => item.id == stageId);
   }
 
+  int get _nextStageSortOrder {
+    if (_stages.isEmpty) {
+      return 1;
+    }
+    final currentMax = _stages
+        .map((item) => item.sortOrder)
+        .reduce((value, element) => value > element ? value : element);
+    return currentMax + 1;
+  }
+
+  Future<int> _resolveNextStageSortOrder() async {
+    final fallback = _nextStageSortOrder;
+    final probe = await _service.listStages(page: 1, pageSize: 1);
+    if (probe.total <= 0 || probe.items.isEmpty) {
+      return 1;
+    }
+    final lastPage = await _service.listStages(page: probe.total, pageSize: 1);
+    if (lastPage.items.isEmpty) {
+      return fallback;
+    }
+    return lastPage.items.first.sortOrder + 1;
+  }
+
   Future<void> _showStageDialog({CraftStageItem? existing}) async {
     if (!widget.canWrite) {
       _showNoPermission();
       return;
     }
 
+    int? initialSortOrder;
+    if (existing == null) {
+      try {
+        initialSortOrder = await _resolveNextStageSortOrder();
+      } catch (error) {
+        if (_isUnauthorized(error)) {
+          widget.onLogout();
+          return;
+        }
+        initialSortOrder = _nextStageSortOrder;
+      }
+    }
+
     final saved = await showDialog<bool>(
       context: context,
       builder: (_) => ProcessStageDialog(
         existing: existing,
+        initialSortOrder: initialSortOrder,
         onSubmit:
             ({
               required String code,

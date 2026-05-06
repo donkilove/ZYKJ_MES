@@ -7,10 +7,12 @@ class ProcessStageDialog extends StatefulWidget {
   const ProcessStageDialog({
     super.key,
     this.existing,
+    this.initialSortOrder,
     required this.onSubmit,
   });
 
   final CraftStageItem? existing;
+  final int? initialSortOrder;
   final Future<void> Function({
     required String code,
     required String name,
@@ -39,9 +41,12 @@ class _ProcessStageDialogState extends State<ProcessStageDialog> {
     _codeController = TextEditingController(text: widget.existing?.code ?? '');
     _nameController = TextEditingController(text: widget.existing?.name ?? '');
     _sortController = TextEditingController(
-      text: (widget.existing?.sortOrder ?? 0).toString(),
+      text: (widget.existing?.sortOrder ?? widget.initialSortOrder ?? 1)
+          .toString(),
     );
-    _remarkController = TextEditingController(text: widget.existing?.remark ?? '');
+    _remarkController = TextEditingController(
+      text: widget.existing?.remark ?? '',
+    );
     _isEnabled = widget.existing?.isEnabled ?? true;
   }
 
@@ -109,7 +114,8 @@ class _ProcessStageDialogState extends State<ProcessStageDialog> {
                   border: OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.number,
-                validator: (value) => value == null || int.tryParse(value.trim()) == null
+                validator: (value) =>
+                    value == null || int.tryParse(value.trim()) == null
                     ? '请输入有效排序'
                     : null,
               ),
@@ -139,7 +145,9 @@ class _ProcessStageDialogState extends State<ProcessStageDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: _submitting ? null : () => Navigator.of(context).pop(false),
+          onPressed: _submitting
+              ? null
+              : () => Navigator.of(context).pop(false),
           child: const Text('取消'),
         ),
         FilledButton(

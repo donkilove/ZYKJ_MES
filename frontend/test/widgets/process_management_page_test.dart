@@ -108,7 +108,9 @@ class _FakeCraftService extends CraftService {
     });
     final start = (page - 1) * pageSize;
     final end = (start + pageSize).clamp(0, items.length);
-    final paged = start >= items.length ? <CraftStageItem>[] : items.sublist(start, end);
+    final paged = start >= items.length
+        ? <CraftStageItem>[]
+        : items.sublist(start, end);
     return CraftStageListResult(total: items.length, items: paged);
   }
 
@@ -147,11 +149,10 @@ class _FakeCraftService extends CraftService {
     });
     final start = (page - 1) * pageSize;
     final end = (start + pageSize).clamp(0, items.length);
-    final paged = start >= items.length ? <CraftProcessItem>[] : items.sublist(start, end);
-    return CraftProcessListResult(
-      total: items.length,
-      items: paged,
-    );
+    final paged = start >= items.length
+        ? <CraftProcessItem>[]
+        : items.sublist(start, end);
+    return CraftProcessListResult(total: items.length, items: paged);
   }
 
   @override
@@ -350,7 +351,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('process-view-switch-stage')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('process-stage-filter-bar')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('process-stage-filter-bar')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('工序列表加载态与空态文案使用统一口径', (tester) async {
@@ -611,8 +615,47 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(craftService.deleteProcessCalls, 1);
-    expect(craftService.lastDeletedProcessId, craftService.lastCreatedProcess?.id);
+    expect(
+      craftService.lastDeletedProcessId,
+      craftService.lastCreatedProcess?.id,
+    );
     expect(find.text('折弯'), findsNothing);
+  });
+
+  testWidgets('新建工段弹窗默认带出下一个排序号', (tester) async {
+    final craftService = _FakeCraftService();
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProcessManagementPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canWrite: true,
+            craftService: craftService,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(
+      find.byKey(const ValueKey('process-management-create-stage-button')),
+    );
+    await tester.pumpAndSettle();
+
+    final sortField = tester.widget<TextFormField>(
+      find.widgetWithText(TextFormField, '排序'),
+    );
+
+    expect(sortField.controller?.text, '22');
   });
 
   testWidgets('工段启停执行前需要确认', (tester) async {
