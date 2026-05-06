@@ -1747,7 +1747,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.text('公告管理'), findsWidgets);
-    expect(find.text('统一查看系统消息、待办与跳转入口。'), findsOneWidget);
+    expect(find.byKey(const ValueKey('message-page-header')), findsNothing);
 
     await tester.tap(find.text('公告管理').last);
     await tester.pump();
