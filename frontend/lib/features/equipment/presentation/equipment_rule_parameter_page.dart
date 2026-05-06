@@ -181,7 +181,7 @@ class _EquipmentRuleParameterPageState extends State<EquipmentRuleParameterPage>
     }
     return MesCrudPageScaffold(
       header: EquipmentRuleParameterPageHeader(
-        loading: _loadingRules || _loadingParameters,
+        loading: false,
         onRefresh: _refreshCurrentTab,
       ),
       filters: Material(
