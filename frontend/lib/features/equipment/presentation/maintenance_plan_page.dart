@@ -552,7 +552,6 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
 
     return MesCrudPageScaffold(
       header: MesRefreshPageHeader(
-        title: '保养计划',
         onRefresh: _loading
             ? null
             : () => _loadAll(page: _page, reloadOptions: true),

@@ -18,7 +18,6 @@ class RegistrationApprovalPageHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MesRefreshPageHeader(
-      title: '注册审批',
       onRefresh: loading ? null : onRefresh,
       actionsBeforeRefresh: [
         SizedBox(

@@ -15,10 +15,7 @@ class ProductManagementPageHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return KeyedSubtree(
       key: const ValueKey('product-management-page-header'),
-      child: MesRefreshPageHeader(
-        title: '产品管理',
-        onRefresh: loading ? null : onRefresh,
-      ),
+      child: MesRefreshPageHeader(onRefresh: loading ? null : onRefresh),
     );
   }
 }

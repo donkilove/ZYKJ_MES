@@ -15,10 +15,7 @@ class FunctionPermissionConfigPageHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return KeyedSubtree(
       key: const ValueKey('function-permission-config-page-header'),
-      child: MesRefreshPageHeader(
-        title: '功能权限配置',
-        onRefresh: loading ? null : onRefresh,
-      ),
+      child: MesRefreshPageHeader(onRefresh: loading ? null : onRefresh),
     );
   }
 }

@@ -253,7 +253,6 @@ void main() {
     );
 
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
-    expect(find.text('注册审批'), findsOneWidget);
     expect(find.byTooltip('刷新'), findsOneWidget);
   });
 
@@ -444,16 +443,10 @@ void main() {
       find.byKey(const ValueKey('registration-approval-reject-button-1')),
     );
     final approveBox = tester.widget<SizedBox>(
-      find.ancestor(
-        of: find.text('通过'),
-        matching: find.byType(SizedBox),
-      ).first,
+      find.ancestor(of: find.text('通过'), matching: find.byType(SizedBox)).first,
     );
     final rejectBox = tester.widget<SizedBox>(
-      find.ancestor(
-        of: find.text('驳回'),
-        matching: find.byType(SizedBox),
-      ).first,
+      find.ancestor(of: find.text('驳回'), matching: find.byType(SizedBox)).first,
     );
 
     expect(approveMaterial.color, Colors.green.shade600);

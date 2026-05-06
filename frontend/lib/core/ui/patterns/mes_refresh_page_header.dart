@@ -6,13 +6,13 @@ import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
 class MesRefreshPageHeader extends StatelessWidget {
   const MesRefreshPageHeader({
     super.key,
-    required this.title,
+    this.title,
     this.subtitle,
     this.onRefresh,
     this.actionsBeforeRefresh = const <Widget>[],
   });
 
-  final String title;
+  final String? title;
   final String? subtitle;
   final VoidCallback? onRefresh;
   final List<Widget> actionsBeforeRefresh;

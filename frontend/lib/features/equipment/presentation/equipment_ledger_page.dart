@@ -407,7 +407,6 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
 
     return MesCrudPageScaffold(
       header: MesRefreshPageHeader(
-        title: '设备台账',
         onRefresh: _loading
             ? null
             : () => _loadItems(page: _page, reloadOwners: widget.canWrite),

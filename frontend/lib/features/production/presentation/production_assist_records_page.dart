@@ -363,10 +363,7 @@ class _ProductionAssistRecordsPageState
     ];
 
     return MesCrudPageScaffold(
-      header: MesRefreshPageHeader(
-        title: '代班记录',
-        onRefresh: _loading ? null : _loadRows,
-      ),
+      header: MesRefreshPageHeader(onRefresh: _loading ? null : _loadRows),
       filters: filtersToolbar,
       banner: bannerWidgets.isEmpty
           ? null

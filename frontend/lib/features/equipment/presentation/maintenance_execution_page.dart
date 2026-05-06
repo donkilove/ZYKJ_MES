@@ -556,7 +556,6 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
 
     return MesCrudPageScaffold(
       header: MesRefreshPageHeader(
-        title: '保养执行',
         onRefresh: _loading ? null : () => _loadItems(page: _page),
       ),
       filters: filtersToolbar,

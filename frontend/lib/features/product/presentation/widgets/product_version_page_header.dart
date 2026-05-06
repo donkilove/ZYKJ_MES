@@ -15,10 +15,7 @@ class ProductVersionPageHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return KeyedSubtree(
       key: const ValueKey('product-version-page-header'),
-      child: MesRefreshPageHeader(
-        title: '版本管理',
-        onRefresh: loading ? null : onRefresh,
-      ),
+      child: MesRefreshPageHeader(onRefresh: loading ? null : onRefresh),
     );
   }
 }

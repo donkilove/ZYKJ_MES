@@ -488,17 +488,17 @@ class _ProductionScrapStatisticsPageState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return MesCrudPageScaffold(
-      header: MesRefreshPageHeader(
-        title: '报废统计',
-        onRefresh: _loading ? null : _loadItems,
-      ),
+      header: MesRefreshPageHeader(onRefresh: _loading ? null : _loadItems),
       filters: _buildFilterPanel(),
       banner: _message.isEmpty
           ? _buildSummarySection()
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_message, style: TextStyle(color: theme.colorScheme.error)),
+                Text(
+                  _message,
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
                 const SizedBox(height: 12),
                 _buildSummarySection(),
               ],

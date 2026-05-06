@@ -252,7 +252,6 @@ void main() {
       ),
     );
 
-    expect(find.text('版本参数管理'), findsOneWidget);
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(find.text('按版本查看、编辑和导出产品参数。'), findsNothing);
     expect(find.byTooltip('刷新'), findsOneWidget);
@@ -344,7 +343,9 @@ void main() {
     expect(find.text('V1.0 / #1'), findsOneWidget);
   });
 
-  testWidgets('ProductParameterManagementPage 列表态与统一页面骨架保持单层边距', (tester) async {
+  testWidgets('ProductParameterManagementPage 列表态与统一页面骨架保持单层边距', (
+    tester,
+  ) async {
     await tester.binding.setSurfaceSize(const Size(1440, 900));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -373,7 +374,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(MesCrudPageScaffold), findsOneWidget);
-    expect(tester.getTopLeft(find.text('版本参数管理')).dx, 16);
+    expect(
+      tester
+          .getTopLeft(
+            find.byKey(const ValueKey('product-parameter-filter-section')),
+          )
+          .dx,
+      16,
+    );
   });
 
   testWidgets('产品参数编辑态展示头部 工具条 表格和底部动作区', (tester) async {

@@ -855,11 +855,15 @@ void main() {
     expect(authzService.loadedCatalogModules, ['user', 'user']);
     expect(find.text('用户管理'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(DropdownButtonFormField<String>, '用户管理'));
+    await tester.tap(
+      find.widgetWithText(DropdownButtonFormField<String>, '用户管理'),
+    );
     await tester.pumpAndSettle();
 
     final modules = tester
-        .widgetList<DropdownMenuItem<String>>(find.byType(DropdownMenuItem<String>))
+        .widgetList<DropdownMenuItem<String>>(
+          find.byType(DropdownMenuItem<String>),
+        )
         .map((item) => ((item.child as Text).data ?? '').trim())
         .where((text) => text.isNotEmpty)
         .fold<List<String>>(<String>[], (result, text) {
@@ -869,10 +873,15 @@ void main() {
           return result;
         });
 
-    expect(
-      modules,
-      const ['用户管理', '产品管理', '工艺管理', '质量管理', '生产管理', '设备管理', '消息中心'],
-    );
+    expect(modules, const [
+      '用户管理',
+      '产品管理',
+      '工艺管理',
+      '质量管理',
+      '生产管理',
+      '设备管理',
+      '消息中心',
+    ]);
 
     authzService.catalogModuleCodes = const ['user', 'system', 'product'];
   });
@@ -1063,7 +1072,7 @@ void main() {
       ),
     );
 
-    expect(find.text('登录会话'), findsOneWidget);
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(find.text('tester'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('login-session-page-header')),

@@ -618,10 +618,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
     return DefaultTabController(
       length: 3,
       child: MesCrudPageScaffold(
-        header: MesRefreshPageHeader(
-          title: '品质数据',
-          onRefresh: _loading ? null : _loadStats,
-        ),
+        header: MesRefreshPageHeader(onRefresh: _loading ? null : _loadStats),
         filters: _buildFilterPanel(theme),
         banner: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -660,7 +657,9 @@ class _QualityDataPageState extends State<QualityDataPage> {
                     child: TabBarView(
                       children: [
                         _buildPaginatedTableSection(
-                          cardKey: const ValueKey('qualityDataProcessTableCard'),
+                          cardKey: const ValueKey(
+                            'qualityDataProcessTableCard',
+                          ),
                           columns: const [
                             DataColumn(label: Text('工序编码')),
                             DataColumn(label: Text('工序名称')),
@@ -690,7 +689,9 @@ class _QualityDataPageState extends State<QualityDataPage> {
                                     DataCell(Text('${item.repairTotal}')),
                                     DataCell(
                                       Text(
-                                        _formatDateTime(item.latestFirstArticleAt),
+                                        _formatDateTime(
+                                          item.latestFirstArticleAt,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -707,7 +708,9 @@ class _QualityDataPageState extends State<QualityDataPage> {
                           emptyText: '暂无工序品质数据',
                         ),
                         _buildPaginatedTableSection(
-                          cardKey: const ValueKey('qualityDataOperatorTableCard'),
+                          cardKey: const ValueKey(
+                            'qualityDataOperatorTableCard',
+                          ),
                           columns: const [
                             DataColumn(label: Text('操作员')),
                             DataColumn(label: Text('首件总数')),
@@ -735,7 +738,9 @@ class _QualityDataPageState extends State<QualityDataPage> {
                                     DataCell(Text('${item.repairTotal}')),
                                     DataCell(
                                       Text(
-                                        _formatDateTime(item.latestFirstArticleAt),
+                                        _formatDateTime(
+                                          item.latestFirstArticleAt,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -752,7 +757,9 @@ class _QualityDataPageState extends State<QualityDataPage> {
                           emptyText: '暂无人员品质数据',
                         ),
                         _buildPaginatedTableSection(
-                          cardKey: const ValueKey('qualityDataProductTableCard'),
+                          cardKey: const ValueKey(
+                            'qualityDataProductTableCard',
+                          ),
                           columns: const [
                             DataColumn(label: Text('产品编码')),
                             DataColumn(label: Text('产品名称')),

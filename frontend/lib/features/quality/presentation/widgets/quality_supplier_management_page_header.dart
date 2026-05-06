@@ -18,7 +18,6 @@ class QualitySupplierManagementPageHeader extends StatelessWidget {
     return KeyedSubtree(
       key: const ValueKey('quality-supplier-management-page-header'),
       child: MesRefreshPageHeader(
-        title: '供应商管理',
         onRefresh: loading ? null : onRefresh,
         actionsBeforeRefresh: [
           FilledButton.icon(

@@ -15,10 +15,7 @@ class AccountSettingsPageHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return KeyedSubtree(
       key: const ValueKey('account-settings-page-header'),
-      child: MesRefreshPageHeader(
-        title: '个人中心',
-        onRefresh: loading ? null : onRefresh,
-      ),
+      child: MesRefreshPageHeader(onRefresh: loading ? null : onRefresh),
     );
   }
 }

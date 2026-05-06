@@ -552,10 +552,7 @@ class _ProductionRepairOrdersPageState
     final theme = Theme.of(context);
 
     return MesCrudPageScaffold(
-      header: MesRefreshPageHeader(
-        title: '维修订单',
-        onRefresh: _loading ? null : _loadItems,
-      ),
+      header: MesRefreshPageHeader(onRefresh: _loading ? null : _loadItems),
       filters: _buildFilterPanel(),
       banner: _message.isEmpty
           ? _buildSummarySection()

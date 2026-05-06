@@ -904,6 +904,10 @@ void main() {
   });
 
   testWidgets('报废统计包装页不再额外嵌套页头', (tester) async {
+    _setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(
       _wrapBody(
         QualityScrapStatisticsPage(
@@ -921,10 +925,13 @@ void main() {
       find.byKey(const ValueKey('quality-scrap-statistics-page-header')),
       findsNothing,
     );
-    expect(find.text('报废统计'), findsOneWidget);
   });
 
   testWidgets('不良分析页接入统一页头锚点', (tester) async {
+    _setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(
       _wrapBody(
         QualityDefectAnalysisPage(
@@ -1034,13 +1041,10 @@ void main() {
       find.byKey(const ValueKey('quality-repair-orders-page-header')),
       findsNothing,
     );
-    expect(find.text('维修订单'), findsOneWidget);
   });
 
   testWidgets('质量维修订单页头组件不再展示副标题', (tester) async {
-    await tester.pumpWidget(
-      _wrapBody(const QualityRepairOrdersPageHeader()),
-    );
+    await tester.pumpWidget(_wrapBody(const QualityRepairOrdersPageHeader()));
 
     await tester.pumpAndSettle();
 

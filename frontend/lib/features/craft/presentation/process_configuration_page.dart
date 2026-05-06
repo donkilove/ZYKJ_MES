@@ -329,9 +329,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       return;
     }
     if (_products.isEmpty || _stages.isEmpty || _processes.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先配置产品、工段和小工序')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请先配置产品、工段和小工序')));
       return;
     }
 
@@ -392,9 +392,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       return;
     }
     if (_stages.isEmpty || _processes.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先配置工段和小工序')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请先配置工段和小工序')));
       return;
     }
 
@@ -425,15 +425,19 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         context: context,
         title: '系统母版历史版本',
         subtitle: '查看工艺母版的演进历史及每个版本的工序构成',
-        versions: result.items.map((e) => TemplateVersionDisplayEntry(
-          version: e.version,
-          action: 'v${e.version} · ${e.action}',
-          note: e.note ?? '',
-          createdBy: e.createdByUsername ?? '未知',
-          createdAt: e.createdAt,
-          steps: e.steps,
-          isCurrent: _systemMasterTemplate?.version == e.version,
-        )).toList(),
+        versions: result.items
+            .map(
+              (e) => TemplateVersionDisplayEntry(
+                version: e.version,
+                action: 'v${e.version} · ${e.action}',
+                note: e.note ?? '',
+                createdBy: e.createdByUsername ?? '未知',
+                createdAt: e.createdAt,
+                steps: e.steps,
+                isCurrent: _systemMasterTemplate?.version == e.version,
+              ),
+            )
+            .toList(),
       );
     } catch (error) {
       if (_isUnauthorized(error)) {
@@ -441,7 +445,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         return;
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
       }
     }
   }
@@ -452,15 +458,15 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       return;
     }
     if (_productFilterId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先选择产品')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请先选择产品')));
       return;
     }
     if (_products.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('暂无可用产品')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('暂无可用产品')));
       return;
     }
 
@@ -640,10 +646,14 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
       return;
     }
     try {
-      final versions = await _craftService.listTemplateVersions(templateId: item.id);
+      final versions = await _craftService.listTemplateVersions(
+        templateId: item.id,
+      );
       if (!mounted) return;
       if (versions.items.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('该模板暂无发布版本记录')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('该模板暂无发布版本记录')));
         return;
       }
 
@@ -659,18 +669,22 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         title: '版本管理 - ${item.templateName}',
         subtitle: subtitle,
         highlightVersion: initialTargetVersion,
-        versions: versions.items.map((e) => TemplateVersionDisplayEntry(
-          version: e.version,
-          action: _templateVersionActionLabel(e),
-          note: e.note?.trim() ?? '',
-          createdBy: e.createdByUsername?.trim().isNotEmpty == true
-              ? e.createdByUsername!.trim()
-              : '未知',
-          createdAt: e.createdAt,
-          steps: const [],
-          isCurrent: item.version == e.version,
-          isPublished: e.action == 'publish' || e.recordType == 'publish',
-        )).toList(),
+        versions: versions.items
+            .map(
+              (e) => TemplateVersionDisplayEntry(
+                version: e.version,
+                action: _templateVersionActionLabel(e),
+                note: e.note?.trim() ?? '',
+                createdBy: e.createdByUsername?.trim().isNotEmpty == true
+                    ? e.createdByUsername!.trim()
+                    : '未知',
+                createdAt: e.createdAt,
+                steps: const [],
+                isCurrent: item.version == e.version,
+                isPublished: e.action == 'publish' || e.recordType == 'publish',
+              ),
+            )
+            .toList(),
       );
     } catch (error) {
       if (_isUnauthorized(error)) {
@@ -678,7 +692,9 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
         return;
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
       }
     }
   }
@@ -1545,17 +1561,12 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     final templates = _filteredTemplates;
 
     return MesCrudPageScaffold(
-      header: MesRefreshPageHeader(
-        title: '生产工序配置',
-        onRefresh: _loading ? null : _loadData,
-      ),
+      header: MesRefreshPageHeader(onRefresh: _loading ? null : _loadData),
       content: LayoutBuilder(
         builder: (context, constraints) {
           return SingleChildScrollView(
             child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minHeight: constraints.maxHeight,
-              ),
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1573,10 +1584,7 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
                             ),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: _buildTemplateWorkspace(
-                                theme,
-                                templates,
-                              ),
+                              child: _buildTemplateWorkspace(theme, templates),
                             ),
                           ],
                         )

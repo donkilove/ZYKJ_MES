@@ -21,7 +21,6 @@ class ProcessManagementPageHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MesRefreshPageHeader(
-      title: '工序管理',
       onRefresh: loading ? null : onRefresh,
       actionsBeforeRefresh: [
         FilledButton.icon(

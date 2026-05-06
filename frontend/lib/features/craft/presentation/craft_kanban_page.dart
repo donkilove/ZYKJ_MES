@@ -144,9 +144,9 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
         widget.onLogout();
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('加载产品失败：${_errorMessage(error)}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('加载产品失败：${_errorMessage(error)}')));
     } finally {
       if (mounted) {
         setState(() {
@@ -191,9 +191,9 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
         widget.onLogout();
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('加载看板失败：${_errorMessage(error)}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('加载看板失败：${_errorMessage(error)}')));
       setState(() {
         _metrics = null;
       });
@@ -341,7 +341,6 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
   Widget _buildHeader() {
     final busy = _loadingProducts || _loadingMetrics || _exporting;
     return MesRefreshPageHeader(
-      title: '工艺看板',
       subtitle: '快速识别异常工时与工序产能波动。',
       onRefresh: busy ? null : _loadProducts,
       actionsBeforeRefresh: [
@@ -365,10 +364,8 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
       ),
       items: _products
           .map(
-            (item) => DropdownMenuItem<int>(
-              value: item.id,
-              child: Text(item.name),
-            ),
+            (item) =>
+                DropdownMenuItem<int>(value: item.id, child: Text(item.name)),
           )
           .toList(),
       onChanged: busy
@@ -396,7 +393,8 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
       items: [
         const DropdownMenuItem<int?>(value: null, child: Text('全部工段')),
         ..._stages.map(
-          (stage) => DropdownMenuItem<int?>(value: stage.id, child: Text(stage.name)),
+          (stage) =>
+              DropdownMenuItem<int?>(value: stage.id, child: Text(stage.name)),
         ),
       ],
       onChanged: busy
@@ -444,7 +442,9 @@ class _CraftKanbanPageState extends State<CraftKanbanPage> {
     return OutlinedButton.icon(
       onPressed: busy ? null : () => _pickDate(isStart: isStart),
       icon: const Icon(Icons.date_range),
-      label: Text(date == null ? (isStart ? '开始日期' : '结束日期') : _formatDate(date)),
+      label: Text(
+        date == null ? (isStart ? '开始日期' : '结束日期') : _formatDate(date),
+      ),
     );
   }
 

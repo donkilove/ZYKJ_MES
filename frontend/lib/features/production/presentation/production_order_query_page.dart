@@ -1129,10 +1129,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     );
 
     return MesCrudPageScaffold(
-      header: MesRefreshPageHeader(
-        title: '生产订单查询',
-        onRefresh: _loading ? null : _loadOrders,
-      ),
+      header: MesRefreshPageHeader(onRefresh: _loading ? null : _loadOrders),
       filters: filtersToolbar,
       banner: _message.isEmpty
           ? null

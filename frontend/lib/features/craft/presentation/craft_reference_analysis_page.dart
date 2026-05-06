@@ -29,7 +29,7 @@ class CraftReferenceAnalysisPage extends StatefulWidget {
   final AppSession session;
   final VoidCallback onLogout;
   final void Function({required String moduleCode, String? jumpTarget})
-      onNavigate;
+  onNavigate;
   final CraftService? craftService;
 
   @override
@@ -326,10 +326,7 @@ class _CraftReferenceAnalysisPageState
   }
 
   Widget _buildHeader() {
-    return MesRefreshPageHeader(
-      title: '引用分析',
-      onRefresh: _loadingBase ? null : _loadBaseData,
-    );
+    return MesRefreshPageHeader(onRefresh: _loadingBase ? null : _loadBaseData);
   }
 
   Widget _buildFilters() {

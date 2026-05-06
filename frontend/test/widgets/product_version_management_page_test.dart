@@ -250,7 +250,6 @@ void main() {
       ),
     );
 
-    expect(find.text('版本管理'), findsOneWidget);
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(find.text('左侧选择产品，右侧查看版本工作区与参数动作。'), findsNothing);
     expect(find.byTooltip('刷新'), findsOneWidget);

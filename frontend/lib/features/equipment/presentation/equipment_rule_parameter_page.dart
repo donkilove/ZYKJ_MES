@@ -180,10 +180,7 @@ class _EquipmentRuleParameterPageState extends State<EquipmentRuleParameterPage>
       return const Center(child: Text('当前账号没有可访问的规则/参数页面。'));
     }
     return MesCrudPageScaffold(
-      header: MesRefreshPageHeader(
-        title: '规则与参数',
-        onRefresh: _refreshCurrentTab,
-      ),
+      header: MesRefreshPageHeader(onRefresh: _refreshCurrentTab),
       filters: Material(
         color: Theme.of(context).colorScheme.surface,
         child: TabBar(controller: _innerTabController, tabs: tabs),

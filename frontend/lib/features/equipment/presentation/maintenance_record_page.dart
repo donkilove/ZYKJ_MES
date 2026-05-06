@@ -366,7 +366,6 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
 
     return MesCrudPageScaffold(
       header: MesRefreshPageHeader(
-        title: '保养记录',
         onRefresh: _loading ? null : () => _loadItems(page: _page),
       ),
       filters: filtersToolbar,

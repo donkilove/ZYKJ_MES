@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/production_first_article_page.dart';
@@ -660,7 +661,7 @@ void main() {
       find.byKey(const ValueKey('productionOrderQueryListCard')),
       findsOneWidget,
     );
-    expect(find.text('生产订单查询'), findsOneWidget);
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(find.text('PO-QUERY-001'), findsOneWidget);
     expect(find.text('产线试产件1'), findsOneWidget);
     expect(find.text('切割'), findsOneWidget);

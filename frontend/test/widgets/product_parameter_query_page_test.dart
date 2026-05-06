@@ -157,7 +157,6 @@ void main() {
       ),
     );
 
-    expect(find.text('产品参数查询'), findsOneWidget);
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(find.text('按启用且已有生效版本的产品查看当前生效参数。'), findsNothing);
     expect(find.byTooltip('刷新'), findsOneWidget);

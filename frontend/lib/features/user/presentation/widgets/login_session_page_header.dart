@@ -15,10 +15,7 @@ class LoginSessionPageHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return KeyedSubtree(
       key: const ValueKey('login-session-page-header'),
-      child: MesRefreshPageHeader(
-        title: '登录会话',
-        onRefresh: loading ? null : onRefresh,
-      ),
+      child: MesRefreshPageHeader(onRefresh: loading ? null : onRefresh),
     );
   }
 }

@@ -295,7 +295,6 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
 
     return MesCrudPageScaffold(
       header: MesRefreshPageHeader(
-        title: '保养项目',
         onRefresh: _loading ? null : () => _loadItems(page: _page),
       ),
       filters: filtersToolbar,

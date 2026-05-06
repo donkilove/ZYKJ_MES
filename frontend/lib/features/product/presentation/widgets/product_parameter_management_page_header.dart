@@ -15,10 +15,7 @@ class ProductParameterManagementPageHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return KeyedSubtree(
       key: const ValueKey('product-parameter-management-page-header'),
-      child: MesRefreshPageHeader(
-        title: '版本参数管理',
-        onRefresh: loading ? null : onRefresh,
-      ),
+      child: MesRefreshPageHeader(onRefresh: loading ? null : onRefresh),
     );
   }
 }

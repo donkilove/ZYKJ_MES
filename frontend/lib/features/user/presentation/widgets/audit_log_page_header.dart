@@ -15,10 +15,7 @@ class AuditLogPageHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return KeyedSubtree(
       key: const ValueKey('audit-log-page-header'),
-      child: MesRefreshPageHeader(
-        title: '审计日志',
-        onRefresh: loading ? null : onRefresh,
-      ),
+      child: MesRefreshPageHeader(onRefresh: loading ? null : onRefresh),
     );
   }
 }

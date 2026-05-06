@@ -15,10 +15,7 @@ class ProductParameterQueryPageHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return KeyedSubtree(
       key: const ValueKey('product-parameter-query-page-header'),
-      child: MesRefreshPageHeader(
-        title: '产品参数查询',
-        onRefresh: loading ? null : onRefresh,
-      ),
+      child: MesRefreshPageHeader(onRefresh: loading ? null : onRefresh),
     );
   }
 }

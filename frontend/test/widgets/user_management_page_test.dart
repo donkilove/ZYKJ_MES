@@ -741,7 +741,6 @@ void main() {
     );
 
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
-    expect(find.text('用户管理'), findsOneWidget);
     expect(find.byTooltip('刷新'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, '新建用户'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, '批量导入'), findsOneWidget);

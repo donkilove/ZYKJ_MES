@@ -20,14 +20,10 @@ class RoleManagementPageHeader extends StatelessWidget {
     return KeyedSubtree(
       key: const ValueKey('role-management-page-header'),
       child: MesRefreshPageHeader(
-        title: '角色管理',
         onRefresh: loading ? null : onRefresh,
         actionsBeforeRefresh: [
           if (canCreateRole && onCreateRole != null)
-            FilledButton(
-              onPressed: onCreateRole,
-              child: const Text('新增角色'),
-            ),
+            FilledButton(onPressed: onCreateRole, child: const Text('新增角色')),
         ],
       ),
     );

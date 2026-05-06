@@ -22,7 +22,6 @@ class QualityTrendPageHeader extends StatelessWidget {
     return KeyedSubtree(
       key: const ValueKey('quality-trend-page-header'),
       child: MesRefreshPageHeader(
-        title: '质量趋势',
         onRefresh: loading ? null : onRefresh,
         actionsBeforeRefresh: [
           if (canExport)

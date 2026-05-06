@@ -502,10 +502,7 @@ class _ProductionOrderManagementPageState
             ),
             items: const [
               DropdownMenuItem<String?>(value: null, child: Text('全部')),
-              DropdownMenuItem<String?>(
-                value: 'pending',
-                child: Text('待生产'),
-              ),
+              DropdownMenuItem<String?>(value: 'pending', child: Text('待生产')),
               DropdownMenuItem<String?>(
                 value: 'in_progress',
                 child: Text('生产中'),
@@ -564,7 +561,6 @@ class _ProductionOrderManagementPageState
 
     return MesCrudPageScaffold(
       header: MesRefreshPageHeader(
-        title: '生产订单管理',
         onRefresh: _loading ? null : () => _loadOrders(page: _page),
       ),
       filters: filtersToolbar,
@@ -612,9 +608,7 @@ class _ProductionOrderManagementPageState
                 DataCell(Text(_formatDate(item.dueDate))),
                 DataCell(ProductionOrderStatusChip(status: item.status)),
                 DataCell(Text(item.currentProcessName ?? '-')),
-                DataCell(
-                  Text(remark == null || remark.isEmpty ? '-' : remark),
-                ),
+                DataCell(Text(remark == null || remark.isEmpty ? '-' : remark)),
                 DataCell(
                   PopupMenuButton<String>(
                     tooltip: '操作',
@@ -639,34 +633,27 @@ class _ProductionOrderManagementPageState
                         case 'pipeline_instances':
                           await Navigator.of(context).push(
                             MaterialPageRoute<void>(
-                              builder: (_) =>
-                                  ProductionPipelineInstancesPage(
-                                    session: widget.session,
-                                    onLogout: widget.onLogout,
-                                    orderId: item.id,
-                                    orderCode: item.orderCode,
-                                    service: _service,
-                                  ),
+                              builder: (_) => ProductionPipelineInstancesPage(
+                                session: widget.session,
+                                onLogout: widget.onLogout,
+                                orderId: item.id,
+                                orderCode: item.orderCode,
+                                service: _service,
+                              ),
                             ),
                           );
                           break;
                       }
                     },
                     itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'detail',
-                        child: Text('查看详情'),
-                      ),
+                      const PopupMenuItem(value: 'detail', child: Text('查看详情')),
                       if (item.pipelineEnabled)
                         const PopupMenuItem(
                           value: 'pipeline_instances',
                           child: Text('查看并行实例'),
                         ),
                       if (widget.canEditOrder && item.status == 'pending')
-                        const PopupMenuItem(
-                          value: 'edit',
-                          child: Text('编辑订单'),
-                        ),
+                        const PopupMenuItem(value: 'edit', child: Text('编辑订单')),
                       if (widget.canCompleteOrder &&
                           item.status == 'in_progress')
                         const PopupMenuItem(
@@ -679,8 +666,7 @@ class _ProductionOrderManagementPageState
                           value: 'pipeline',
                           child: Text('并行模式设置'),
                         ),
-                      if (widget.canDeleteOrder &&
-                          item.status == 'pending')
+                      if (widget.canDeleteOrder && item.status == 'pending')
                         const PopupMenuItem(
                           value: 'delete',
                           child: Text('删除订单'),

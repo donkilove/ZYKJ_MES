@@ -16,7 +16,6 @@ class UserManagementPageHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MesRefreshPageHeader(
-      title: '用户管理',
       onRefresh: loading ? null : onRefresh,
       actionsBeforeRefresh: actionsBeforeRefresh,
     );

@@ -22,7 +22,6 @@ class QualityDefectAnalysisPageHeader extends StatelessWidget {
     return KeyedSubtree(
       key: const ValueKey('quality-defect-analysis-page-header'),
       child: MesRefreshPageHeader(
-        title: '不良分析',
         onRefresh: loading ? null : onRefresh,
         actionsBeforeRefresh: [
           if (canExport)

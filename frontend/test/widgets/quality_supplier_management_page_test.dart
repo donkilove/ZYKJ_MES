@@ -45,7 +45,7 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('供应商管理'), findsAtLeastNWidgets(1));
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(find.text('初始供应商'), findsOneWidget);
   });
 

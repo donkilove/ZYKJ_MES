@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/ui/patterns/mes_filter_bar.dart';
 import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/production_repair_order_detail_page.dart';
@@ -267,7 +268,7 @@ void main() {
       find.byKey(const ValueKey('productionScrapStatisticsListCard')),
       findsOneWidget,
     );
-    expect(find.text('报废统计'), findsOneWidget);
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(find.text('PO-1'), findsOneWidget);
     expect(find.text('刀具磨损'), findsOneWidget);
     expect(find.text('产品名称（精确）'), findsOneWidget);
@@ -391,7 +392,7 @@ void main() {
       find.byKey(const ValueKey('productionRepairOrdersListCard')),
       findsOneWidget,
     );
-    expect(find.text('维修订单'), findsOneWidget);
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(find.text('RW-1'), findsOneWidget);
     expect(find.text('切割'), findsOneWidget);
 
