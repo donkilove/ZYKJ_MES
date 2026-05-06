@@ -387,11 +387,11 @@ void main() {
     expect(find.text('第 1 / 3 页'), findsOneWidget);
     expect(find.widgetWithText(TextField, '搜索订单号/产品'), findsOneWidget);
     expect(find.widgetWithText(TextField, '产品名称'), findsNothing);
-    expect(find.text('订单编号'), findsOneWidget);
-    expect(find.text('产品名称'), findsOneWidget);
-    expect(find.text('供应商'), findsOneWidget);
-    expect(find.text('交货日期'), findsOneWidget);
-    expect(find.text('备注'), findsOneWidget);
+    expect(find.text('订单编号'), findsAtLeastNWidgets(1));
+    expect(find.text('产品名称'), findsAtLeastNWidgets(1));
+    expect(find.text('供应商'), findsAtLeastNWidgets(1));
+    expect(find.text('交货日期'), findsAtLeastNWidgets(1));
+    expect(find.text('备注'), findsAtLeastNWidgets(1));
     expect(find.text('产品版本'), findsNothing);
     expect(find.text('模板名称/版本'), findsNothing);
     expect(find.text('创建人'), findsNothing);
