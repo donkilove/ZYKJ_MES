@@ -23,15 +23,15 @@ class MesPageHeader extends StatelessWidget {
     final hasTitle = (title ?? '').trim().isNotEmpty;
     final hasSubtitle = (subtitle ?? '').trim().isNotEmpty;
     final hasLeadActions = actionsBeforeTitle.isNotEmpty;
+    final hasTrailingActions = actions.isNotEmpty;
     return Row(
-      crossAxisAlignment: hasTitle || hasSubtitle
-          ? CrossAxisAlignment.start
-          : CrossAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         if (hasLeadActions) ...[
           Wrap(
             spacing: tokens?.spacing.sm ?? 12,
             runSpacing: tokens?.spacing.sm ?? 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: actionsBeforeTitle,
           ),
           if (hasTitle || hasSubtitle)
@@ -65,12 +65,15 @@ class MesPageHeader extends StatelessWidget {
               ],
             ),
           ),
+        if (!hasTitle && !hasSubtitle && hasLeadActions && hasTrailingActions)
+          const Spacer(),
         if (actions.isNotEmpty) ...[
           if (hasTitle || hasSubtitle)
             MesGap.horizontal(tokens?.spacing.md ?? 16),
           Wrap(
             spacing: tokens?.spacing.sm ?? 12,
             runSpacing: tokens?.spacing.sm ?? 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: actions,
           ),
         ],

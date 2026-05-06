@@ -16,6 +16,7 @@ import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 
@@ -1517,28 +1518,16 @@ class _ProcessConfigurationPageState extends State<ProcessConfigurationPage> {
     final templates = _filteredTemplates;
 
     return MesCrudPageScaffold(
-      header: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
+      header: MesRefreshPageHeader(
+        actionsBeforeTitle: [
           OutlinedButton.icon(
             key: const ValueKey('process-configuration-system-master-button'),
             onPressed: _loading ? null : _showSystemMasterManagementDialog,
             icon: const Icon(Icons.account_tree_outlined),
             label: const Text('系统母版管理'),
           ),
-          const Spacer(),
-          Tooltip(
-            message: '刷新',
-            child: SizedBox(
-              width: 40,
-              height: 40,
-              child: IconButton(
-                onPressed: _loading ? null : _loadData,
-                icon: const Icon(Icons.refresh),
-              ),
-            ),
-          ),
         ],
+        onRefresh: _loading ? null : _loadData,
       ),
       content: LayoutBuilder(
         builder: (context, constraints) {
