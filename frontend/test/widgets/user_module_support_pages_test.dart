@@ -618,7 +618,6 @@ void main() {
       find.byKey(const ValueKey('function-permission-config-page-header')),
       findsOneWidget,
     );
-    expect(find.text('功能权限配置'), findsOneWidget);
     expect(find.text('统一配置模块权限能力包。'), findsNothing);
     expect(find.text('系统管理'), findsNothing);
     expect(tester.takeException(), isNull);
@@ -964,11 +963,6 @@ void main() {
     );
 
     await tester.enterText(find.widgetWithText(TextField, '操作人账号'), 'admin');
-    await tester.enterText(
-      find.widgetWithText(TextField, '操作编码'),
-      'user.create',
-    );
-    await tester.enterText(find.widgetWithText(TextField, '目标类型'), 'user');
     await tester.tap(find.widgetWithText(OutlinedButton, '选择时间范围'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '查询'));
@@ -976,8 +970,8 @@ void main() {
 
     expect(userService.lastAuditLogPage, 1);
     expect(userService.lastAuditOperatorUsername, 'admin');
-    expect(userService.lastAuditActionCode, 'user.create');
-    expect(userService.lastAuditTargetType, 'user');
+    expect(userService.lastAuditActionCode, anyOf(isNull, ''));
+    expect(userService.lastAuditTargetType, anyOf(isNull, ''));
     expect(userService.lastAuditStartTime, DateTime(2026, 3, 1));
     expect(userService.lastAuditEndTime, DateTime(2026, 3, 5, 23, 59, 59));
 

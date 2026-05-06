@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/services/export_file_service.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_list_detail_shell.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_version_action_dialogs.dart';
@@ -468,145 +469,132 @@ class _ProductVersionManagementPageState
     final selectedProduct = _selectedProduct;
     final selectedVersion = _selectedVersion;
 
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ProductVersionPageHeader(
-            loading: _loadingProducts || _loadingVersions,
-            onRefresh: _refreshPage,
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final isStacked = constraints.maxWidth < 960;
-                final stackedTableHeight = (constraints.maxHeight * 0.6)
-                    .clamp(320.0, 520.0)
-                    .toDouble();
+    return MesCrudPageScaffold(
+      header: ProductVersionPageHeader(
+        loading: _loadingProducts || _loadingVersions,
+        onRefresh: _refreshPage,
+      ),
+      content: LayoutBuilder(
+        builder: (context, constraints) {
+          final isStacked = constraints.maxWidth < 960;
+          final stackedTableHeight = (constraints.maxHeight * 0.6)
+              .clamp(320.0, 520.0)
+              .toDouble();
 
-                final toolbar = ProductVersionToolbar(
-                  product: selectedProduct,
-                  selectedVersion: selectedVersion,
-                  hasDraft: _hasDraftVersion,
+          final toolbar = ProductVersionToolbar(
+            product: selectedProduct,
+            selectedVersion: selectedVersion,
+            hasDraft: _hasDraftVersion,
+            canManageVersions: widget.canManageVersions,
+            canActivateVersions: widget.canActivateVersions,
+            canExportVersionParameters: widget.canExportVersionParameters,
+            onCreateVersion: _createVersion,
+            onCopyVersion: () {
+              if (selectedVersion != null) {
+                _copyVersion(selectedVersion);
+              }
+            },
+            onEditVersionNote: () {
+              if (selectedVersion != null) {
+                _editVersionNote(selectedVersion);
+              }
+            },
+            onExportParameters: () {
+              if (selectedVersion != null) {
+                _exportVersionParams(selectedVersion);
+              }
+            },
+            onActivateVersion: () {
+              if (selectedVersion != null) {
+                _activateVersion(selectedVersion);
+              }
+            },
+            onRefresh: () {
+              if (selectedProduct != null) {
+                _loadVersions(selectedProduct);
+              }
+            },
+          );
+
+          final versionTable = selectedProduct == null
+              ? const Center(child: Text('请在左侧选择产品'))
+              : ProductVersionTableSection(
+                  versions: _versions,
+                  loading: _loadingVersions,
+                  selectedVersionNumber: _selectedVersionNumber,
                   canManageVersions: widget.canManageVersions,
                   canActivateVersions: widget.canActivateVersions,
                   canExportVersionParameters: widget.canExportVersionParameters,
-                  onCreateVersion: _createVersion,
-                  onCopyVersion: () {
-                    if (selectedVersion != null) {
-                      _copyVersion(selectedVersion);
-                    }
+                  onSelectVersion: (versionNumber) {
+                    setState(() {
+                      _selectedVersionNumber = versionNumber;
+                    });
                   },
-                  onEditVersionNote: () {
-                    if (selectedVersion != null) {
-                      _editVersionNote(selectedVersion);
-                    }
-                  },
-                  onExportParameters: () {
-                    if (selectedVersion != null) {
-                      _exportVersionParams(selectedVersion);
-                    }
-                  },
-                  onActivateVersion: () {
-                    if (selectedVersion != null) {
-                      _activateVersion(selectedVersion);
-                    }
-                  },
-                  onRefresh: () {
-                    if (selectedProduct != null) {
-                      _loadVersions(selectedProduct);
-                    }
-                  },
+                  onShowDetail: _showVersionDetail,
+                  onActivate: _activateVersion,
+                  onCopy: _copyVersion,
+                  onEditNote: _editVersionNote,
+                  onEditParameters: _navigateToEditParams,
+                  onExport: _exportVersionParams,
+                  onDisable: _disableVersion,
+                  onDelete: _deleteVersion,
+                  formatDate: _formatDate,
                 );
 
-                final versionTable = selectedProduct == null
-                    ? const Center(child: Text('请在左侧选择产品'))
-                    : ProductVersionTableSection(
-                        versions: _versions,
-                        loading: _loadingVersions,
-                        selectedVersionNumber: _selectedVersionNumber,
-                        canManageVersions: widget.canManageVersions,
-                        canActivateVersions: widget.canActivateVersions,
-                        canExportVersionParameters:
-                            widget.canExportVersionParameters,
-                        onSelectVersion: (versionNumber) {
-                          setState(() {
-                            _selectedVersionNumber = versionNumber;
-                          });
-                        },
-                        onShowDetail: _showVersionDetail,
-                        onActivate: _activateVersion,
-                        onCopy: _copyVersion,
-                        onEditNote: _editVersionNote,
-                        onEditParameters: _navigateToEditParams,
-                        onExport: _exportVersionParams,
-                        onDisable: _disableVersion,
-                        onDelete: _deleteVersion,
-                        formatDate: _formatDate,
-                      );
-
-                return MesListDetailShell(
-                  banner: ProductVersionFeedbackBanner(
-                    message: _pageMessage,
-                    hasDraft: _hasDraftVersion,
-                    product: selectedProduct,
-                    effectiveVersion: _effectiveVersion,
-                    formatDate: _formatDate,
-                  ),
-                  sidebar: ProductSelectorPanel(
-                    searchController: _searchController,
-                    loading: _loadingProducts,
-                    products: _products,
-                    selectedProductId: selectedProduct?.id,
-                    page: _productPage,
-                    totalPages: _productTotalPages,
-                    total: _productTotal,
-                    onSearchSubmitted: (value) {
-                      _productKeyword = value.trim();
-                      _productPage = 1;
-                      _loadProducts();
-                    },
-                    onRefresh: _loadProducts,
-                    onSelectProduct: (product) => _loadVersions(product),
-                    onPreviousPage: _productPage > 1
-                        ? () {
-                            _productPage -= 1;
-                            _loadProducts();
-                          }
-                        : null,
-                    onNextPage: _productPage < _productTotalPages
-                        ? () {
-                            _productPage += 1;
-                            _loadProducts();
-                          }
-                        : null,
-                  ),
-                  content: isStacked
-                      ? ListView(
-                          children: [
-                            toolbar,
-                            const SizedBox(height: 16),
-                            SizedBox(
-                              height: stackedTableHeight,
-                              child: versionTable,
-                            ),
-                          ],
-                        )
-                      : Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            toolbar,
-                            const SizedBox(height: 16),
-                            Expanded(child: versionTable),
-                          ],
-                        ),
-                );
-              },
+          return MesListDetailShell(
+            banner: ProductVersionFeedbackBanner(
+              message: _pageMessage,
+              hasDraft: _hasDraftVersion,
+              product: selectedProduct,
+              effectiveVersion: _effectiveVersion,
+              formatDate: _formatDate,
             ),
-          ),
-        ],
+            sidebar: ProductSelectorPanel(
+              searchController: _searchController,
+              loading: _loadingProducts,
+              products: _products,
+              selectedProductId: selectedProduct?.id,
+              page: _productPage,
+              totalPages: _productTotalPages,
+              total: _productTotal,
+              onSearchSubmitted: (value) {
+                _productKeyword = value.trim();
+                _productPage = 1;
+                _loadProducts();
+              },
+              onRefresh: _loadProducts,
+              onSelectProduct: (product) => _loadVersions(product),
+              onPreviousPage: _productPage > 1
+                  ? () {
+                      _productPage -= 1;
+                      _loadProducts();
+                    }
+                  : null,
+              onNextPage: _productPage < _productTotalPages
+                  ? () {
+                      _productPage += 1;
+                      _loadProducts();
+                    }
+                  : null,
+            ),
+            content: isStacked
+                ? ListView(
+                    children: [
+                      toolbar,
+                      const SizedBox(height: 16),
+                      SizedBox(height: stackedTableHeight, child: versionTable),
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      toolbar,
+                      const SizedBox(height: 16),
+                      Expanded(child: versionTable),
+                    ],
+                  ),
+          );
+        },
       ),
     );
   }

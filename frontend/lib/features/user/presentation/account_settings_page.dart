@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_inline_banner.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
@@ -913,58 +914,56 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     if (_loading) {
       return const MesLoadingState(label: '个人中心加载中...');
     }
-    return RefreshIndicator(
-      onRefresh: _loadData,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final isWide = constraints.maxWidth >= 1080;
-          return Semantics(
-            container: true,
-            label: '个人中心主区域',
-            child: SingleChildScrollView(
-              controller: _scrollController,
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  AccountSettingsPageHeader(
-                    loading: _loading,
-                    onRefresh: _loadData,
-                  ),
-                  const SizedBox(height: 12),
-                  _buildOverviewCard(),
-                  const SizedBox(height: 16),
-                  if (_message.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: MesInlineBanner.error(message: _message),
-                    ),
-                  if (isWide)
-                    IntrinsicHeight(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(flex: 5, child: _buildProfileCard()),
-                          const SizedBox(width: 16),
-                          Expanded(flex: 5, child: _buildPasswordCard()),
-                        ],
-                      ),
-                    )
-                  else ...[
-                    _buildProfileCard(),
+    return Semantics(
+      container: true,
+      label: '个人中心主区域',
+      child: MesCrudPageScaffold(
+        header: AccountSettingsPageHeader(
+          loading: _loading,
+          onRefresh: _loadData,
+        ),
+        banner: _message.isEmpty
+            ? null
+            : MesInlineBanner.error(message: _message),
+        content: RefreshIndicator(
+          onRefresh: _loadData,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth >= 1080;
+              return SingleChildScrollView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildOverviewCard(),
                     const SizedBox(height: 16),
-                    _buildPasswordCard(),
+                    if (isWide)
+                      IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(flex: 5, child: _buildProfileCard()),
+                            const SizedBox(width: 16),
+                            Expanded(flex: 5, child: _buildPasswordCard()),
+                          ],
+                        ),
+                      )
+                    else ...[
+                      _buildProfileCard(),
+                      const SizedBox(height: 16),
+                      _buildPasswordCard(),
+                    ],
+                    if (widget.canViewSession) ...[
+                      const SizedBox(height: 16),
+                      _buildSessionCard(),
+                    ],
                   ],
-                  if (widget.canViewSession) ...[
-                    const SizedBox(height: 16),
-                    _buildSessionCard(),
-                  ],
-                ],
-              ),
-            ),
-          );
-        },
+                ),
+              );
+            },
+          ),
+        ),
       ),
     );
   }

@@ -4,6 +4,7 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/models/authz_models.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/features/auth/services/authz_service.dart';
 import 'package:mes_client/features/user/presentation/widgets/function_permission_action_dialogs.dart';
@@ -235,9 +236,7 @@ class _FunctionPermissionConfigPageState
         throw StateError('未查询到可配置模块');
       }
 
-      final initialModule = modules.contains('user')
-          ? 'user'
-          : modules.first;
+      final initialModule = modules.contains('user') ? 'user' : modules.first;
       await _loadModuleData(initialModule, roles: roles, moduleCodes: modules);
     } catch (error) {
       if (!mounted) {
@@ -667,9 +666,8 @@ class _FunctionPermissionConfigPageState
                     Expanded(
                       child: Text(
                         '能力包（${capabilityPacks.length}）',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                     ),
                     Switch(
@@ -704,7 +702,8 @@ class _FunctionPermissionConfigPageState
             child: ListView(
               padding: const EdgeInsets.all(12),
               children: groupNames.map((groupName) {
-                final items = grouped[groupName] ?? const <CapabilityPackItem>[];
+                final items =
+                    grouped[groupName] ?? const <CapabilityPackItem>[];
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ExpansionTile(
@@ -837,69 +836,48 @@ class _FunctionPermissionConfigPageState
     return Semantics(
       container: true,
       label: '功能权限配置主区域',
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            FunctionPermissionConfigPageHeader(
-              loading: _loading,
-              onRefresh: _refreshCurrentModule,
-            ),
-            const SizedBox(height: 12),
-            _buildFilterCard(),
-            if (_message.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(_message),
+      child: MesCrudPageScaffold(
+        header: FunctionPermissionConfigPageHeader(
+          loading: _loading,
+          onRefresh: _refreshCurrentModule,
+        ),
+        filters: _buildFilterCard(),
+        banner: _message.isEmpty
+            ? null
+            : Align(alignment: Alignment.centerLeft, child: Text(_message)),
+        content: LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth < 1100) {
+              return Column(
+                children: [
+                  SizedBox(height: 220, child: _buildRoleSelectorCard(role)),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: _buildCapabilityCard(
+                      role: role,
+                      draft: draft,
+                      readonly: readonly,
+                      capabilityPacks: capabilityPacks,
+                    ),
+                  ),
+                ],
+              );
+            }
+            return Row(
+              children: [
+                SizedBox(width: 340, child: _buildRoleSelectorCard(role)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildCapabilityCard(
+                    role: role,
+                    draft: draft,
+                    readonly: readonly,
+                    capabilityPacks: capabilityPacks,
+                  ),
                 ),
-              ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  if (constraints.maxWidth < 1100) {
-                    return Column(
-                      children: [
-                        SizedBox(
-                          height: 220,
-                          child: _buildRoleSelectorCard(role),
-                        ),
-                        const SizedBox(height: 8),
-                        Expanded(
-                          child: _buildCapabilityCard(
-                            role: role,
-                            draft: draft,
-                            readonly: readonly,
-                            capabilityPacks: capabilityPacks,
-                          ),
-                        ),
-                      ],
-                    );
-                  }
-                  return Row(
-                    children: [
-                      SizedBox(
-                        width: 340,
-                        child: _buildRoleSelectorCard(role),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _buildCapabilityCard(
-                          role: role,
-                          draft: draft,
-                          readonly: readonly,
-                          capabilityPacks: capabilityPacks,
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
+              ],
+            );
+          },
         ),
       ),
     );
