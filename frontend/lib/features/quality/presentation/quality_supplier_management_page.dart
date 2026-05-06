@@ -183,16 +183,10 @@ class _QualitySupplierManagementPageState
   @override
   Widget build(BuildContext context) {
     return MesCrudPageScaffold(
-      header: Row(
-        children: [
-          Expanded(
-            child: QualitySupplierManagementPageHeader(
-              loading: _loading,
-              onRefresh: _loadSuppliers,
-              onCreate: () => _showEditDialog(),
-            ),
-          ),
-        ],
+      header: QualitySupplierManagementPageHeader(
+        loading: _loading,
+        onRefresh: _loadSuppliers,
+        onCreate: () => _showEditDialog(),
       ),
       filters: Wrap(
         spacing: 12,
