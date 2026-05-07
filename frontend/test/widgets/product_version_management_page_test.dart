@@ -143,22 +143,10 @@ void main() {
         home: Scaffold(
           body: Column(
             children: [
-              ProductVersionPageHeader(loading: false, onRefresh: () {}),
-              ProductVersionFeedbackBanner(
+              ProductVersionPageHeader(
+                loading: false,
+                onRefresh: () {},
                 hasDraft: true,
-                product: _buildProduct(
-                  id: 101,
-                  name: '产品101',
-                  lifecycleStatus: 'inactive',
-                  effectiveVersion: 0,
-                  inactiveReason: '当前无生效版本，请先将目标版本设为生效后再恢复启用。',
-                ),
-                effectiveVersion: _buildVersion(
-                  version: 1,
-                  label: 'V1.0',
-                  lifecycleStatus: 'effective',
-                ),
-                formatDate: (value) => '2026-04-20 08:00',
               ),
               Expanded(
                 child: Row(
@@ -181,7 +169,6 @@ void main() {
                         totalPages: 3,
                         total: 120,
                         onSearchSubmitted: (_) {},
-                        onRefresh: () {},
                         onSelectProduct: (_) {},
                         onPreviousPage: () {},
                         onNextPage: () {},
@@ -208,7 +195,6 @@ void main() {
                             onEditVersionNote: () {},
                             onExportParameters: () {},
                             onActivateVersion: () {},
-                            onRefresh: () {},
                           ),
                           const SizedBox(height: 16),
                           Expanded(
@@ -254,7 +240,10 @@ void main() {
     expect(find.text('左侧选择产品，右侧查看版本工作区与参数动作。'), findsNothing);
     expect(find.byTooltip('刷新'), findsOneWidget);
     expect(
-      find.byKey(const ValueKey('product-version-feedback-banner')),
+      find.descendant(
+        of: find.byKey(const ValueKey('product-version-page-header')),
+        matching: find.byKey(const ValueKey('product-version-header-warning')),
+      ),
       findsOneWidget,
     );
     expect(
@@ -271,6 +260,7 @@ void main() {
     );
     expect(find.widgetWithText(OutlinedButton, '复制版本'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, '立即生效'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, '刷新'), findsNothing);
   });
 
   testWidgets('版本表格区保留行级操作菜单文案', (tester) async {

@@ -9,7 +9,6 @@ import 'package:mes_client/features/product/presentation/widgets/product_version
 import 'package:mes_client/features/product/presentation/widgets/product_version_detail_dialog.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_version_note_dialog.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_selector_panel.dart';
-import 'package:mes_client/features/product/presentation/widgets/product_version_feedback_banner.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_version_page_header.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_version_table_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_version_toolbar.dart';
@@ -473,6 +472,7 @@ class _ProductVersionManagementPageState
       header: ProductVersionPageHeader(
         loading: _loadingProducts || _loadingVersions,
         onRefresh: _refreshPage,
+        hasDraft: _hasDraftVersion,
       ),
       content: LayoutBuilder(
         builder: (context, constraints) {
@@ -509,11 +509,6 @@ class _ProductVersionManagementPageState
                 _activateVersion(selectedVersion);
               }
             },
-            onRefresh: () {
-              if (selectedProduct != null) {
-                _loadVersions(selectedProduct);
-              }
-            },
           );
 
           final versionTable = selectedProduct == null
@@ -542,13 +537,20 @@ class _ProductVersionManagementPageState
                 );
 
           return MesListDetailShell(
-            banner: ProductVersionFeedbackBanner(
-              message: _pageMessage,
-              hasDraft: _hasDraftVersion,
-              product: selectedProduct,
-              effectiveVersion: _effectiveVersion,
-              formatDate: _formatDate,
-            ),
+            banner: _pageMessage.isEmpty
+                ? null
+                : Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        _pageMessage,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ),
+                  ),
             sidebar: ProductSelectorPanel(
               searchController: _searchController,
               loading: _loadingProducts,
@@ -562,7 +564,6 @@ class _ProductVersionManagementPageState
                 _productPage = 1;
                 _loadProducts();
               },
-              onRefresh: _loadProducts,
               onSelectProduct: (product) => _loadVersions(product),
               onPreviousPage: _productPage > 1
                   ? () {

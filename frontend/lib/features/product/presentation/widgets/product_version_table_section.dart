@@ -50,7 +50,6 @@ class ProductVersionTableSection extends StatelessWidget {
       key: const ValueKey('product-version-table-section'),
       child: MesSectionCard(
         title: '版本列表',
-        subtitle: '版本状态、备注、来源版本和动作入口保持既有业务语义。',
         expandChild: true,
         child: CrudListTableSection(
           loading: loading,

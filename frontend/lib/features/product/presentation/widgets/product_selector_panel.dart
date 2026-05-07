@@ -15,7 +15,6 @@ class ProductSelectorPanel extends StatelessWidget {
     required this.totalPages,
     required this.total,
     required this.onSearchSubmitted,
-    required this.onRefresh,
     required this.onSelectProduct,
     required this.onPreviousPage,
     required this.onNextPage,
@@ -29,7 +28,6 @@ class ProductSelectorPanel extends StatelessWidget {
   final int totalPages;
   final int total;
   final ValueChanged<String> onSearchSubmitted;
-  final VoidCallback onRefresh;
   final ValueChanged<ProductItem> onSelectProduct;
   final VoidCallback? onPreviousPage;
   final VoidCallback? onNextPage;
@@ -40,32 +38,19 @@ class ProductSelectorPanel extends StatelessWidget {
       key: const ValueKey('product-selector-panel'),
       child: MesSectionCard(
         title: '产品列表',
-        subtitle: '先定位产品，再进入右侧版本工作区。',
         expandChild: true,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: searchController,
-                    decoration: const InputDecoration(
-                      hintText: '搜索产品名称',
-                      prefixIcon: Icon(Icons.search),
-                      isDense: true,
-                      border: OutlineInputBorder(),
-                    ),
-                    onSubmitted: onSearchSubmitted,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                OutlinedButton.icon(
-                  onPressed: loading ? null : onRefresh,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('刷新'),
-                ),
-              ],
+            TextField(
+              controller: searchController,
+              decoration: const InputDecoration(
+                hintText: '搜索产品名称',
+                prefixIcon: Icon(Icons.search),
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+              onSubmitted: onSearchSubmitted,
             ),
             const SizedBox(height: 16),
             if (loading)
