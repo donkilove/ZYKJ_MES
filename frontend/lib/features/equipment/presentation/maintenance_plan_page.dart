@@ -12,6 +12,9 @@ import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
+import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
+
+enum _MaintenancePlanAction { edit, toggle, delete, generate }
 
 class MaintenancePlanPage extends StatefulWidget {
   const MaintenancePlanPage({
@@ -605,36 +608,43 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
                 DataCell(Text(_formatDate(plan.updatedAt))),
                 DataCell(Text(plan.isEnabled ? '启用' : '停用')),
                 DataCell(
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextButton(
-                        onPressed: widget.canWrite
-                            ? () => _showPlanEditDialog(plan: plan)
-                            : null,
-                        child: const Text('编辑'),
-                      ),
-                      const SizedBox(width: 8),
-                      TextButton(
-                        onPressed: widget.canWrite
-                            ? () => _togglePlan(plan)
-                            : null,
-                        child: Text(plan.isEnabled ? '停用' : '启用'),
-                      ),
-                      const SizedBox(width: 8),
-                      TextButton(
-                        onPressed: widget.canWrite
-                            ? () => _deletePlan(plan)
-                            : null,
-                        child: const Text('删除'),
-                      ),
-                      const SizedBox(width: 8),
-                      TextButton(
-                        onPressed: (widget.canWrite && plan.isEnabled)
-                            ? () => _generateWorkOrder(plan)
-                            : null,
-                        child: const Text('生成执行单'),
-                      ),
+                  UnifiedListTableHeaderStyle.actionMenuButton<
+                    _MaintenancePlanAction
+                  >(
+                    theme: theme,
+                    onSelected: (action) {
+                      switch (action) {
+                        case _MaintenancePlanAction.edit:
+                          _showPlanEditDialog(plan: plan);
+                        case _MaintenancePlanAction.toggle:
+                          _togglePlan(plan);
+                        case _MaintenancePlanAction.delete:
+                          _deletePlan(plan);
+                        case _MaintenancePlanAction.generate:
+                          _generateWorkOrder(plan);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      if (widget.canWrite)
+                        const PopupMenuItem<_MaintenancePlanAction>(
+                          value: _MaintenancePlanAction.edit,
+                          child: Text('编辑'),
+                        ),
+                      if (widget.canWrite)
+                        PopupMenuItem<_MaintenancePlanAction>(
+                          value: _MaintenancePlanAction.toggle,
+                          child: Text(plan.isEnabled ? '停用' : '启用'),
+                        ),
+                      if (widget.canWrite)
+                        const PopupMenuItem<_MaintenancePlanAction>(
+                          value: _MaintenancePlanAction.delete,
+                          child: Text('删除'),
+                        ),
+                      if (widget.canWrite && plan.isEnabled)
+                        const PopupMenuItem<_MaintenancePlanAction>(
+                          value: _MaintenancePlanAction.generate,
+                          child: Text('生成执行单'),
+                        ),
                     ],
                   ),
                 ),

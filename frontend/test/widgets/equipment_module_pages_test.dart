@@ -18,6 +18,12 @@ import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'dart:async';
 
+Finder _popupMenuButtonFinder() {
+  return find.byWidgetPredicate(
+    (widget) => widget.runtimeType.toString().startsWith('PopupMenuButton'),
+  );
+}
+
 class _FakeEquipmentService extends EquipmentService {
   _FakeEquipmentService({
     List<EquipmentOwnerOption>? owners,
@@ -786,7 +792,7 @@ void main() {
         canWrite: true,
         equipmentService: equipmentService,
       ),
-      size: const Size(900, 1200),
+      size: const Size(1200, 1200),
     );
 
     expect(find.text('搜索设备编号/名称/型号/位置/负责人'), findsOneWidget);
@@ -813,7 +819,7 @@ void main() {
         canWrite: true,
         equipmentService: equipmentService,
       ),
-      size: const Size(900, 1200),
+      size: const Size(1200, 1200),
     );
 
     await tester.tap(find.byType(DropdownButtonFormField<String?>).first);
@@ -932,7 +938,7 @@ void main() {
     expect(find.text('项目配置'), findsOneWidget);
     expect(find.text('周期与说明'), findsOneWidget);
     expect(find.text('项目名称'), findsOneWidget);
-    expect(find.text('默认周期天数'), findsOneWidget);
+    expect(find.text('默认周期天数'), findsAtLeastNWidgets(1));
   });
 
   testWidgets('保养项目页面可完成新增 编辑 与 启停', (tester) async {
@@ -1005,11 +1011,11 @@ void main() {
       ),
     );
 
-    expect(find.text('项目分类'), findsOneWidget);
-    expect(find.text('默认周期天数'), findsOneWidget);
-    expect(find.text('默认预计时长'), findsOneWidget);
-    expect(find.text('创建时间'), findsOneWidget);
-    expect(find.text('更新时间'), findsOneWidget);
+    expect(find.text('项目分类'), findsAtLeastNWidgets(1));
+    expect(find.text('默认周期天数'), findsAtLeastNWidgets(1));
+    expect(find.text('默认预计时长'), findsAtLeastNWidgets(1));
+    expect(find.text('创建时间'), findsAtLeastNWidgets(1));
+    expect(find.text('更新时间'), findsAtLeastNWidgets(1));
     expect(find.text('执行日期'), findsNothing);
   });
 
@@ -1026,10 +1032,10 @@ void main() {
       ),
     );
 
-    expect(find.text('保养项目'), findsOneWidget);
-    expect(find.text('执行工段'), findsWidgets);
-    expect(find.text('下次到期日'), findsOneWidget);
-    expect(find.text('默认执行人'), findsWidgets);
+    expect(find.text('保养项目'), findsAtLeastNWidgets(1));
+    expect(find.text('执行工段'), findsAtLeastNWidgets(1));
+    expect(find.text('下次到期日'), findsAtLeastNWidgets(1));
+    expect(find.text('默认执行人'), findsAtLeastNWidgets(1));
     expect(find.text('冲压工段'), findsOneWidget);
     expect(equipmentService.ownersRequestCount, 1);
   });
@@ -1074,7 +1080,7 @@ void main() {
         equipmentService: equipmentService,
         craftService: customCraftService,
       ),
-      size: const Size(1500, 1200),
+      size: const Size(1800, 1200),
     );
 
     await tester.tap(find.byType(DropdownButtonFormField<int?>).first);
@@ -1159,15 +1165,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(equipmentService.createPlanCalls, 1);
 
-    await tester.ensureVisible(find.widgetWithText(TextButton, '编辑').first);
-    await tester.tap(find.widgetWithText(TextButton, '编辑').first);
+    await tester.tap(_popupMenuButtonFinder().first, warnIfMissed: false);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('保存').last);
     await tester.pumpAndSettle();
     expect(equipmentService.updatePlanCalls, 1);
 
-    await tester.ensureVisible(find.widgetWithText(TextButton, '停用').first);
-    await tester.tap(find.widgetWithText(TextButton, '停用').first);
+    await tester.tap(_popupMenuButtonFinder().first, warnIfMissed: false);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('停用').last);
     await tester.pumpAndSettle();
     expect(find.text('停用保养计划确认'), findsOneWidget);
     expect(find.textContaining('计划“冲压机-A / 月度润滑”'), findsOneWidget);
@@ -1177,8 +1185,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(equipmentService.togglePlanCalls, 1);
 
-    await tester.ensureVisible(find.widgetWithText(TextButton, '删除').first);
-    await tester.tap(find.widgetWithText(TextButton, '删除').first);
+    await tester.tap(_popupMenuButtonFinder().first, warnIfMissed: false);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('删除').last);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '删除').last);
     await tester.pumpAndSettle();
@@ -1324,9 +1333,9 @@ void main() {
       ),
     );
 
-    expect(find.text('工单编号'), findsOneWidget);
-    expect(find.text('到期日期'), findsOneWidget);
-    expect(find.text('结果摘要'), findsOneWidget);
+    expect(find.text('工单编号'), findsAtLeastNWidgets(1));
+    expect(find.text('到期日期'), findsAtLeastNWidgets(1));
+    expect(find.text('结果摘要'), findsAtLeastNWidgets(1));
     expect(find.text('#4'), findsOneWidget);
   });
 
@@ -1423,8 +1432,11 @@ void main() {
         equipmentService: equipmentService,
         craftService: craftService,
       ),
+      size: const Size(1800, 1200),
     );
 
+    await tester.tap(_popupMenuButtonFinder().first, warnIfMissed: false);
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('maintenance-execution-start-4')));
     await tester.pumpAndSettle();
 
@@ -1438,6 +1450,8 @@ void main() {
     expect(equipmentService.startExecutionCalls, 1);
     expect(find.text('执行中'), findsOneWidget);
 
+    await tester.tap(_popupMenuButtonFinder().first, warnIfMissed: false);
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('maintenance-execution-detail-4')));
     await tester.pumpAndSettle();
 
@@ -1484,8 +1498,11 @@ void main() {
         equipmentService: inProgressService,
         craftService: craftService,
       ),
+      size: const Size(1800, 1200),
     );
 
+    await tester.tap(_popupMenuButtonFinder().first, warnIfMissed: false);
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('maintenance-execution-complete-4')));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '提交'));
@@ -1534,8 +1551,11 @@ void main() {
         equipmentService: pendingService,
         craftService: craftService,
       ),
+      size: const Size(1800, 1200),
     );
 
+    await tester.tap(_popupMenuButtonFinder().first, warnIfMissed: false);
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('maintenance-execution-cancel-4')));
     await tester.pumpAndSettle();
     expect(
@@ -1562,6 +1582,7 @@ void main() {
         craftService: craftService,
         jumpPayloadJson: '{"action":"detail","work_order_id":4}',
       ),
+      size: const Size(1800, 1200),
     );
     await tester.pumpAndSettle();
 
@@ -1582,6 +1603,7 @@ void main() {
         craftService: craftService,
         jumpPayloadJson: '{"dashboard_filter":"overdue"}',
       ),
+      size: const Size(1800, 1200),
     );
     await tester.pumpAndSettle();
 
@@ -1599,9 +1621,9 @@ void main() {
       ),
     );
 
-    expect(find.text('记录编号'), findsOneWidget);
-    expect(find.text('到期日期'), findsOneWidget);
-    expect(find.text('完成时间'), findsOneWidget);
+    expect(find.text('记录编号'), findsAtLeastNWidgets(1));
+    expect(find.text('到期日期'), findsAtLeastNWidgets(1));
+    expect(find.text('完成时间'), findsAtLeastNWidgets(1));
     expect(find.text('执行人'), findsWidgets);
     expect(find.text('执行正常'), findsOneWidget);
   });

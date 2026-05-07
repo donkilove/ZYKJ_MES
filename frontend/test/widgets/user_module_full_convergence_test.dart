@@ -5,12 +5,15 @@ import 'package:mes_client/features/user/presentation/user_page.dart';
 
 Widget _host(Widget child) {
   return MaterialApp(
-    home: Scaffold(body: SizedBox(width: 1600, height: 1200, child: child)),
+    home: Scaffold(body: SizedBox(width: 1800, height: 1400, child: child)),
   );
 }
 
 void main() {
   testWidgets('UserPage 接入统一总页壳层并保留稳定页签栏锚点', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     await tester.pumpWidget(
       _host(
         UserPage(
@@ -29,6 +32,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('user-page-shell')), findsOneWidget);
+    expect(find.byKey(const ValueKey('user-page-header-slot')), findsOneWidget);
     expect(find.byKey(const ValueKey('user-page-tab-bar')), findsOneWidget);
     expect(find.text('用户管理'), findsWidgets);
     expect(find.text('注册审批'), findsWidgets);

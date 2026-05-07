@@ -41,7 +41,7 @@ void main() {
 
     expect(find.text('插件中心'), findsOneWidget);
     expect(find.text('串口助手'), findsOneWidget);
-    expect(find.text('选择一个插件以打开工作区'), findsOneWidget);
+    expect(find.text('未选择插件'), findsOneWidget);
   });
 
   testWidgets('插件列表为空时会提示检查插件目录', (tester) async {
@@ -68,7 +68,7 @@ void main() {
     );
     await _pumpForCatalogLoad(tester);
 
-    expect(find.text('未发现插件，请检查插件目录。'), findsOneWidget);
+    expect(find.text('未发现插件'), findsOneWidget);
   });
 
   testWidgets('启动中状态会渲染宿主启动面板', (tester) async {

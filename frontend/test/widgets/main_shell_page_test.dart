@@ -1747,7 +1747,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.text('公告管理'), findsWidgets);
-    expect(find.byKey(const ValueKey('message-page-header')), findsNothing);
+    expect(find.byKey(const ValueKey('message-page-header')), findsOneWidget);
 
     await tester.tap(find.text('公告管理').last);
     await tester.pump();

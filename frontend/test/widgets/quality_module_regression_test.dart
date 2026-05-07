@@ -695,7 +695,11 @@ QualitySupplierItem _buildSupplier({required int id, required String name}) {
 }
 
 Widget _wrapBody(Widget child) {
-  return MaterialApp(home: Scaffold(body: child));
+  return MaterialApp(
+    home: Scaffold(
+      body: Center(child: SizedBox(width: 1800, height: 1400, child: child)),
+    ),
+  );
 }
 
 void _setDesktopViewport(WidgetTester tester) {
@@ -1520,6 +1524,9 @@ void main() {
 
   testWidgets('质量域报废统计与维修订单包装页透传质量 service 权限与路由', (tester) async {
     final repairScrapService = _FakeQualityRepairScrapService();
+    _setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(
       _wrapBody(

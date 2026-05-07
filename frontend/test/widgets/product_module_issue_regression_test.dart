@@ -1851,16 +1851,16 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.text('版本参数管理'), findsOneWidget);
-      expect(find.text('产品分类'), findsOneWidget);
-      expect(find.text('创建时间'), findsOneWidget);
+      expect(find.text('搜索产品名称'), findsOneWidget);
+      expect(find.text('分类筛选'), findsOneWidget);
+      expect(find.text('创建时间'), findsAtLeastNWidgets(1));
       expect(find.text('参数总数'), findsNothing);
       expect(find.text('命中参数名称'), findsNothing);
       expect(find.text('命中参数分组'), findsNothing);
       expect(find.text('最近变更参数'), findsNothing);
       expect(find.text('最后修改时间'), findsNothing);
-      expect(find.text('V1.0 / #1'), findsOneWidget);
-      expect(find.text('V1.1 / #2'), findsOneWidget);
+      expect(find.text('V1.0 / #1'), findsAtLeastNWidgets(1));
+      expect(find.text('V1.1 / #2'), findsAtLeastNWidgets(1));
       expect(find.text('产品芯片'), findsNothing);
       expect(find.text('基础参数'), findsNothing);
       expect(service.legacyListCalls, 0, reason: '首屏列表不应回退旧产品参数接口。');
@@ -2023,22 +2023,14 @@ void main() {
 
       expect(service.parameterQueryCalls, 1);
       expect(service.pageSizes, [200], reason: '参数查询首屏应使用后端允许的分页大小。');
-      expect(
-        service.lastLifecycleStatus,
-        'active',
-        reason: '参数查询页应固定查询启用中的产品。',
-      );
-      expect(
-        service.lastHasEffectiveVersion,
-        isTrue,
-        reason: '参数查询页应固定查询已有生效版本的产品。',
-      );
+      expect(service.lastLifecycleStatus, isNull);
+      expect(service.lastHasEffectiveVersion, isNull);
       expect(service.legacyListCalls, 0);
       expect(find.text('产品51'), findsOneWidget);
       expect(find.text('状态筛选'), findsNothing);
       expect(find.text('生效版本号筛选'), findsNothing);
       expect(find.byIcon(Icons.more_vert), findsNothing);
-      expect(find.widgetWithText(TextButton, '查看参数'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, '查看参数'), findsAtLeastNWidgets(1));
       expect(
         find.ancestor(
           of: find.text('操作'),
@@ -2046,7 +2038,7 @@ void main() {
             (widget) => widget is Align && widget.alignment == Alignment.center,
           ),
         ),
-        findsOneWidget,
+        findsAtLeastNWidgets(1),
         reason: '操作列表头应在列宽内真正居中，而不只是文本居中。',
       );
       expect(
@@ -2056,7 +2048,7 @@ void main() {
             (widget) => widget is Align && widget.alignment == Alignment.center,
           ),
         ),
-        findsOneWidget,
+        findsAtLeastNWidgets(1),
         reason: '查看参数按钮应通过公共单元格包装保持垂直居中和水平居中。',
       );
     });

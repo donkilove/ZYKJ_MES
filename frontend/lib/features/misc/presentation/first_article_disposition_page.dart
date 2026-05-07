@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_detail_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_error_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
@@ -183,7 +184,6 @@ class _FirstArticleDispositionPageState
         widget.canDispose &&
         (_detail?.checkResult == 'failed' || _detail?.checkResult == 'fail');
     return Scaffold(
-      appBar: AppBar(title: Text(_pageTitle())),
       body: SafeArea(
         child: _loading
             ? const MesLoadingState(label: '首件处置加载中...')
@@ -200,51 +200,58 @@ class _FirstArticleDispositionPageState
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        KeyedSubtree(
+                          key: const ValueKey(
+                            'first-article-disposition-page-header',
+                          ),
+                          child: MesDetailPageHeader(title: _pageTitle()),
+                        ),
+                        const SizedBox(height: 16),
                         MesSectionCard(
                           title: '首件基础信息',
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                                _InfoRow('校验码', _detail!.verificationCode),
-                                _InfoRow('订单号', _detail!.productionOrderCode),
-                                _InfoRow(
-                                  '产品',
-                                  '${_detail!.productName} (${_detail!.productCode})',
-                                ),
-                                _InfoRow('工序', _detail!.processName),
-                                _InfoRow('操作员', _detail!.operatorUsername),
-                                _InfoRow(
-                                  '模板名称',
-                                  _displayText(_detail!.templateName),
-                                ),
-                                _InfoRow(
-                                  '首件内容',
-                                  _displayText(_detail!.checkContent),
-                                ),
-                                _InfoRow(
-                                  '首件测试值',
-                                  _displayText(_detail!.testValue),
-                                ),
-                                _InfoRow(
-                                  '参与操作员',
-                                  _participantText(_detail!.participants),
-                                ),
-                                _InfoRow(
-                                  '检验结果',
-                                  firstArticleResultLabel(_detail!.checkResult),
-                                ),
-                                _InfoRow(
-                                  '缺陷描述',
-                                  _detail!.defectDescription.isEmpty
-                                      ? '-'
-                                      : _detail!.defectDescription,
-                                ),
-                                _InfoRow(
-                                  '检验时间',
-                                  _formatDateTime(_detail!.checkAt),
-                                ),
-                              ],
-                            ),
+                              _InfoRow('校验码', _detail!.verificationCode),
+                              _InfoRow('订单号', _detail!.productionOrderCode),
+                              _InfoRow(
+                                '产品',
+                                '${_detail!.productName} (${_detail!.productCode})',
+                              ),
+                              _InfoRow('工序', _detail!.processName),
+                              _InfoRow('操作员', _detail!.operatorUsername),
+                              _InfoRow(
+                                '模板名称',
+                                _displayText(_detail!.templateName),
+                              ),
+                              _InfoRow(
+                                '首件内容',
+                                _displayText(_detail!.checkContent),
+                              ),
+                              _InfoRow(
+                                '首件测试值',
+                                _displayText(_detail!.testValue),
+                              ),
+                              _InfoRow(
+                                '参与操作员',
+                                _participantText(_detail!.participants),
+                              ),
+                              _InfoRow(
+                                '检验结果',
+                                firstArticleResultLabel(_detail!.checkResult),
+                              ),
+                              _InfoRow(
+                                '缺陷描述',
+                                _detail!.defectDescription.isEmpty
+                                    ? '-'
+                                    : _detail!.defectDescription,
+                              ),
+                              _InfoRow(
+                                '检验时间',
+                                _formatDateTime(_detail!.checkAt),
+                              ),
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 16),
                         MesSectionCard(
@@ -252,171 +259,165 @@ class _FirstArticleDispositionPageState
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                                if (_detail!.disposition != null) ...[
-                                  _InfoRow(
-                                    '处置人',
-                                    _detail!.disposition!.dispositionUsername,
+                              if (_detail!.disposition != null) ...[
+                                _InfoRow(
+                                  '处置人',
+                                  _detail!.disposition!.dispositionUsername,
+                                ),
+                                _InfoRow(
+                                  '处置时间',
+                                  _formatDateTime(
+                                    _detail!.disposition!.dispositionAt,
                                   ),
-                                  _InfoRow(
-                                    '处置时间',
-                                    _formatDateTime(
-                                      _detail!.disposition!.dispositionAt,
-                                    ),
+                                ),
+                                _InfoRow(
+                                  '复检结果',
+                                  _recheckResultLabel(
+                                    _detail!.disposition!.recheckResult,
                                   ),
-                                  _InfoRow(
-                                    '复检结果',
-                                    _recheckResultLabel(
-                                      _detail!.disposition!.recheckResult,
-                                    ),
+                                ),
+                                _InfoRow(
+                                  '最终判定',
+                                  _finalJudgmentLabel(
+                                    _detail!.disposition!.finalJudgment,
                                   ),
-                                  _InfoRow(
-                                    '最终判定',
-                                    _finalJudgmentLabel(
-                                      _detail!.disposition!.finalJudgment,
-                                    ),
-                                  ),
-                                  _InfoRow(
-                                    '处置意见',
-                                    _detail!.disposition!.dispositionOpinion,
-                                  ),
-                                  const Divider(height: 24),
-                                ] else
-                                  const Text('暂无处置记录'),
-                                if (_detail!.dispositionHistory.isNotEmpty) ...[
-                                  Text(
-                                    '处置历史',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.titleSmall,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  ..._detail!.dispositionHistory.map(
-                                    (history) => Padding(
-                                      padding: const EdgeInsets.only(bottom: 8),
-                                      child: Container(
-                                        width: double.infinity,
-                                        padding: const EdgeInsets.all(10),
-                                        decoration: BoxDecoration(
-                                          border: Border.all(
-                                            color: Theme.of(
-                                              context,
-                                            ).colorScheme.outlineVariant,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
+                                ),
+                                _InfoRow(
+                                  '处置意见',
+                                  _detail!.disposition!.dispositionOpinion,
+                                ),
+                                const Divider(height: 24),
+                              ] else
+                                const Text('暂无处置记录'),
+                              if (_detail!.dispositionHistory.isNotEmpty) ...[
+                                Text(
+                                  '处置历史',
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                                const SizedBox(height: 8),
+                                ..._detail!.dispositionHistory.map(
+                                  (history) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.outlineVariant,
                                         ),
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text('版本 ${history.version}'),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              '处置人：${history.dispositionUsername}',
-                                            ),
-                                            Text(
-                                              '处置时间：${_formatDateTime(history.dispositionAt)}',
-                                            ),
-                                            Text(
-                                              '复检结果：${_recheckResultLabel(history.recheckResult)}',
-                                            ),
-                                            Text(
-                                              '最终判定：${_finalJudgmentLabel(history.finalJudgment)}',
-                                            ),
-                                            Text(
-                                              '处置意见：${history.dispositionOpinion}',
-                                            ),
-                                          ],
-                                        ),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text('版本 ${history.version}'),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            '处置人：${history.dispositionUsername}',
+                                          ),
+                                          Text(
+                                            '处置时间：${_formatDateTime(history.dispositionAt)}',
+                                          ),
+                                          Text(
+                                            '复检结果：${_recheckResultLabel(history.recheckResult)}',
+                                          ),
+                                          Text(
+                                            '最终判定：${_finalJudgmentLabel(history.finalJudgment)}',
+                                          ),
+                                          Text(
+                                            '处置意见：${history.dispositionOpinion}',
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ),
-                                ],
-                                if (canSubmitDisposition) ...[
-                                  if (_detail!.dispositionHistory.isNotEmpty ||
-                                      _detail!.disposition != null)
-                                    const Divider(height: 24),
-                                  Text(
-                                    widget.isDispositionMode ? '提交处置' : '修改处置',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.titleSmall,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  DropdownButtonFormField<String>(
-                                    initialValue: _recheckResult,
-                                    decoration: const InputDecoration(
-                                      labelText: '复检结果',
-                                      border: OutlineInputBorder(),
-                                    ),
-                                    items: const [
-                                      DropdownMenuItem(
-                                        value: 'pass',
-                                        child: Text('合格'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'passed',
-                                        child: Text('合格'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'fail',
-                                        child: Text('不合格'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'failed',
-                                        child: Text('不合格'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'conditional',
-                                        child: Text('条件放行'),
-                                      ),
-                                    ],
-                                    onChanged: (v) => setState(
-                                      () => _recheckResult = v ?? 'passed',
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  DropdownButtonFormField<String>(
-                                    initialValue: _finalJudgment,
-                                    decoration: const InputDecoration(
-                                      labelText: '最终判定',
-                                      border: OutlineInputBorder(),
-                                    ),
-                                    items: const [
-                                      DropdownMenuItem(
-                                        value: 'accept',
-                                        child: Text('接受'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'reject',
-                                        child: Text('拒绝'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'rework',
-                                        child: Text('返工'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'scrap',
-                                        child: Text('报废'),
-                                      ),
-                                    ],
-                                    onChanged: (v) => setState(
-                                      () => _finalJudgment = v ?? 'accept',
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  TextField(
-                                    controller: _opinionController,
-                                    maxLines: 3,
-                                    decoration: const InputDecoration(
-                                      labelText: '处置意见',
-                                      border: OutlineInputBorder(),
-                                    ),
-                                  ),
-                                ],
+                                ),
                               ],
-                            ),
+                              if (canSubmitDisposition) ...[
+                                if (_detail!.dispositionHistory.isNotEmpty ||
+                                    _detail!.disposition != null)
+                                  const Divider(height: 24),
+                                Text(
+                                  widget.isDispositionMode ? '提交处置' : '修改处置',
+                                  style: Theme.of(context).textTheme.titleSmall,
+                                ),
+                                const SizedBox(height: 8),
+                                DropdownButtonFormField<String>(
+                                  initialValue: _recheckResult,
+                                  decoration: const InputDecoration(
+                                    labelText: '复检结果',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  items: const [
+                                    DropdownMenuItem(
+                                      value: 'pass',
+                                      child: Text('合格'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'passed',
+                                      child: Text('合格'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'fail',
+                                      child: Text('不合格'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'failed',
+                                      child: Text('不合格'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'conditional',
+                                      child: Text('条件放行'),
+                                    ),
+                                  ],
+                                  onChanged: (v) => setState(
+                                    () => _recheckResult = v ?? 'passed',
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                DropdownButtonFormField<String>(
+                                  initialValue: _finalJudgment,
+                                  decoration: const InputDecoration(
+                                    labelText: '最终判定',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  items: const [
+                                    DropdownMenuItem(
+                                      value: 'accept',
+                                      child: Text('接受'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'reject',
+                                      child: Text('拒绝'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'rework',
+                                      child: Text('返工'),
+                                    ),
+                                    DropdownMenuItem(
+                                      value: 'scrap',
+                                      child: Text('报废'),
+                                    ),
+                                  ],
+                                  onChanged: (v) => setState(
+                                    () => _finalJudgment = v ?? 'accept',
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: _opinionController,
+                                  maxLines: 3,
+                                  decoration: const InputDecoration(
+                                    labelText: '处置意见',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 16),
                         if (_message.isNotEmpty) ...[

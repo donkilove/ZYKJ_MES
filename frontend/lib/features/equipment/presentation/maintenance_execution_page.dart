@@ -15,6 +15,9 @@ import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
+import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
+
+enum _MaintenanceExecutionAction { start, complete, cancel, detail }
 
 class MaintenanceExecutionPage extends StatefulWidget {
   const MaintenanceExecutionPage({
@@ -621,36 +624,44 @@ class _MaintenanceExecutionPageState extends State<MaintenanceExecutionPage> {
                 ),
                 DataCell(Text(item.resultSummary ?? '-')),
                 DataCell(
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextButton(
-                        key: Key('maintenance-execution-start-${item.id}'),
-                        onPressed: canStart
-                            ? () => _startExecution(item)
-                            : null,
-                        child: const Text('开始执行'),
-                      ),
-                      const SizedBox(width: 8),
-                      TextButton(
-                        key: Key('maintenance-execution-complete-${item.id}'),
-                        onPressed: canComplete
-                            ? () => _completeExecution(item)
-                            : null,
-                        child: const Text('完成执行'),
-                      ),
-                      const SizedBox(width: 8),
-                      TextButton(
-                        key: Key('maintenance-execution-cancel-${item.id}'),
-                        onPressed: canCancel
-                            ? () => _cancelExecution(item)
-                            : null,
-                        child: const Text('取消'),
-                      ),
-                      const SizedBox(width: 8),
-                      TextButton(
+                  UnifiedListTableHeaderStyle.actionMenuButton<
+                    _MaintenanceExecutionAction
+                  >(
+                    theme: theme,
+                    onSelected: (action) {
+                      switch (action) {
+                        case _MaintenanceExecutionAction.start:
+                          _startExecution(item);
+                        case _MaintenanceExecutionAction.complete:
+                          _completeExecution(item);
+                        case _MaintenanceExecutionAction.cancel:
+                          _cancelExecution(item);
+                        case _MaintenanceExecutionAction.detail:
+                          _showDetail(item);
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      if (canStart)
+                        PopupMenuItem<_MaintenanceExecutionAction>(
+                          key: Key('maintenance-execution-start-${item.id}'),
+                          value: _MaintenanceExecutionAction.start,
+                          child: const Text('开始执行'),
+                        ),
+                      if (canComplete)
+                        PopupMenuItem<_MaintenanceExecutionAction>(
+                          key: Key('maintenance-execution-complete-${item.id}'),
+                          value: _MaintenanceExecutionAction.complete,
+                          child: const Text('完成执行'),
+                        ),
+                      if (canCancel)
+                        PopupMenuItem<_MaintenanceExecutionAction>(
+                          key: Key('maintenance-execution-cancel-${item.id}'),
+                          value: _MaintenanceExecutionAction.cancel,
+                          child: const Text('取消'),
+                        ),
+                      PopupMenuItem<_MaintenanceExecutionAction>(
                         key: Key('maintenance-execution-detail-${item.id}'),
-                        onPressed: () => _showDetail(item),
+                        value: _MaintenanceExecutionAction.detail,
                         child: const Text('详情'),
                       ),
                     ],

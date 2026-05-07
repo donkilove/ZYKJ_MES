@@ -172,6 +172,11 @@ ProductDetailResult _buildDetailResult() {
 
 void main() {
   testWidgets('产品管理页展示组件提供稳定页头 筛选区 反馈区和列表区锚点', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(3200, 1800));
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final keywordController = TextEditingController(text: '产品');
     addTearDown(keywordController.dispose);
 
@@ -182,53 +187,57 @@ void main() {
           visualDensity: VisualDensity.standard,
         ),
         home: Scaffold(
-          body: Column(
-            children: [
-              ProductManagementPageHeader(loading: false, onRefresh: () {}),
-              ProductManagementFilterSection(
-                keywordController: keywordController,
-                categoryOptions: const ['贴片', 'DTU', '套件'],
-                selectedCategory: '',
-                selectedStatus: '',
-                selectedEffectiveVersion: '',
-                loading: false,
-                canCreateProduct: true,
-                canExportProducts: true,
-                onCategoryChanged: (_) {},
-                onStatusChanged: (_) {},
-                onEffectiveVersionChanged: (_) {},
-                onSearch: () {},
-                onCreate: () {},
-                onExport: () {},
-              ),
-              const ProductManagementFeedbackBanner(message: '加载失败：网络错误'),
-              Expanded(
-                child: ProductManagementTableSection(
-                  products: [
-                    _buildProduct(id: 41),
-                    _buildProduct(
-                      id: 42,
-                      lifecycleStatus: 'inactive',
-                      effectiveVersion: 0,
-                    ),
-                  ],
+          body: SizedBox(
+            width: 3200,
+            height: 1800,
+            child: Column(
+              children: [
+                ProductManagementPageHeader(loading: false, onRefresh: () {}),
+                ProductManagementFilterSection(
+                  keywordController: keywordController,
+                  categoryOptions: const ['贴片', 'DTU', '套件'],
+                  selectedCategory: '',
+                  selectedStatus: '',
+                  selectedEffectiveVersion: '',
                   loading: false,
-                  emptyText: '暂无产品',
-                  formatTime: (value) => '2026-04-20 08:00:00',
-                  buildActionItems: (product) => const [
-                    PopupMenuItem<ProductManagementTableAction>(
-                      value: ProductManagementTableAction.viewDetail,
-                      child: Text('查看详情'),
-                    ),
-                    PopupMenuItem<ProductManagementTableAction>(
-                      value: ProductManagementTableAction.version,
-                      child: Text('版本管理'),
-                    ),
-                  ],
-                  onSelected: (action, product) {},
+                  canCreateProduct: true,
+                  canExportProducts: true,
+                  onCategoryChanged: (_) {},
+                  onStatusChanged: (_) {},
+                  onEffectiveVersionChanged: (_) {},
+                  onSearch: () {},
+                  onCreate: () {},
+                  onExport: () {},
                 ),
-              ),
-            ],
+                const ProductManagementFeedbackBanner(message: '加载失败：网络错误'),
+                Expanded(
+                  child: ProductManagementTableSection(
+                    products: [
+                      _buildProduct(id: 41),
+                      _buildProduct(
+                        id: 42,
+                        lifecycleStatus: 'inactive',
+                        effectiveVersion: 0,
+                      ),
+                    ],
+                    loading: false,
+                    emptyText: '暂无产品',
+                    formatTime: (value) => '2026-04-20 08:00:00',
+                    buildActionItems: (product) => const [
+                      PopupMenuItem<ProductManagementTableAction>(
+                        value: ProductManagementTableAction.viewDetail,
+                        child: Text('查看详情'),
+                      ),
+                      PopupMenuItem<ProductManagementTableAction>(
+                        value: ProductManagementTableAction.version,
+                        child: Text('版本管理'),
+                      ),
+                    ],
+                    onSelected: (action, product) {},
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -257,6 +266,11 @@ void main() {
   });
 
   testWidgets('产品状态薄包装按产品生命周期展示启用或停用语义', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(3200, 1800));
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(
       MaterialApp(
         theme: buildMesTheme(
@@ -264,20 +278,24 @@ void main() {
           visualDensity: VisualDensity.standard,
         ),
         home: Scaffold(
-          body: ProductManagementTableSection(
-            products: [
-              _buildProduct(id: 41, lifecycleStatus: 'active'),
-              _buildProduct(
-                id: 42,
-                lifecycleStatus: 'inactive',
-                effectiveVersion: 0,
-              ),
-            ],
-            loading: false,
-            emptyText: '暂无产品',
-            formatTime: (value) => '2026-04-20 08:00:00',
-            buildActionItems: (product) => const [],
-            onSelected: (action, product) {},
+          body: SizedBox(
+            width: 3200,
+            height: 1800,
+            child: ProductManagementTableSection(
+              products: [
+                _buildProduct(id: 41, lifecycleStatus: 'active'),
+                _buildProduct(
+                  id: 42,
+                  lifecycleStatus: 'inactive',
+                  effectiveVersion: 0,
+                ),
+              ],
+              loading: false,
+              emptyText: '暂无产品',
+              formatTime: (value) => '2026-04-20 08:00:00',
+              buildActionItems: (product) => const [],
+              onSelected: (action, product) {},
+            ),
           ),
         ),
       ),
@@ -290,6 +308,11 @@ void main() {
   testWidgets('ProductManagementPage 接入 MesCrudPageScaffold 并展示统一锚点', (
     tester,
   ) async {
+    await tester.binding.setSurfaceSize(const Size(3200, 1800));
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final service = _PageStructureService();
 
     await tester.pumpWidget(
@@ -300,8 +323,8 @@ void main() {
         ),
         home: Scaffold(
           body: SizedBox(
-            width: 1440,
-            height: 900,
+            width: 3200,
+            height: 1800,
             child: ProductManagementPage(
               session: AppSession(baseUrl: '', accessToken: 'token'),
               onLogout: () {},

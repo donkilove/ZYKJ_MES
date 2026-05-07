@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/ui/patterns/mes_filter_bar.dart';
 import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
+import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
 import 'package:mes_client/features/misc/presentation/daily_first_article_page.dart';
@@ -165,6 +166,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('首件详情 #1'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('first-article-disposition-page-header')),
+      findsOneWidget,
+    );
+    expect(find.byType(MesPageHeader), findsOneWidget);
     expect(find.text('首件基础信息'), findsOneWidget);
     expect(find.text('默认首件模板'), findsOneWidget);
     expect(find.text('外观、尺寸、装配确认'), findsOneWidget);
@@ -196,6 +202,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('首件处置 #1'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('first-article-disposition-page-header')),
+      findsOneWidget,
+    );
     expect(find.text('默认首件模板'), findsOneWidget);
     expect(find.text('helper_a (张三)、helper_b'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, '提交处置'), findsOneWidget);

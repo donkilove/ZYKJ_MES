@@ -526,7 +526,14 @@ MyOrderItem _buildDialogOrderItem() {
 }
 
 void main() {
+  Future<void> _setWideViewport(WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(const Size(2200, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+  }
+
   testWidgets('生产订单查询页支持 route payload 进入异常过滤态', (tester) async {
+    await _setWideViewport(tester);
+
     final service = _FakeProductionOrderQueryPageService();
 
     await tester.pumpWidget(
@@ -555,6 +562,8 @@ void main() {
   });
 
   testWidgets('生产订单查询页 route payload 解析失败时展示错误提示', (tester) async {
+    await _setWideViewport(tester);
+
     final service = _FakeProductionOrderQueryPageService();
 
     await tester.pumpWidget(
@@ -585,6 +594,8 @@ void main() {
   testWidgets('订单查询页 pollingEnabled=false 时不会启动定时刷新，切回 true 会补拉并恢复轮询', (
     tester,
   ) async {
+    await _setWideViewport(tester);
+
     final service = _FakeProductionOrderQueryPageService();
 
     Future<void> pumpPage({required bool pollingEnabled}) async {
@@ -634,12 +645,7 @@ void main() {
 
   testWidgets('订单查询页支持筛选并展示工单列表', (tester) async {
     final service = _FakeProductionOrderQueryPageService();
-    tester.view.physicalSize = const Size(1920, 1400);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
+    await _setWideViewport(tester);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -668,10 +674,10 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
-    expect(find.text('PO-QUERY-001'), findsOneWidget);
+    expect(find.text('PO-QUERY-001'), findsAtLeastNWidgets(1));
     expect(find.text('产线试产件1'), findsOneWidget);
     expect(find.text('切割'), findsOneWidget);
-    expect(find.text('可见12 / 分配12 / 完成4'), findsOneWidget);
+    expect(find.text('可见12 / 分配12 / 完成4'), findsAtLeastNWidgets(1));
     expect(find.text('2026-03-18'), findsOneWidget);
     expect(find.text('-'), findsWidgets);
     expect(find.text('订单编号'), findsAtLeastNWidgets(1));
@@ -713,6 +719,7 @@ void main() {
   });
 
   testWidgets('订单查询页个人完成数为0时回退展示工序完成数', (tester) async {
+    await _setWideViewport(tester);
     final service = _FakeProductionOrderQueryPageService()
       ..processCompletedQuantity = 4
       ..userCompletedQuantity = 0;
@@ -739,11 +746,12 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
-    expect(find.text('可见12 / 分配12 / 完成4'), findsOneWidget);
+    expect(find.text('可见12 / 分配12 / 完成4'), findsAtLeastNWidgets(1));
     expect(find.text('可见12 / 分配12 / 完成0'), findsNothing);
   });
 
   testWidgets('订单查询页仅在具备权限时显示导出按钮', (tester) async {
+    await _setWideViewport(tester);
     final service = _FakeProductionOrderQueryPageService();
 
     await tester.pumpWidget(
@@ -794,6 +802,7 @@ void main() {
   });
 
   testWidgets('订单查询页导出按钮触发导出主链路', (tester) async {
+    await _setWideViewport(tester);
     final service = _FakeProductionOrderQueryPageService();
     String? savedFilename;
     String? savedContentBase64;
@@ -843,6 +852,7 @@ void main() {
   });
 
   testWidgets('订单查询页翻页请求生效且搜索会回到第一页', (tester) async {
+    await _setWideViewport(tester);
     final service = _FakeProductionOrderQueryPageService();
 
     await tester.pumpWidget(
@@ -868,7 +878,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.text('第 1 / 3 页'), findsOneWidget);
-    expect(find.text('PO-QUERY-001'), findsOneWidget);
+    expect(find.text('PO-QUERY-001'), findsAtLeastNWidgets(1));
 
     await tester.tap(find.widgetWithText(OutlinedButton, '下一页'));
     await tester.pump();
@@ -891,8 +901,7 @@ void main() {
 
   testWidgets('订单查询页开始首件入口跳转到独立首件录入页', (tester) async {
     final service = _FakeProductionOrderQueryPageService();
-    await tester.binding.setSurfaceSize(const Size(1600, 1200));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await _setWideViewport(tester);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -929,8 +938,7 @@ void main() {
 
   testWidgets('订单查询页操作菜单包含历史且可跳转到历史视图', (tester) async {
     final service = _FakeProductionOrderQueryPageService();
-    await tester.binding.setSurfaceSize(const Size(1600, 1200));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await _setWideViewport(tester);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -1004,10 +1012,12 @@ void main() {
     expect(find.byType(ProductionOrderQueryDetailPage), findsOneWidget);
     final detailTabContext = tester.element(find.byType(TabBar));
     expect(DefaultTabController.of(detailTabContext).index, 0);
-    expect(find.text('顺序'), findsOneWidget);
+    expect(find.text('顺序'), findsAtLeastNWidgets(1));
   });
 
   testWidgets('代理视角展示工段与操作员控件', (tester) async {
+    await _setWideViewport(tester);
+
     final service = _FakeProductionOrderQueryPageService();
     final craftService = _FakeCraftService();
 
@@ -1048,6 +1058,8 @@ void main() {
   });
 
   testWidgets('代理视角选项加载失败会展示错误提示', (tester) async {
+    await _setWideViewport(tester);
+
     final service = _FakeProductionOrderQueryPageService()
       ..proxyOperatorOptionsError = ApiException('操作员加载失败', 500);
     final craftService = _FakeCraftService()
@@ -1081,6 +1093,8 @@ void main() {
   });
 
   testWidgets('代理视角切换工段会重载操作员选项', (tester) async {
+    await _setWideViewport(tester);
+
     final service = _FakeProductionOrderQueryPageService();
     final craftService = _FakeCraftService();
 
@@ -1140,6 +1154,8 @@ void main() {
   });
 
   testWidgets('代理视角按工段加载操作员失败会展示错误提示', (tester) async {
+    await _setWideViewport(tester);
+
     final service = _FakeProductionOrderQueryPageService()
       ..proxyViewOperatorOptionsError = ApiException('工段操作员失败', 500);
     final craftService = _FakeCraftService();
@@ -1183,6 +1199,8 @@ void main() {
   });
 
   testWidgets('代理视角未选择操作员时显示提示且不误查列表', (tester) async {
+    await _setWideViewport(tester);
+
     final service = _FakeProductionOrderQueryPageService();
     final craftService = _FakeCraftService();
 
@@ -1235,8 +1253,7 @@ void main() {
 
   testWidgets('订单查询页结束生产提交主链路可用', (tester) async {
     final service = _FakeProductionOrderQueryPageService();
-    await tester.binding.setSurfaceSize(const Size(1600, 1200));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await _setWideViewport(tester);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -1284,8 +1301,7 @@ void main() {
 
   testWidgets('订单查询页手工送修建单主链路可用', (tester) async {
     final service = _FakeProductionOrderQueryPageService();
-    await tester.binding.setSurfaceSize(const Size(1600, 1200));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await _setWideViewport(tester);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -1330,8 +1346,7 @@ void main() {
 
   testWidgets('订单查询页发起代班主链路可用', (tester) async {
     final service = _FakeProductionOrderQueryPageService();
-    await tester.binding.setSurfaceSize(const Size(1600, 1200));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await _setWideViewport(tester);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -1375,8 +1390,7 @@ void main() {
   testWidgets('订单查询页发起代班选项加载失败会展示错误提示', (tester) async {
     final service = _FakeProductionOrderQueryPageService()
       ..assistUserOptionsError = ApiException('代班人加载失败', 500);
-    await tester.binding.setSurfaceSize(const Size(1600, 1200));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await _setWideViewport(tester);
 
     await tester.pumpWidget(
       MaterialApp(

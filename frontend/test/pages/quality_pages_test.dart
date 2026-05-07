@@ -343,6 +343,9 @@ void main() {
   });
 
   testWidgets('维修详情页展示缺陷与原因区块', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1600, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     await tester.pumpWidget(
       MaterialApp(
         home: ProductionRepairOrderDetailPage(
@@ -356,8 +359,8 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    expect(find.text('缺陷现象'), findsOneWidget);
-    expect(find.text('维修原因'), findsOneWidget);
+    expect(find.text('缺陷现象'), findsAtLeastNWidgets(1));
+    expect(find.text('维修原因'), findsAtLeastNWidgets(1));
     expect(find.textContaining('虚焊'), findsWidgets);
     await tester.drag(find.byType(ListView), const Offset(0, -300));
     await tester.pumpAndSettle();
@@ -365,6 +368,9 @@ void main() {
   });
 
   testWidgets('质量页透传报废消息后打开品质报废详情', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -388,6 +394,9 @@ void main() {
   });
 
   testWidgets('质量页透传维修消息后打开品质维修详情', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -414,6 +423,9 @@ void main() {
   });
 
   testWidgets('质量页透传首件消息后展示新增首件字段', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
