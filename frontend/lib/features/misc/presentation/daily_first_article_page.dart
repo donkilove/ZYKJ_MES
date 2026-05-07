@@ -13,7 +13,6 @@ import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/misc/presentation/first_article_disposition_page.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
-import 'package:mes_client/features/quality/presentation/widgets/quality_workbench_filter_panel.dart';
 import 'package:mes_client/features/quality/presentation/widgets/quality_workbench_summary_grid.dart';
 import 'package:mes_client/features/quality/services/quality_service.dart';
 
@@ -47,10 +46,6 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
   late final QualityService _service;
   final ExportFileService _exportFileService = const ExportFileService();
   final TextEditingController _keywordController = TextEditingController();
-  final TextEditingController _productNameController = TextEditingController();
-  final TextEditingController _processCodeController = TextEditingController();
-  final TextEditingController _operatorUsernameController =
-      TextEditingController();
 
   bool _loading = false;
   bool _exporting = false;
@@ -83,9 +78,6 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
   @override
   void dispose() {
     _keywordController.dispose();
-    _productNameController.dispose();
-    _processCodeController.dispose();
-    _operatorUsernameController.dispose();
     super.dispose();
   }
 
@@ -136,9 +128,6 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
         date: _queryDate,
         keyword: _keywordController.text.trim(),
         result: _resultFilter,
-        productName: _productNameController.text.trim(),
-        processCode: _processCodeController.text.trim(),
-        operatorUsername: _operatorUsernameController.text.trim(),
         page: _page,
         pageSize: _pageSize,
       );
@@ -217,9 +206,6 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
         date: _queryDate,
         keyword: _keywordController.text.trim(),
         result: _resultFilter,
-        productName: _productNameController.text.trim(),
-        processCode: _processCodeController.text.trim(),
-        operatorUsername: _operatorUsernameController.text.trim(),
       );
       if (!mounted) return;
       if (exportFile.contentBase64.isEmpty) {
@@ -314,10 +300,12 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
     } catch (_) {}
   }
 
-  int get _failedCount => _items.where((item) => item.result == 'failed').length;
+  int get _failedCount =>
+      _items.where((item) => item.result == 'failed').length;
 
-  int get _disposableCount =>
-      _items.where((item) => widget.canDispose && item.result != 'passed').length;
+  int get _disposableCount => _items
+      .where((item) => widget.canDispose && item.result != 'passed')
+      .length;
 
   Widget _buildSummarySection() {
     return MesSectionCard(
@@ -345,110 +333,54 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
     );
   }
 
-  Widget _buildFilterPanel() {
-    return QualityWorkbenchFilterPanel(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              OutlinedButton.icon(
-                onPressed: _loading ? null : _pickQueryDate,
-                icon: const Icon(Icons.calendar_month),
-                label: Text('查询日期：${_formatDate(_queryDate)}'),
-              ),
-              DropdownButton<String?>(
-                value: _resultFilter,
-                hint: const Text('全部结果'),
-                items: const [
-                  DropdownMenuItem(value: null, child: Text('全部结果')),
-                  DropdownMenuItem(value: 'passed', child: Text('合格')),
-                  DropdownMenuItem(value: 'failed', child: Text('不合格')),
-                ],
-                onChanged: _loading
-                    ? null
-                    : (v) {
-                        setState(() {
-                          _resultFilter = v;
-                          _page = 1;
-                        });
-                        _loadFirstArticles(page: 1);
-                      },
-              ),
-              FilledButton.icon(
-                onPressed: _loading ? null : () => _loadFirstArticles(page: 1),
-                icon: const Icon(Icons.search),
-                label: const Text('查询'),
-              ),
-              if (widget.canExport)
-                OutlinedButton.icon(
-                  onPressed: (_loading || _exporting) ? null : _exportCsv,
-                  icon: const Icon(Icons.download),
-                  label: const Text('导出'),
-                ),
-            ],
+  Widget _buildHeaderFilters() {
+    return Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        OutlinedButton.icon(
+          onPressed: _loading ? null : _pickQueryDate,
+          icon: const Icon(Icons.calendar_month),
+          label: Text('查询日期：${_formatDate(_queryDate)}'),
+        ),
+        DropdownButton<String?>(
+          value: _resultFilter,
+          hint: const Text('全部结果'),
+          items: const [
+            DropdownMenuItem(value: null, child: Text('全部结果')),
+            DropdownMenuItem(value: 'passed', child: Text('合格')),
+            DropdownMenuItem(value: 'failed', child: Text('不合格')),
+          ],
+          onChanged: _loading
+              ? null
+              : (v) {
+                  setState(() {
+                    _resultFilter = v;
+                    _page = 1;
+                  });
+                  _loadFirstArticles(page: 1);
+                },
+        ),
+        SizedBox(
+          width: 260,
+          child: TextField(
+            key: const ValueKey('daily-first-article-search-field'),
+            controller: _keywordController,
+            decoration: const InputDecoration(
+              labelText: '搜索订单号/操作员',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            onSubmitted: (_) => _loadFirstArticles(page: 1),
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              SizedBox(
-                width: 260,
-                child: TextField(
-                  controller: _keywordController,
-                  decoration: const InputDecoration(
-                    labelText: '搜索订单号/产品/工序/操作员',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadFirstArticles(page: 1),
-                ),
-              ),
-              SizedBox(
-                width: 220,
-                child: TextField(
-                  controller: _productNameController,
-                  decoration: const InputDecoration(
-                    labelText: '产品名称',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadFirstArticles(page: 1),
-                ),
-              ),
-              SizedBox(
-                width: 220,
-                child: TextField(
-                  controller: _processCodeController,
-                  decoration: const InputDecoration(
-                    labelText: '工序编码',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadFirstArticles(page: 1),
-                ),
-              ),
-              SizedBox(
-                width: 220,
-                child: TextField(
-                  controller: _operatorUsernameController,
-                  decoration: const InputDecoration(
-                    labelText: '操作员',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadFirstArticles(page: 1),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+        ),
+        FilledButton.icon(
+          onPressed: _loading ? null : () => _loadFirstArticles(page: 1),
+          icon: const Icon(Icons.search),
+          label: const Text('查询'),
+        ),
+      ],
     );
   }
 
@@ -458,10 +390,17 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
 
     return MesCrudPageScaffold(
       header: MesRefreshPageHeader(
-        title: '每日首件',
+        leading: _buildHeaderFilters(),
         onRefresh: _loading ? null : _loadFirstArticles,
+        actionsBeforeRefresh: [
+          if (widget.canExport)
+            OutlinedButton.icon(
+              onPressed: (_loading || _exporting) ? null : _exportCsv,
+              icon: const Icon(Icons.download),
+              label: const Text('导出'),
+            ),
+        ],
       ),
-      filters: _buildFilterPanel(),
       banner: _message.isEmpty
           ? _buildSummarySection()
           : Column(

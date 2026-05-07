@@ -626,8 +626,6 @@ def list_first_articles(
         filters.append(
             or_(
                 ProductionOrder.order_code.ilike(like_pattern),
-                Product.name.ilike(like_pattern),
-                ProductionOrderProcess.process_name.ilike(like_pattern),
                 User.username.ilike(like_pattern),
             )
         )

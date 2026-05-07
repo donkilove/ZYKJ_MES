@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
-import 'package:mes_client/core/ui/patterns/mes_filter_bar.dart';
 import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
 import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
 import 'package:mes_client/features/misc/presentation/daily_first_article_page.dart';
@@ -15,6 +15,11 @@ class _FakeQualityService extends QualityService {
 
   int listCalls = 0;
   int submitCalls = 0;
+  String? lastKeyword;
+  String? lastResult;
+  String? lastProductName;
+  String? lastProcessCode;
+  String? lastOperatorUsername;
 
   @override
   Future<FirstArticleListResult> listFirstArticles({
@@ -28,6 +33,11 @@ class _FakeQualityService extends QualityService {
     int pageSize = 20,
   }) async {
     listCalls += 1;
+    lastKeyword = keyword;
+    lastResult = result;
+    lastProductName = productName;
+    lastProcessCode = processCode;
+    lastOperatorUsername = operatorUsername;
     return FirstArticleListResult(
       queryDate: DateTime(2026, 3, 21),
       verificationCode: 'FA-001',
@@ -160,7 +170,8 @@ void main() {
     final service = _FakeQualityService();
     await pumpPage(tester, service);
 
-    expect(find.text('每日首件'), findsOneWidget);
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.text('每日首件'), findsNothing);
 
     await tester.tap(find.text('详情'));
     await tester.pumpAndSettle();
@@ -183,12 +194,37 @@ void main() {
     final service = _FakeQualityService();
     await pumpPage(tester, service);
 
-    expect(find.byType(MesFilterBar), findsOneWidget);
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(find.byType(MesMetricCard), findsAtLeastNWidgets(4));
-    expect(find.text('筛选控制台'), findsOneWidget);
+    expect(find.text('每日首件'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('daily-first-article-search-field')),
+      findsOneWidget,
+    );
+    expect(find.text('搜索订单号/操作员'), findsOneWidget);
+    expect(find.widgetWithText(TextField, '产品名称'), findsNothing);
+    expect(find.widgetWithText(TextField, '工序编码'), findsNothing);
+    expect(find.widgetWithText(TextField, '操作员'), findsNothing);
     expect(find.text('任务总览'), findsOneWidget);
     expect(find.text('首件记录'), findsOneWidget);
     expect(find.byType(MesSectionCard), findsAtLeastNWidgets(2));
+  });
+
+  testWidgets('每日首件页查询只保留一个关键词输入并按订单号或操作员查询', (tester) async {
+    final service = _FakeQualityService();
+    await pumpPage(tester, service);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('daily-first-article-search-field')),
+      ' worker ',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, '查询'));
+    await tester.pumpAndSettle();
+
+    expect(service.lastKeyword, 'worker');
+    expect(service.lastProductName, isNull);
+    expect(service.lastProcessCode, isNull);
+    expect(service.lastOperatorUsername, isNull);
   });
 
   testWidgets('提交处置后返回列表并刷新', (tester) async {
@@ -215,7 +251,8 @@ void main() {
 
     expect(service.submitCalls, 1);
     expect(service.listCalls, 2);
-    expect(find.text('每日首件'), findsOneWidget);
+    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.text('每日首件'), findsNothing);
     expect(find.text('首件处置 #1'), findsNothing);
   });
 

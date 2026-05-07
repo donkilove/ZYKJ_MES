@@ -605,6 +605,39 @@ class QualityModuleIntegrationTest(unittest.TestCase):
         self.assertIn(record.order.order_code, csv_lines[1])
         self.assertIn("不通过", csv_lines[1])
 
+    def test_first_article_keyword_only_matches_order_code_and_operator_username(self) -> None:
+        matched_record = self._create_first_article_record(result="failed")
+        keyword = f"needle-{self._suffix}"
+        matched_operator = self._create_operator_user(token=keyword)
+        matched_record.operator_user_id = matched_operator.id
+
+        unmatched_record = self._create_first_article_record(result="failed")
+        unmatched_order = self.db.get(ProductionOrder, unmatched_record.order_id)
+        unmatched_order_process = self.db.get(
+            ProductionOrderProcess,
+            unmatched_record.order_process_id,
+        )
+        self.assertIsNotNone(unmatched_order)
+        self.assertIsNotNone(unmatched_order_process)
+        assert unmatched_order is not None and unmatched_order_process is not None
+        unmatched_order.product.name = f"目标关键词产品-{self._suffix}"
+        unmatched_order_process.process_name = f"目标关键词工序-{self._suffix}"
+        self.db.commit()
+
+        response = self.client.get(
+            "/api/v1/quality/first-articles",
+            headers=self._headers(),
+            params={
+                "date": "2026-03-02",
+                "keyword": keyword,
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+
+        payload = response.json()["data"]
+        self.assertEqual(payload["total"], 1)
+        self.assertEqual(payload["items"][0]["id"], matched_record.id)
+
     def test_quality_stats_export_returns_quality_sections_and_trend_rows(self) -> None:
         record = self._create_first_article_record(result="failed")
         repair_order = self._create_repair_order(record=record)
