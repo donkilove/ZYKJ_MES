@@ -484,6 +484,13 @@ void main() {
       findsOneWidget,
     );
     expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('audit-log-page-header')),
+        matching: find.byKey(const ValueKey('audit-log-filter-section')),
+      ),
+      findsOneWidget,
+    );
+    expect(
       find.byKey(const ValueKey('audit-log-table-section')),
       findsOneWidget,
     );

@@ -5,7 +5,6 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/features/user/presentation/widgets/audit_log_page_header.dart';
-import 'package:mes_client/features/user/presentation/widgets/shared/user_module_filter_panel.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
@@ -220,53 +219,12 @@ class _AuditLogPageState extends State<AuditLogPage> {
       header: AuditLogPageHeader(
         loading: _loading,
         onRefresh: () => _loadAuditLogs(page: _page),
-      ),
-      filters: UserModuleFilterPanel(
-        sectionKey: const ValueKey('audit-log-filter-section'),
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _operatorController,
-                decoration: const InputDecoration(
-                  labelText: '操作人账号',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                onSubmitted: (_) => _loadAuditLogs(page: 1),
-              ),
-            ),
-            const SizedBox(width: 8),
-            OutlinedButton.icon(
-              onPressed: _pickDateRange,
-              icon: const Icon(Icons.date_range, size: 16),
-              label: Text(
-                _startTime != null && _endTime != null
-                    ? '${_formatDate(_startTime)} ~ ${_formatDate(_endTime)}'
-                    : '选择时间范围',
-                style: const TextStyle(fontSize: 13),
-              ),
-            ),
-            const SizedBox(width: 8),
-            if (_startTime != null) ...[
-              IconButton(
-                onPressed: _clearDateRange,
-                icon: const Icon(Icons.clear, size: 16),
-                tooltip: '清除时间范围',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(
-                  minWidth: 28,
-                  minHeight: 28,
-                ),
-              ),
-            ],
-            const SizedBox(width: 8),
-            FilledButton(
-              onPressed: () => _loadAuditLogs(page: 1),
-              child: const Text('查询'),
-            ),
-          ],
-        ),
+        operatorController: _operatorController,
+        onPickDateRange: _pickDateRange,
+        onClearDateRange: _clearDateRange,
+        onSearch: () => _loadAuditLogs(page: 1),
+        startTime: _startTime,
+        endTime: _endTime,
       ),
       banner: _message.isEmpty
           ? null
