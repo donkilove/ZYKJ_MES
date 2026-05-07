@@ -19,7 +19,6 @@ import 'package:mes_client/features/craft/presentation/widgets/process_stage_pan
 import 'package:mes_client/features/craft/presentation/widgets/process_toggle_dialogs.dart';
 import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
-import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 
 class ProcessManagementPage extends StatefulWidget {
   const ProcessManagementPage({
@@ -625,10 +624,11 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
         canWrite: widget.canWrite,
         onKeywordChanged: (value) {
           _pageState.setProcessKeyword(value);
-          unawaited(_pageState.reloadProcesses(page: 1));
         },
         onStageFilterChanged: (value) {
           _pageState.setProcessStageFilter(value);
+        },
+        onSearch: () {
           unawaited(_pageState.reloadProcesses(page: 1));
         },
         onPreviousPage: _viewState.processPage > 1
@@ -654,6 +654,8 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
         canWrite: widget.canWrite,
         onKeywordChanged: (value) {
           _pageState.setStageKeyword(value);
+        },
+        onSearch: () {
           unawaited(_pageState.reloadStages(page: 1));
         },
         onPreviousPage: _viewState.stagePage > 1
@@ -684,9 +686,7 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
         message: _viewState.message,
         jumpNotice: _viewState.jumpNotice,
       ),
-      content: _viewState.loading
-          ? const MesLoadingState(label: '工艺视图加载中...')
-          : workspace,
+      content: workspace,
     );
   }
 }

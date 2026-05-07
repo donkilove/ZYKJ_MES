@@ -25,6 +25,7 @@ class ProcessItemPanel extends StatelessWidget {
     required this.canWrite,
     required this.onKeywordChanged,
     required this.onStageFilterChanged,
+    required this.onSearch,
     required this.onPreviousPage,
     required this.onNextPage,
     required this.onFocusProcess,
@@ -43,6 +44,7 @@ class ProcessItemPanel extends StatelessWidget {
   final bool canWrite;
   final ValueChanged<String> onKeywordChanged;
   final ValueChanged<int?> onStageFilterChanged;
+  final VoidCallback onSearch;
   final VoidCallback? onPreviousPage;
   final VoidCallback? onNextPage;
   final ValueChanged<int> onFocusProcess;
@@ -100,6 +102,10 @@ class ProcessItemPanel extends StatelessWidget {
                       ),
                     ],
                     onChanged: onStageFilterChanged,
+                  ),
+                  FilledButton(
+                    onPressed: loading ? null : onSearch,
+                    child: const Text('查询'),
                   ),
                 ],
               ),

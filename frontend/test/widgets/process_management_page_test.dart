@@ -336,6 +336,7 @@ void main() {
     expect(find.byKey(const ValueKey('process-item-panel')), findsOneWidget);
     expect(find.byKey(const ValueKey('process-stage-panel')), findsNothing);
     expect(find.byKey(const ValueKey('process-focus-panel')), findsNothing);
+    expect(find.widgetWithText(FilledButton, '查询'), findsOneWidget);
     expect(find.text('全部状态'), findsNothing);
     expect(find.byTooltip('导出工段'), findsNothing);
     expect(find.byTooltip('导出工序'), findsNothing);
@@ -430,6 +431,7 @@ void main() {
               canWrite: true,
               onKeywordChanged: (_) {},
               onStageFilterChanged: (_) {},
+              onSearch: () {},
               onPreviousPage: null,
               onNextPage: null,
               onFocusProcess: (_) {},
@@ -462,6 +464,7 @@ void main() {
               canWrite: true,
               onKeywordChanged: (_) {},
               onStageFilterChanged: (_) {},
+              onSearch: () {},
               onPreviousPage: null,
               onNextPage: null,
               onFocusProcess: (_) {},
@@ -492,6 +495,7 @@ void main() {
               total: 0,
               canWrite: true,
               onKeywordChanged: (_) {},
+              onSearch: () {},
               onPreviousPage: null,
               onNextPage: null,
               onActionSelected: (_, __) {},
@@ -519,6 +523,7 @@ void main() {
               total: 0,
               canWrite: true,
               onKeywordChanged: (_) {},
+              onSearch: () {},
               onPreviousPage: null,
               onNextPage: null,
               onActionSelected: (_, __) {},
@@ -562,6 +567,48 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(craftService.lastProcessPage, 2);
+  });
+
+  testWidgets('工序搜索时输入框不会因加载态重建而失焦丢字', (tester) async {
+    final craftService = _FakeCraftService();
+    tester.view.physicalSize = const Size(1600, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProcessManagementPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canWrite: true,
+            craftService: craftService,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.enterText(find.widgetWithText(TextField, '搜索工序'), '激');
+    await tester.pump();
+
+    expect(find.widgetWithText(TextField, '搜索工序'), findsOneWidget);
+    expect(find.text('工艺视图加载中...'), findsNothing);
+    expect(craftService.lastProcessPage, 1);
+    expect(
+      tester.widget<TextField>(find.widgetWithText(TextField, '搜索工序')).controller?.text,
+      '激',
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, '查询'));
+    await tester.pumpAndSettle();
+
+    expect(craftService.lastProcessPage, 1);
+    expect(find.text('激光切割'), findsOneWidget);
   });
 
   testWidgets('工序管理引用弹窗展示编码字段', (tester) async {

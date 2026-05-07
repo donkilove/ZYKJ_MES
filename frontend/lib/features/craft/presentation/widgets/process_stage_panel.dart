@@ -21,6 +21,7 @@ class ProcessStagePanel extends StatelessWidget {
     required this.total,
     required this.canWrite,
     required this.onKeywordChanged,
+    required this.onSearch,
     required this.onPreviousPage,
     required this.onNextPage,
     required this.onActionSelected,
@@ -34,6 +35,7 @@ class ProcessStagePanel extends StatelessWidget {
   final int total;
   final bool canWrite;
   final ValueChanged<String> onKeywordChanged;
+  final VoidCallback onSearch;
   final VoidCallback? onPreviousPage;
   final VoidCallback? onNextPage;
   final void Function(StageAction action, CraftStageItem item) onActionSelected;
@@ -73,7 +75,13 @@ class ProcessStagePanel extends StatelessWidget {
                   spacing: 8,
                   runSpacing: 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [_buildSearchField()],
+                  children: [
+                    _buildSearchField(),
+                    FilledButton(
+                      onPressed: loading ? null : onSearch,
+                      child: const Text('查询'),
+                    ),
+                  ],
                 ),
               ),
             ),
