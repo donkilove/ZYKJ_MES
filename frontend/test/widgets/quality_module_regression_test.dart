@@ -1047,7 +1047,11 @@ void main() {
       find.byKey(const ValueKey('quality-trend-page-header')),
       findsOneWidget,
     );
-    expect(find.byType(MesFilterBar), findsOneWidget);
+    expect(find.byType(MesFilterBar), findsNothing);
+    expect(
+      find.byKey(const ValueKey('quality-trend-keyword-field')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('质量维修订单包装页不再额外嵌套页头', (tester) async {

@@ -317,6 +317,7 @@ class QualityService implements RepairScrapService {
   Future<QualityExportFile> exportQualityTrend({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,
@@ -325,6 +326,9 @@ class QualityService implements RepairScrapService {
     final payload = <String, dynamic>{};
     if (startDate != null) payload['start_date'] = _formatDate(startDate);
     if (endDate != null) payload['end_date'] = _formatDate(endDate);
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      payload['keyword'] = keyword.trim();
+    }
     if (productName != null && productName.trim().isNotEmpty) {
       payload['product_name'] = productName.trim();
     }

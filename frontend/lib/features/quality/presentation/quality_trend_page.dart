@@ -14,7 +14,6 @@ import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
 import 'package:mes_client/features/quality/presentation/widgets/quality_trend_page_header.dart';
-import 'package:mes_client/features/quality/presentation/widgets/quality_workbench_filter_panel.dart';
 import 'package:mes_client/features/quality/presentation/widgets/quality_workbench_summary_grid.dart';
 import 'package:mes_client/features/quality/services/quality_service.dart';
 
@@ -41,9 +40,7 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
 
   late final QualityService _service;
   final ExportFileService _exportFileService = const ExportFileService();
-  final TextEditingController _productController = TextEditingController();
-  final TextEditingController _processController = TextEditingController();
-  final TextEditingController _operatorController = TextEditingController();
+  final TextEditingController _keywordController = TextEditingController();
 
   bool _loading = false;
   bool _exporting = false;
@@ -69,9 +66,7 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
 
   @override
   void dispose() {
-    _productController.dispose();
-    _processController.dispose();
-    _operatorController.dispose();
+    _keywordController.dispose();
     super.dispose();
   }
 
@@ -108,57 +103,45 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
 
   Future<void> _loadTrend() async {
     if (_startDate.isAfter(_endDate)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('开始日期不能晚于结束日期')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('开始日期不能晚于结束日期')));
       return;
     }
     setState(() {
       _loading = true;
     });
     try {
-      final productName = _productController.text.trim();
-      final processCode = _processController.text.trim();
-      final operatorUsername = _operatorController.text.trim();
+      final keyword = _keywordController.text.trim();
       final requests = await Future.wait<Object>([
         _service.getQualityTrend(
           startDate: _startDate,
           endDate: _endDate,
-          productName: productName,
-          processCode: processCode,
-          operatorUsername: operatorUsername,
+          keyword: keyword,
           result: _resultFilter,
         ),
         _service.getQualityOverview(
           startDate: _startDate,
           endDate: _endDate,
-          productName: productName,
-          processCode: processCode,
-          operatorUsername: operatorUsername,
+          keyword: keyword,
           result: _resultFilter,
         ),
         _service.getQualityProductStats(
           startDate: _startDate,
           endDate: _endDate,
-          productName: productName,
-          processCode: processCode,
-          operatorUsername: operatorUsername,
+          keyword: keyword,
           result: _resultFilter,
         ),
         _service.getQualityProcessStats(
           startDate: _startDate,
           endDate: _endDate,
-          productName: productName,
-          processCode: processCode,
-          operatorUsername: operatorUsername,
+          keyword: keyword,
           result: _resultFilter,
         ),
         _service.getQualityOperatorStats(
           startDate: _startDate,
           endDate: _endDate,
-          productName: productName,
-          processCode: processCode,
-          operatorUsername: operatorUsername,
+          keyword: keyword,
           result: _resultFilter,
         ),
       ]);
@@ -198,16 +181,14 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
       final exportFile = await _service.exportQualityTrend(
         startDate: _startDate,
         endDate: _endDate,
-        productName: _productController.text.trim(),
-        processCode: _processController.text.trim(),
-        operatorUsername: _operatorController.text.trim(),
+        keyword: _keywordController.text.trim(),
         result: _resultFilter,
       );
       if (!mounted) return;
       if (exportFile.contentBase64.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('导出质量趋势失败：服务端返回空数据')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('导出质量趋势失败：服务端返回空数据')));
         return;
       }
       final savedPath = await _exportFileService.saveCsvBase64(
@@ -236,117 +217,15 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
     }
   }
 
-  Widget _buildFilterBar() {
-    return QualityWorkbenchFilterPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              OutlinedButton.icon(
-                onPressed: _loading
-                    ? null
-                    : () => _pickDate(
-                        current: _startDate,
-                        helpText: '选择开始日期',
-                        onChanged: (v) => setState(() => _startDate = v),
-                      ),
-                icon: const Icon(Icons.event),
-                label: Text('开始：${_formatDate(_startDate)}'),
-              ),
-              OutlinedButton.icon(
-                onPressed: _loading
-                    ? null
-                    : () => _pickDate(
-                        current: _endDate,
-                        helpText: '选择结束日期',
-                        onChanged: (v) => setState(() => _endDate = v),
-                      ),
-                icon: const Icon(Icons.event_available),
-                label: Text('结束：${_formatDate(_endDate)}'),
-              ),
-              FilledButton.icon(
-                onPressed: _loading ? null : _loadTrend,
-                icon: const Icon(Icons.search),
-                label: const Text('查询'),
-              ),
-              if (widget.canExport)
-                OutlinedButton.icon(
-                  onPressed: (_loading || _exporting) ? null : _exportTrend,
-                  icon: const Icon(Icons.download),
-                  label: const Text('导出'),
-                ),
-              DropdownButton<String?>(
-                value: _resultFilter,
-                hint: const Text('全部结果'),
-                items: const [
-                  DropdownMenuItem(value: null, child: Text('全部结果')),
-                  DropdownMenuItem(value: 'passed', child: Text('合格')),
-                  DropdownMenuItem(value: 'failed', child: Text('不合格')),
-                ],
-                onChanged: _loading
-                    ? null
-                    : (v) => setState(() => _resultFilter = v),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              SizedBox(
-                width: 220,
-                child: TextField(
-                  controller: _productController,
-                  decoration: const InputDecoration(
-                    labelText: '产品名称',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadTrend(),
-                ),
-              ),
-              SizedBox(
-                width: 220,
-                child: TextField(
-                  controller: _processController,
-                  decoration: const InputDecoration(
-                    labelText: '工序编码',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadTrend(),
-                ),
-              ),
-              SizedBox(
-                width: 220,
-                child: TextField(
-                  controller: _operatorController,
-                  decoration: const InputDecoration(
-                    labelText: '操作员',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadTrend(),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildSummaryCards() {
     final overallPassRate =
         _overview?.passRatePercent ??
         _ratioPercent(_totalPassedCount, _totalFirstArticleCount);
     final scrapRate = _ratioPercent(_totalScrapCount, _totalFirstArticleCount);
-    final repairShare = _ratioPercent(_totalRepairCount, _totalFirstArticleCount);
+    final repairShare = _ratioPercent(
+      _totalRepairCount,
+      _totalFirstArticleCount,
+    );
     final cards = [
       ('整体通过率', _formatMetricPercent(overallPassRate), '首件通过表现'),
       ('不良总数', '$_totalDefectCount', '趋势期累计不良'),
@@ -395,10 +274,7 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
             const SizedBox(height: 12),
             _buildPassRateChart(),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 16,
-              children: [_legendDot(Colors.blue, '通过率趋势')],
-            ),
+            Wrap(spacing: 16, children: [_legendDot(Colors.blue, '通过率趋势')]),
             const SizedBox(height: 12),
           ],
           _buildTrendTable(),
@@ -878,9 +754,7 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
                           DataCell(Text('${item.passedTotal}')),
                           DataCell(Text('${item.failedTotal}')),
                           DataCell(
-                            Text(
-                              '${item.passRatePercent.toStringAsFixed(1)}%',
-                            ),
+                            Text('${item.passRatePercent.toStringAsFixed(1)}%'),
                           ),
                           DataCell(Text('${item.defectTotal}')),
                           DataCell(Text('${item.scrapTotal}')),
@@ -944,12 +818,28 @@ class _QualityTrendPageState extends State<QualityTrendPage> {
     return MesCrudPageScaffold(
       header: QualityTrendPageHeader(
         loading: _loading,
+        keywordController: _keywordController,
+        resultFilter: _resultFilter,
         canExport: widget.canExport,
         exporting: _exporting,
+        startDateText: _formatDate(_startDate),
+        endDateText: _formatDate(_endDate),
+        onKeywordSubmitted: (_) => _loadTrend(),
+        onResultChanged: (v) => setState(() => _resultFilter = v),
+        onPickStartDate: () => _pickDate(
+          current: _startDate,
+          helpText: '选择开始日期',
+          onChanged: (v) => setState(() => _startDate = v),
+        ),
+        onPickEndDate: () => _pickDate(
+          current: _endDate,
+          helpText: '选择结束日期',
+          onChanged: (v) => setState(() => _endDate = v),
+        ),
+        onSearch: _loadTrend,
         onRefresh: _loadTrend,
         onExport: _exportTrend,
       ),
-      filters: _buildFilterBar(),
       banner: _buildSummaryCards(),
       content: _loading
           ? const MesLoadingState(label: '质量趋势加载中...')

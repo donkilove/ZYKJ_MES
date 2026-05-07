@@ -16,6 +16,8 @@ class _FakeQualityTrendService extends QualityService {
   int productCalls = 0;
   int processCalls = 0;
   int operatorCalls = 0;
+  int exportCalls = 0;
+  String? lastKeyword;
 
   @override
   Future<List<QualityTrendItem>> getQualityTrend({
@@ -28,6 +30,7 @@ class _FakeQualityTrendService extends QualityService {
     String? result,
   }) async {
     trendCalls += 1;
+    lastKeyword = keyword;
     return const [
       QualityTrendItem(
         date: '2026-03-01',
@@ -63,6 +66,7 @@ class _FakeQualityTrendService extends QualityService {
     String? result,
   }) async {
     overviewCalls += 1;
+    lastKeyword = keyword;
     return QualityStatsOverview(
       firstArticleTotal: 15,
       passedTotal: 12,
@@ -89,6 +93,7 @@ class _FakeQualityTrendService extends QualityService {
     String? result,
   }) async {
     productCalls += 1;
+    lastKeyword = keyword;
     return const [
       QualityProductStatItem(
         productId: 1,
@@ -116,6 +121,7 @@ class _FakeQualityTrendService extends QualityService {
     String? result,
   }) async {
     processCalls += 1;
+    lastKeyword = keyword;
     return [
       QualityProcessStatItem(
         processCode: 'GX-01',
@@ -143,6 +149,7 @@ class _FakeQualityTrendService extends QualityService {
     String? result,
   }) async {
     operatorCalls += 1;
+    lastKeyword = keyword;
     return [
       QualityOperatorStatItem(
         operatorUserId: 7,
@@ -158,12 +165,31 @@ class _FakeQualityTrendService extends QualityService {
       ),
     ];
   }
+
+  @override
+  Future<QualityExportFile> exportQualityTrend({
+    DateTime? startDate,
+    DateTime? endDate,
+    String? keyword,
+    String? productName,
+    String? processCode,
+    String? operatorUsername,
+    String? result,
+  }) async {
+    exportCalls += 1;
+    lastKeyword = keyword;
+    return const QualityExportFile(
+      filename: 'quality_trend.csv',
+      contentBase64: 'YQ==',
+    );
+  }
 }
 
 void main() {
   Future<void> pumpPage(
     WidgetTester tester,
     _FakeQualityTrendService service,
+    {bool canExport = true,}
   ) async {
     tester.view.physicalSize = const Size(1600, 2000);
     tester.view.devicePixelRatio = 1.0;
@@ -178,6 +204,7 @@ void main() {
           body: QualityTrendPage(
             session: AppSession(baseUrl: '', accessToken: ''),
             onLogout: () {},
+            canExport: canExport,
             service: service,
           ),
         ),
@@ -225,12 +252,45 @@ void main() {
 
     await pumpPage(tester, service);
 
-    expect(find.byType(MesFilterBar), findsOneWidget);
+    expect(find.byType(MesFilterBar), findsNothing);
     expect(find.byType(MesMetricCard), findsAtLeastNWidgets(4));
-    expect(find.text('筛选控制台'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('quality-trend-keyword-field')),
+      findsOneWidget,
+    );
+    expect(find.text('搜索产品/工序/操作员'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('quality-trend-operation-menu')),
+      findsOneWidget,
+    );
     expect(find.text('质量总览'), findsOneWidget);
     expect(find.text('趋势概览'), findsOneWidget);
     expect(find.byType(MesSectionCard), findsAtLeastNWidgets(4));
+  });
+
+  testWidgets('质量趋势页使用聚合搜索并把导出收进操作菜单', (tester) async {
+    final service = _FakeQualityTrendService();
+
+    await pumpPage(tester, service);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('quality-trend-keyword-field')),
+      '产品A',
+    );
+    await tester.tap(find.widgetWithText(FilledButton, '查询'));
+    await tester.pumpAndSettle();
+
+    expect(service.lastKeyword, '产品A');
+
+    await tester.tap(
+      find.byKey(const ValueKey('quality-trend-operation-menu')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('导出').last);
+    await tester.pumpAndSettle();
+
+    expect(service.exportCalls, 1);
+    expect(service.lastKeyword, '产品A');
   });
 
   testWidgets('质量趋势页首屏先展示趋势主体再展示维度对比', (tester) async {
