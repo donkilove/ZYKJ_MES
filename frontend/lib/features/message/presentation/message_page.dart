@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/message/presentation/announcement_management_page.dart';
 import 'package:mes_client/features/message/presentation/message_center_page.dart';
+import 'package:mes_client/features/message/presentation/widgets/message_page_header.dart';
 import 'package:mes_client/features/message/presentation/widgets/message_page_shell.dart';
 import 'package:mes_client/features/message/services/message_service.dart';
 
@@ -189,8 +190,7 @@ class _MessagePageState extends State<MessagePage>
           refreshTick: widget.refreshTick,
           onUnreadCountChanged: widget.onUnreadCountChanged,
           onNavigateToPage: widget.onNavigateToPage,
-          routePayloadJson:
-              widget.preferredTabCode == messageCenterTabCode
+          routePayloadJson: widget.preferredTabCode == messageCenterTabCode
               ? widget.routePayloadJson
               : null,
           nowProvider: widget.nowProvider,
@@ -213,6 +213,7 @@ class _MessagePageState extends State<MessagePage>
     }
 
     return MessagePageShell(
+      header: const MessagePageHeader(),
       tabBar: Material(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         child: TabBar(

@@ -4,6 +4,7 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/product_management_page.dart';
 import 'package:mes_client/features/product/presentation/product_page.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_page_header.dart';
 
 AppSession _session() {
   return AppSession(baseUrl: 'http://test', accessToken: 'token');
@@ -53,7 +54,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('产品管理'), findsOneWidget);
+    expect(find.byType(ProductPageHeader), findsOneWidget);
+    expect(find.byKey(const ValueKey('product-page-shell')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('product-page-header-slot')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('product-page-tab-bar')), findsOneWidget);
+    expect(find.text('产品管理'), findsAtLeastNWidgets(1));
     expect(find.text('版本管理'), findsOneWidget);
     expect(find.text('产品参数查询'), findsOneWidget);
     expect(find.text('tab:$productVersionManagementTabCode'), findsOneWidget);
@@ -79,6 +87,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.byType(ProductPageHeader), findsOneWidget);
     expect(find.text('tab:$productParameterQueryTabCode'), findsOneWidget);
   });
 
@@ -108,6 +117,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.byType(ProductPageHeader), findsOneWidget);
     final product = _buildProduct();
     expect(managementPage, isNotNull);
 

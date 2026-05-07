@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 class EquipmentPageShell extends StatelessWidget {
   const EquipmentPageShell({
     super.key,
+    required this.header,
     required this.tabBar,
     required this.tabBarView,
   });
 
+  final Widget header;
   final Widget tabBar;
   final Widget tabBarView;
 
@@ -16,6 +18,10 @@ class EquipmentPageShell extends StatelessWidget {
       key: const ValueKey('equipment-page-shell'),
       child: Column(
         children: [
+          KeyedSubtree(
+            key: const ValueKey('equipment-page-header-slot'),
+            child: header,
+          ),
           KeyedSubtree(
             key: const ValueKey('equipment-page-tab-bar'),
             child: tabBar,

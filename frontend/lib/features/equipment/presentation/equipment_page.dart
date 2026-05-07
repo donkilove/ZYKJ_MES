@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/models/authz_models.dart';
+import 'package:mes_client/features/equipment/presentation/widgets/equipment_page_header.dart';
 import 'package:mes_client/features/equipment/presentation/widgets/equipment_page_shell.dart';
 import 'package:mes_client/features/equipment/presentation/equipment_ledger_page.dart';
 import 'package:mes_client/features/equipment/presentation/equipment_rule_parameter_page.dart';
@@ -259,6 +260,7 @@ class _EquipmentPageState extends State<EquipmentPage>
     }
 
     return EquipmentPageShell(
+      header: const EquipmentPageHeader(),
       tabBar: Material(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         child: TabBar(

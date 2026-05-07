@@ -12,14 +12,19 @@ void main() {
             body: DefaultTabController(
               length: 2,
               child: CraftPageShell(
-                tabBar: const TabBar(tabs: [
-                  Tab(text: '工序管理'),
-                  Tab(text: '生产工序配置'),
-                ]),
-                tabBarView: const TabBarView(children: [
-                  Center(child: Text('工序管理')),
-                  Center(child: Text('生产工序配置')),
-                ]),
+                header: const CraftPageHeader(),
+                tabBar: const TabBar(
+                  tabs: [
+                    Tab(text: '工序管理'),
+                    Tab(text: '生产工序配置'),
+                  ],
+                ),
+                tabBarView: const TabBarView(
+                  children: [
+                    Center(child: Text('工序管理')),
+                    Center(child: Text('生产工序配置')),
+                  ],
+                ),
               ),
             ),
           ),
@@ -27,15 +32,18 @@ void main() {
       );
 
       expect(find.byType(CraftPageShell), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('craft-page-header-slot')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('craft-page-tab-bar')), findsOneWidget);
       expect(find.byType(TabBar), findsOneWidget);
       expect(find.byType(TabBarView), findsOneWidget);
     });
 
     testWidgets('CraftPageHeader renders correctly', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(body: CraftPageHeader()),
-        ),
+        const MaterialApp(home: Scaffold(body: CraftPageHeader())),
       );
 
       expect(find.byType(CraftPageHeader), findsOneWidget);

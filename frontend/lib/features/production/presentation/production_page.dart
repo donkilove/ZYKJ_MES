@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/models/authz_models.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_page_header.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_page_shell.dart';
 import 'package:mes_client/features/production/presentation/production_assist_records_page.dart';
 import 'package:mes_client/features/production/presentation/production_data_page.dart';
@@ -242,8 +243,7 @@ class _ProductionPageState extends State<ProductionPage>
           ProductionFeaturePermissionCodes.orderQueryExport,
         ),
         pollingEnabled: isTabActive,
-        routePayloadJson:
-            widget.preferredTabCode == productionOrderQueryTabCode
+        routePayloadJson: widget.preferredTabCode == productionOrderQueryTabCode
             ? widget.routePayloadJson
             : null,
       ),
@@ -310,6 +310,7 @@ class _ProductionPageState extends State<ProductionPage>
     }
 
     return ProductionPageShell(
+      header: const ProductionPageHeader(),
       tabBar: Material(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         child: TabBar(

@@ -11,6 +11,8 @@ import 'package:mes_client/features/product/presentation/product_management_page
 import 'package:mes_client/features/product/presentation/product_parameter_management_page.dart';
 import 'package:mes_client/features/product/presentation/product_parameter_query_page.dart';
 import 'package:mes_client/features/product/presentation/product_version_management_page.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_page_header.dart';
+import 'package:mes_client/features/product/presentation/widgets/product_page_shell.dart';
 
 const String productManagementTabCode = 'product_management';
 const String productVersionManagementTabCode = 'product_version_management';
@@ -392,24 +394,21 @@ class _ProductPageState extends State<ProductPage>
       return const Center(child: Text('当前账号没有可访问的产品模块页面。'));
     }
 
-    return Column(
-      children: [
-        Material(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          child: TabBar(
-            controller: _tabController,
-            tabs: _orderedVisibleTabCodes
-                .map((code) => Tab(text: _tabTitle(code)))
-                .toList(),
-          ),
+    return ProductPageShell(
+      header: const ProductPageHeader(),
+      tabBar: Material(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: TabBar(
+          controller: _tabController,
+          tabs: _orderedVisibleTabCodes
+              .map((code) => Tab(text: _tabTitle(code)))
+              .toList(),
         ),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: _orderedVisibleTabCodes.map(_buildTabContent).toList(),
-          ),
-        ),
-      ],
+      ),
+      tabBarView: TabBarView(
+        controller: _tabController,
+        children: _orderedVisibleTabCodes.map(_buildTabContent).toList(),
+      ),
     );
   }
 }

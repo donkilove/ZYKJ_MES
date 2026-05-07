@@ -11,6 +11,7 @@ import 'package:mes_client/features/production/presentation/quality_repair_order
 import 'package:mes_client/features/quality/presentation/quality_supplier_management_page.dart';
 import 'package:mes_client/features/quality/presentation/quality_scrap_statistics_page.dart';
 import 'package:mes_client/features/quality/presentation/quality_trend_page.dart';
+import 'package:mes_client/features/quality/presentation/widgets/quality_page_header.dart';
 import 'package:mes_client/features/quality/presentation/widgets/quality_page_shell.dart';
 
 const String firstArticleManagementTabCode = 'first_article_management';
@@ -242,6 +243,7 @@ class _QualityPageState extends State<QualityPage>
     }
 
     return QualityPageShell(
+      header: const QualityPageHeader(),
       tabBar: Material(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         child: TabBar(

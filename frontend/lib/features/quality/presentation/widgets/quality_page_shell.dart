@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 class QualityPageShell extends StatelessWidget {
   const QualityPageShell({
     super.key,
+    required this.header,
     required this.tabBar,
     required this.tabBarView,
   });
 
+  final Widget header;
   final Widget tabBar;
   final Widget tabBarView;
 
@@ -16,6 +18,10 @@ class QualityPageShell extends StatelessWidget {
       key: const ValueKey('quality-page-shell'),
       child: Column(
         children: [
+          KeyedSubtree(
+            key: const ValueKey('quality-page-header-slot'),
+            child: header,
+          ),
           KeyedSubtree(
             key: const ValueKey('quality-page-tab-bar'),
             child: tabBar,

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/models/authz_models.dart';
 import 'package:mes_client/features/craft/presentation/widgets/craft_page_shell.dart';
+import 'package:mes_client/features/craft/presentation/widgets/craft_page_header.dart';
 import 'package:mes_client/features/craft/presentation/craft_kanban_page.dart';
 import 'package:mes_client/features/craft/presentation/craft_reference_analysis_page.dart';
 import 'package:mes_client/features/craft/presentation/process_configuration_page.dart';
@@ -374,6 +375,7 @@ class _CraftPageState extends State<CraftPage> with TickerProviderStateMixin {
     }
 
     return CraftPageShell(
+      header: const CraftPageHeader(),
       tabBar: Material(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
         child: TabBar(

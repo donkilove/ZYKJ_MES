@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-class UserPageShell extends StatelessWidget {
-  const UserPageShell({
+class ProductPageShell extends StatelessWidget {
+  const ProductPageShell({
     super.key,
     required this.header,
     required this.tabBar,
@@ -15,14 +15,17 @@ class UserPageShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return KeyedSubtree(
-      key: const ValueKey('user-page-shell'),
+      key: const ValueKey('product-page-shell'),
       child: Column(
         children: [
           KeyedSubtree(
-            key: const ValueKey('user-page-header-slot'),
+            key: const ValueKey('product-page-header-slot'),
             child: header,
           ),
-          KeyedSubtree(key: const ValueKey('user-page-tab-bar'), child: tabBar),
+          KeyedSubtree(
+            key: const ValueKey('product-page-tab-bar'),
+            child: tabBar,
+          ),
           Expanded(child: tabBarView),
         ],
       ),

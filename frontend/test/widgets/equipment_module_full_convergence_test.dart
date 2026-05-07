@@ -12,14 +12,19 @@ void main() {
             body: DefaultTabController(
               length: 2,
               child: EquipmentPageShell(
-                tabBar: const TabBar(tabs: [
-                  Tab(text: '设备台账'),
-                  Tab(text: '保养项目'),
-                ]),
-                tabBarView: const TabBarView(children: [
-                  Center(child: Text('设备台账')),
-                  Center(child: Text('保养项目')),
-                ]),
+                header: const EquipmentPageHeader(),
+                tabBar: const TabBar(
+                  tabs: [
+                    Tab(text: '设备台账'),
+                    Tab(text: '保养项目'),
+                  ],
+                ),
+                tabBarView: const TabBarView(
+                  children: [
+                    Center(child: Text('设备台账')),
+                    Center(child: Text('保养项目')),
+                  ],
+                ),
               ),
             ),
           ),
@@ -27,15 +32,21 @@ void main() {
       );
 
       expect(find.byType(EquipmentPageShell), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('equipment-page-header-slot')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('equipment-page-tab-bar')),
+        findsOneWidget,
+      );
       expect(find.byType(TabBar), findsOneWidget);
       expect(find.byType(TabBarView), findsOneWidget);
     });
 
     testWidgets('EquipmentPageHeader renders correctly', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(body: EquipmentPageHeader()),
-        ),
+        const MaterialApp(home: Scaffold(body: EquipmentPageHeader())),
       );
 
       expect(find.byType(EquipmentPageHeader), findsOneWidget);

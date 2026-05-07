@@ -9,6 +9,7 @@ import 'package:mes_client/features/user/presentation/login_session_page.dart';
 import 'package:mes_client/features/user/presentation/registration_approval_page.dart';
 import 'package:mes_client/features/user/presentation/role_management_page.dart';
 import 'package:mes_client/features/user/presentation/user_management_page.dart';
+import 'package:mes_client/features/user/presentation/widgets/user_page_header.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_page_shell.dart';
 
 const List<String> _defaultTabOrder = [
@@ -351,6 +352,7 @@ class _UserPageState extends State<UserPage> {
             });
           }
           return UserPageShell(
+            header: const UserPageHeader(),
             tabBar: Material(
               color: Theme.of(context).colorScheme.surfaceContainerHighest,
               child: Semantics(
@@ -377,9 +379,7 @@ class _UserPageState extends State<UserPage> {
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 textAlign: TextAlign.center,
-                                style: Theme.of(
-                                  context,
-                                ).textTheme.labelMedium,
+                                style: Theme.of(context).textTheme.labelMedium,
                               ),
                             ),
                           ),

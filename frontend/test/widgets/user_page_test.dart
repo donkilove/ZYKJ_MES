@@ -9,6 +9,7 @@ import 'package:mes_client/features/user/presentation/registration_approval_page
 import 'package:mes_client/features/user/presentation/role_management_page.dart';
 import 'package:mes_client/features/user/presentation/user_management_page.dart';
 import 'package:mes_client/features/user/presentation/user_page.dart';
+import 'package:mes_client/features/user/presentation/widgets/user_page_header.dart';
 
 Finder _findSemanticsLabel(String label) {
   return find.byWidgetPredicate(
@@ -45,8 +46,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('用户管理'), findsOneWidget);
-    expect(find.text('角色管理'), findsOneWidget);
+    expect(find.byType(UserPageHeader), findsOneWidget);
+    expect(find.byKey(const ValueKey('user-page-header-slot')), findsOneWidget);
+    expect(find.byKey(const ValueKey('user-page-tab-bar')), findsOneWidget);
+    expect(find.text('用户管理'), findsAtLeastNWidgets(1));
+    expect(find.text('角色管理'), findsAtLeastNWidgets(1));
     expect(find.text('个人中心'), findsOneWidget);
     expect(find.text('tab:account_settings'), findsOneWidget);
   });

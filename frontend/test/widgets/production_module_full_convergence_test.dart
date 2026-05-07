@@ -8,23 +8,30 @@ import 'package:mes_client/features/production/models/production_models.dart';
 
 void main() {
   group('ProductionModuleFullConvergence', () {
-    testWidgets('ProductionPageShell renders correctly with TabController', (tester) async {
+    testWidgets('ProductionPageShell renders correctly with TabController', (
+      tester,
+    ) async {
       final tabController = TabController(length: 2, vsync: tester);
-      
+
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: DefaultTabController(
               length: 2,
               child: ProductionPageShell(
-                tabBar: const TabBar(tabs: [
-                  Tab(text: '订单管理'),
-                  Tab(text: '订单查询'),
-                ]),
-                tabBarView: const TabBarView(children: [
-                  Center(child: Text('订单管理')),
-                  Center(child: Text('订单查询')),
-                ]),
+                header: const ProductionPageHeader(),
+                tabBar: const TabBar(
+                  tabs: [
+                    Tab(text: '订单管理'),
+                    Tab(text: '订单查询'),
+                  ],
+                ),
+                tabBarView: const TabBarView(
+                  children: [
+                    Center(child: Text('订单管理')),
+                    Center(child: Text('订单查询')),
+                  ],
+                ),
               ),
             ),
           ),
@@ -32,29 +39,35 @@ void main() {
       );
 
       expect(find.byType(ProductionPageShell), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('production-page-header-slot')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('production-page-tab-bar')),
+        findsOneWidget,
+      );
       expect(find.byType(TabBar), findsOneWidget);
       expect(find.byType(TabBarView), findsOneWidget);
-      
+
       tabController.dispose();
     });
 
     testWidgets('ProductionPageHeader renders correctly', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(body: ProductionPageHeader()),
-        ),
+        const MaterialApp(home: Scaffold(body: ProductionPageHeader())),
       );
 
       expect(find.byType(ProductionPageHeader), findsOneWidget);
       expect(find.text('统一装配生产模块全部页签。'), findsNothing);
     });
 
-    testWidgets('ProductionOrderStatusChip renders pending status', (tester) async {
+    testWidgets('ProductionOrderStatusChip renders pending status', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         const MaterialApp(
-          home: Scaffold(
-            body: ProductionOrderStatusChip(status: 'pending'),
-          ),
+          home: Scaffold(body: ProductionOrderStatusChip(status: 'pending')),
         ),
       );
 
@@ -62,7 +75,9 @@ void main() {
       expect(find.text('待生产'), findsOneWidget);
     });
 
-    testWidgets('ProductionOrderStatusChip renders in_progress status', (tester) async {
+    testWidgets('ProductionOrderStatusChip renders in_progress status', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -75,12 +90,12 @@ void main() {
       expect(find.text('生产中'), findsOneWidget);
     });
 
-    testWidgets('ProductionOrderStatusChip renders completed status', (tester) async {
+    testWidgets('ProductionOrderStatusChip renders completed status', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         const MaterialApp(
-          home: Scaffold(
-            body: ProductionOrderStatusChip(status: 'completed'),
-          ),
+          home: Scaffold(body: ProductionOrderStatusChip(status: 'completed')),
         ),
       );
 
@@ -92,7 +107,9 @@ void main() {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
-            body: ProductionDataSectionChip(section: ProductionDataSection.processStats),
+            body: ProductionDataSectionChip(
+              section: ProductionDataSection.processStats,
+            ),
           ),
         ),
       );
@@ -101,7 +118,9 @@ void main() {
       expect(find.text('工序统计'), findsOneWidget);
     });
 
-    testWidgets('ProductionDataSectionSelector renders all sections', (tester) async {
+    testWidgets('ProductionDataSectionSelector renders all sections', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -114,7 +133,10 @@ void main() {
       );
 
       expect(find.byType(ProductionDataSectionSelector), findsOneWidget);
-      expect(find.byType(SegmentedButton<ProductionDataSection>), findsOneWidget);
+      expect(
+        find.byType(SegmentedButton<ProductionDataSection>),
+        findsOneWidget,
+      );
       expect(find.text('工序统计'), findsOneWidget);
       expect(find.text('今日实时产量'), findsOneWidget);
       expect(find.text('人员统计'), findsOneWidget);
@@ -128,9 +150,18 @@ void main() {
     });
 
     test('productionDataSectionLabel returns correct labels', () {
-      expect(productionDataSectionLabel(ProductionDataSection.processStats), '工序统计');
-      expect(productionDataSectionLabel(ProductionDataSection.todayRealtime), '今日实时产量');
-      expect(productionDataSectionLabel(ProductionDataSection.operatorStats), '人员统计');
+      expect(
+        productionDataSectionLabel(ProductionDataSection.processStats),
+        '工序统计',
+      );
+      expect(
+        productionDataSectionLabel(ProductionDataSection.todayRealtime),
+        '今日实时产量',
+      );
+      expect(
+        productionDataSectionLabel(ProductionDataSection.operatorStats),
+        '人员统计',
+      );
     });
   });
 }
