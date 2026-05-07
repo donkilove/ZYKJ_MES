@@ -1093,6 +1093,10 @@ void main() {
       find.byKey(const ValueKey('login-session-page-header')),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const ValueKey('login-session-filter-section')),
+      findsOneWidget,
+    );
     expect(find.byType(CrudListTableSection), findsOneWidget);
     expect(find.text('登录日志'), findsNothing);
     expect(find.text('全选当前页'), findsOneWidget);
@@ -1291,6 +1295,13 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('login-session-page-header')),
+        matching: find.byKey(const ValueKey('login-session-filter-section')),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('统一查看在线会话和强制下线入口。'), findsNothing);
   });
 

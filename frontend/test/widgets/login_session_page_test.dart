@@ -302,7 +302,7 @@ void main() {
     expect(userService.lastListPage, 2);
 
     await tester.enterText(find.widgetWithText(TextField, '关键词'), 'gamma');
-    await tester.tap(find.widgetWithText(OutlinedButton, '查询'));
+    await tester.tap(find.widgetWithText(FilledButton, '查询'));
     await tester.pumpAndSettle();
 
     expect(userService.lastListPage, 1);
@@ -375,7 +375,10 @@ void main() {
     await _pumpSessionPage(tester, userService: userService);
 
     expect(_findSemanticsLabel('登录会话主区域'), findsOneWidget);
-    expect(_findSemanticsLabel('登录会话筛选与操作区'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('login-session-filter-section')),
+      findsOneWidget,
+    );
     expect(_findSemanticsLabel('在线会话列表区域'), findsOneWidget);
   });
 }

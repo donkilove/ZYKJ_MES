@@ -6,7 +6,6 @@ import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/features/user/presentation/widgets/login_session_action_dialogs.dart';
 import 'package:mes_client/features/user/presentation/widgets/login_session_page_header.dart';
-import 'package:mes_client/features/user/presentation/widgets/shared/user_module_filter_panel.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
@@ -279,57 +278,15 @@ class _LoginSessionPageState extends State<LoginSessionPage> {
         header: LoginSessionPageHeader(
           loading: _loadingSessions,
           onRefresh: () => _loadOnlineSessions(page: _sessionPage),
-        ),
-        filters: Semantics(
-          container: true,
-          label: '登录会话筛选与操作区',
-          child: UserModuleFilterPanel(
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                SizedBox(
-                  width: 320,
-                  child: TextField(
-                    controller: _sessionKeywordController,
-                    decoration: const InputDecoration(
-                      labelText: '关键词',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                    onSubmitted: (_) => _loadOnlineSessions(page: 1),
-                  ),
-                ),
-                OutlinedButton(
-                  onPressed: () => _loadOnlineSessions(page: 1),
-                  child: const Text('查询'),
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Checkbox(
-                      value: _allCurrentPageSelected
-                          ? true
-                          : (_someCurrentPageSelected ? null : false),
-                      tristate: true,
-                      onChanged: _hasSelectableSessions
-                          ? _toggleSelectCurrentPage
-                          : null,
-                    ),
-                    const Text('全选当前页'),
-                  ],
-                ),
-                FilledButton(
-                  onPressed:
-                      widget.canForceOffline && _selectedSessionIds.isNotEmpty
-                      ? _forceOfflineBatch
-                      : null,
-                  child: Text('批量强制下线（${_selectedSessionIds.length}）'),
-                ),
-              ],
-            ),
-          ),
+          keywordController: _sessionKeywordController,
+          onSearch: () => _loadOnlineSessions(page: 1),
+          allCurrentPageSelected: _allCurrentPageSelected,
+          someCurrentPageSelected: _someCurrentPageSelected,
+          hasSelectableSessions: _hasSelectableSessions,
+          onToggleSelectCurrentPage: _toggleSelectCurrentPage,
+          canForceOffline: widget.canForceOffline,
+          selectedCount: _selectedSessionIds.length,
+          onForceOfflineBatch: _forceOfflineBatch,
         ),
         banner: _message.isEmpty
             ? null
