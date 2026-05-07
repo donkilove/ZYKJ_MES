@@ -1267,11 +1267,11 @@ void main() {
 
     expect(
       find.byKey(const ValueKey('account-settings-page-header')),
-      findsOneWidget,
+      findsNothing,
     );
-    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(find.byType(MesRefreshPageHeader), findsNothing);
     expect(find.text('统一管理个人信息与密码修改入口。'), findsNothing);
-    expect(find.byTooltip('刷新'), findsOneWidget);
+    expect(find.byTooltip('刷新'), findsNothing);
   });
 
   testWidgets('login session page 接入统一页头锚点', (tester) async {
