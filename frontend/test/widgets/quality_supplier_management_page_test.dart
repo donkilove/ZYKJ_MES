@@ -77,6 +77,14 @@ void main() {
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(find.text('刷新页面'), findsNothing);
     expect(find.textContaining('统一管理质量供应商与状态'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('quality-supplier-keyword-field')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('quality-supplier-operation-menu')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('供应商管理页可完成新增编辑', (tester) async {
@@ -100,7 +108,11 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('新增供应商'));
+    await tester.tap(
+      find.byKey(const ValueKey('quality-supplier-operation-menu')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新增供应商').last);
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextFormField, '名称'), '测试供应商B');
     await tester.enterText(find.widgetWithText(TextFormField, '备注'), '新增备注');
@@ -251,7 +263,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.widgetWithText(TextField, '搜索供应商名称'), '供应商B');
+    await tester.enterText(
+      find.byKey(const ValueKey('quality-supplier-keyword-field')),
+      '供应商B',
+    );
     await tester.tap(find.byType(DropdownButtonFormField<bool?>));
     await tester.pumpAndSettle();
     await tester.tap(find.text('停用').last);

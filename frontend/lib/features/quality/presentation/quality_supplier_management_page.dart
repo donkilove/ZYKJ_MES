@@ -185,59 +185,29 @@ class _QualitySupplierManagementPageState
     return MesCrudPageScaffold(
       header: QualitySupplierManagementPageHeader(
         loading: _loading,
+        keywordController: _keywordController,
+        enabledFilter: _enabledFilter,
+        onKeywordSubmitted: (_) {
+          setState(() {
+            _page = 1;
+          });
+          _loadSuppliers();
+        },
+        onEnabledChanged: (value) {
+          setState(() {
+            _enabledFilter = value;
+            _page = 1;
+          });
+          _loadSuppliers();
+        },
+        onSearch: () {
+          setState(() {
+            _page = 1;
+          });
+          _loadSuppliers();
+        },
         onRefresh: _loadSuppliers,
         onCreate: () => _showEditDialog(),
-      ),
-      filters: Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        children: [
-          SizedBox(
-            width: 260,
-            child: TextField(
-              controller: _keywordController,
-              decoration: const InputDecoration(
-                labelText: '搜索供应商名称',
-                border: OutlineInputBorder(),
-              ),
-              onSubmitted: (_) => _loadSuppliers(),
-            ),
-          ),
-          SizedBox(
-            width: 160,
-            child: DropdownButtonFormField<bool?>(
-              initialValue: _enabledFilter,
-              decoration: const InputDecoration(
-                labelText: '状态筛选',
-                border: OutlineInputBorder(),
-              ),
-              items: const [
-                DropdownMenuItem<bool?>(value: null, child: Text('全部')),
-                DropdownMenuItem<bool?>(value: true, child: Text('启用')),
-                DropdownMenuItem<bool?>(value: false, child: Text('停用')),
-              ],
-              onChanged: _loading
-                  ? null
-                  : (value) {
-                      setState(() {
-                        _enabledFilter = value;
-                        _page = 1;
-                      });
-                      _loadSuppliers();
-                    },
-            ),
-          ),
-          FilledButton.icon(
-            onPressed: _loading
-                ? null
-                : () {
-                    setState(() => _page = 1);
-                    _loadSuppliers();
-                  },
-            icon: const Icon(Icons.search),
-            label: const Text('查询'),
-          ),
-        ],
       ),
       banner: _message.isEmpty
           ? null
