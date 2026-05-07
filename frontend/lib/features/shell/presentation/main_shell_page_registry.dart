@@ -84,6 +84,11 @@ class MainShellPageRegistry {
           const <String>{};
     }
 
+    Set<String> permissionCodesFor(String moduleCode) {
+      return state.authzSnapshot?.permissionCodesForModule(moduleCode) ??
+          const <String>{};
+    }
+
     bool moduleActiveFor(String moduleCode) {
       return state.activeUtilityCode == null &&
           state.selectedPageCode == moduleCode;
@@ -211,6 +216,7 @@ class MainShellPageRegistry {
                 onLogout: onLogout,
                 visibleTabCodes: tabCodesFor('quality'),
                 capabilityCodes: capabilityCodesFor('quality'),
+                permissionCodes: permissionCodesFor('quality'),
                 preferredTabCode: state.preferredTabCode,
                 routePayloadJson: state.preferredRoutePayloadJson,
               );
@@ -271,7 +277,8 @@ class MainShellPageRegistry {
         }
         return PluginHostPage(
           controller: pluginHostController,
-          webviewBuilder: (entryUrl) => PluginHostWebviewPanel(entryUrl: entryUrl),
+          webviewBuilder: (entryUrl) =>
+              PluginHostWebviewPanel(entryUrl: entryUrl),
         );
       default:
         return Center(child: Text('页面暂未实现：$pageCode'));

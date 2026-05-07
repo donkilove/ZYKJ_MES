@@ -39,6 +39,7 @@ class QualityPage extends StatefulWidget {
     required this.onLogout,
     required this.visibleTabCodes,
     required this.capabilityCodes,
+    this.permissionCodes = const <String>{},
     this.preferredTabCode,
     this.routePayloadJson,
     this.firstArticleService,
@@ -50,6 +51,7 @@ class QualityPage extends StatefulWidget {
   final VoidCallback onLogout;
   final List<String> visibleTabCodes;
   final Set<String> capabilityCodes;
+  final Set<String> permissionCodes;
   final String? preferredTabCode;
   final String? routePayloadJson;
   final QualityService? firstArticleService;
@@ -162,13 +164,13 @@ class _QualityPageState extends State<QualityPage>
         return DailyFirstArticlePage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canViewDetail: widget.capabilityCodes.contains(
+          canViewDetail: widget.permissionCodes.contains(
             'quality.first_articles.detail',
           ),
-          canExport: widget.capabilityCodes.contains(
+          canExport: widget.permissionCodes.contains(
             'quality.first_articles.export',
           ),
-          canDispose: widget.capabilityCodes.contains(
+          canDispose: widget.permissionCodes.contains(
             'quality.first_articles.disposition',
           ),
           routePayloadJson:
@@ -181,13 +183,13 @@ class _QualityPageState extends State<QualityPage>
         return QualityDataPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canExport: widget.capabilityCodes.contains('quality.stats.export'),
+          canExport: widget.permissionCodes.contains('quality.stats.export'),
         );
       case qualityScrapStatisticsTabCode:
         return QualityScrapStatisticsPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canExport: widget.capabilityCodes.contains(
+          canExport: widget.permissionCodes.contains(
             'quality.scrap_statistics.export',
           ),
           service: widget.repairScrapService,
@@ -200,10 +202,10 @@ class _QualityPageState extends State<QualityPage>
         return QualityRepairOrdersPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canComplete: widget.capabilityCodes.contains(
+          canComplete: widget.permissionCodes.contains(
             'quality.repair_orders.complete',
           ),
-          canExport: widget.capabilityCodes.contains(
+          canExport: widget.permissionCodes.contains(
             'quality.repair_orders.export',
           ),
           service: widget.repairScrapService,
@@ -215,13 +217,13 @@ class _QualityPageState extends State<QualityPage>
         return QualityTrendPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canExport: widget.capabilityCodes.contains('quality.trend'),
+          canExport: widget.permissionCodes.contains('quality.trend'),
         );
       case qualityDefectAnalysisTabCode:
         return QualityDefectAnalysisPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          canExport: widget.capabilityCodes.contains(
+          canExport: widget.permissionCodes.contains(
             'quality.defect_analysis.export',
           ),
         );

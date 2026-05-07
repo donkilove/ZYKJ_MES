@@ -181,6 +181,7 @@ class QualityService implements RepairScrapService {
   Future<List<QualityProductStatItem>> getQualityProductStats({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,
@@ -189,6 +190,9 @@ class QualityService implements RepairScrapService {
     final query = <String, String>{};
     if (startDate != null) query['start_date'] = _formatDate(startDate);
     if (endDate != null) query['end_date'] = _formatDate(endDate);
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
     if (productName != null && productName.trim().isNotEmpty) {
       query['product_name'] = productName.trim();
     }
@@ -221,6 +225,7 @@ class QualityService implements RepairScrapService {
   Future<QualityExportFile> exportQualityStats({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,
@@ -229,6 +234,9 @@ class QualityService implements RepairScrapService {
     final payload = <String, dynamic>{};
     if (startDate != null) payload['start_date'] = _formatDate(startDate);
     if (endDate != null) payload['end_date'] = _formatDate(endDate);
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      payload['keyword'] = keyword.trim();
+    }
     if (productName != null && productName.trim().isNotEmpty) {
       payload['product_name'] = productName.trim();
     }
@@ -265,6 +273,7 @@ class QualityService implements RepairScrapService {
   Future<List<QualityTrendItem>> getQualityTrend({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,
@@ -273,6 +282,9 @@ class QualityService implements RepairScrapService {
     final query = <String, String>{};
     if (startDate != null) query['start_date'] = _formatDate(startDate);
     if (endDate != null) query['end_date'] = _formatDate(endDate);
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
+    }
     if (productName != null && productName.trim().isNotEmpty) {
       query['product_name'] = productName.trim();
     }
@@ -348,6 +360,7 @@ class QualityService implements RepairScrapService {
   Future<QualityStatsOverview> getQualityOverview({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,
@@ -359,6 +372,9 @@ class QualityService implements RepairScrapService {
     }
     if (endDate != null) {
       query['end_date'] = _formatDate(endDate);
+    }
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
     }
     if (productName != null && productName.trim().isNotEmpty) {
       query['product_name'] = productName.trim();
@@ -390,6 +406,7 @@ class QualityService implements RepairScrapService {
   Future<List<QualityProcessStatItem>> getQualityProcessStats({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,
@@ -401,6 +418,9 @@ class QualityService implements RepairScrapService {
     }
     if (endDate != null) {
       query['end_date'] = _formatDate(endDate);
+    }
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
     }
     if (productName != null && productName.trim().isNotEmpty) {
       query['product_name'] = productName.trim();
@@ -437,6 +457,7 @@ class QualityService implements RepairScrapService {
   Future<List<QualityOperatorStatItem>> getQualityOperatorStats({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,
@@ -448,6 +469,9 @@ class QualityService implements RepairScrapService {
     }
     if (endDate != null) {
       query['end_date'] = _formatDate(endDate);
+    }
+    if (keyword != null && keyword.trim().isNotEmpty) {
+      query['keyword'] = keyword.trim();
     }
     if (productName != null && productName.trim().isNotEmpty) {
       query['product_name'] = productName.trim();

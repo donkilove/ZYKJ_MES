@@ -272,19 +272,28 @@ void main() {
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(find.text('PO-1'), findsOneWidget);
     expect(find.text('刀具磨损'), findsOneWidget);
-    expect(find.text('产品名称（精确）'), findsOneWidget);
-    expect(find.text('关键词（订单/原因/工序名称）'), findsOneWidget);
-    expect(find.text('工序编码（精确）'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('production-scrap-keyword-field')),
+      findsOneWidget,
+    );
+    expect(find.text('搜索订单编号/报废原因/产品型号'), findsOneWidget);
+    expect(find.text('产品名称（精确）'), findsNothing);
+    expect(find.text('工序编码（精确）'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('production-scrap-statistics-operation-menu')),
+      findsOneWidget,
+    );
 
-    await tester.enterText(find.byType(TextField).at(0), 'PO-1');
-    await tester.enterText(find.byType(TextField).at(1), '产品A');
-    await tester.enterText(find.byType(TextField).at(2), '01-01');
+    await tester.enterText(
+      find.byKey(const ValueKey('production-scrap-keyword-field')),
+      'PO-1',
+    );
     await tester.tap(find.text('查询'));
     await tester.pump();
 
     expect(service.lastScrapKeyword, 'PO-1');
-    expect(service.lastScrapProductName, '产品A');
-    expect(service.lastScrapProcessCode, '01-01');
+    expect(service.lastScrapProductName, isNull);
+    expect(service.lastScrapProcessCode, isNull);
   });
 
   testWidgets('production scrap statistics page uses workbench skeleton', (
@@ -311,9 +320,12 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
-    expect(find.byType(MesFilterBar), findsOneWidget);
+    expect(find.byType(MesFilterBar), findsNothing);
     expect(find.byType(MesMetricCard), findsAtLeastNWidgets(4));
-    expect(find.text('筛选控制台'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('production-scrap-keyword-field')),
+      findsOneWidget,
+    );
     expect(find.text('质量总览'), findsOneWidget);
     expect(find.text('报废记录'), findsOneWidget);
     expect(find.byType(MesSectionCard), findsAtLeastNWidgets(2));
@@ -354,7 +366,10 @@ void main() {
     expect(service.lastScrapPage, 2);
     expect(find.text('PO-2'), findsOneWidget);
 
-    await tester.enterText(find.byType(TextField).at(0), 'PO-RESET');
+    await tester.enterText(
+      find.byKey(const ValueKey('production-scrap-keyword-field')),
+      'PO-RESET',
+    );
     await tester.tap(find.text('查询'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
@@ -396,6 +411,15 @@ void main() {
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(find.text('RW-1'), findsOneWidget);
     expect(find.text('切割'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('production-repair-keyword-field')),
+      findsOneWidget,
+    );
+    expect(find.text('搜索维修单/订单/产品'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('production-repair-orders-operation-menu')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.widgetWithText(OutlinedButton, '下一页'));
     await tester.pump();
@@ -442,9 +466,12 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
-    expect(find.byType(MesFilterBar), findsOneWidget);
+    expect(find.byType(MesFilterBar), findsNothing);
     expect(find.byType(MesMetricCard), findsAtLeastNWidgets(4));
-    expect(find.text('筛选控制台'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('production-repair-keyword-field')),
+      findsOneWidget,
+    );
     expect(find.text('任务总览'), findsOneWidget);
     expect(find.text('维修工单'), findsOneWidget);
     expect(find.byType(MesSectionCard), findsAtLeastNWidgets(2));

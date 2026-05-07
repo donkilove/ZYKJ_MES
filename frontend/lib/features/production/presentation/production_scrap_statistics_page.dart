@@ -16,7 +16,6 @@ import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
-import 'package:mes_client/features/quality/presentation/widgets/quality_workbench_filter_panel.dart';
 import 'package:mes_client/features/quality/presentation/widgets/quality_workbench_summary_grid.dart';
 
 class ProductionScrapStatisticsPage extends StatefulWidget {
@@ -44,8 +43,6 @@ class _ProductionScrapStatisticsPageState
     extends State<ProductionScrapStatisticsPage> {
   late final RepairScrapService _service;
   final TextEditingController _keywordController = TextEditingController();
-  final TextEditingController _productNameController = TextEditingController();
-  final TextEditingController _processCodeController = TextEditingController();
 
   bool _loading = false;
   bool _exporting = false;
@@ -81,8 +78,6 @@ class _ProductionScrapStatisticsPageState
   @override
   void dispose() {
     _keywordController.dispose();
-    _productNameController.dispose();
-    _processCodeController.dispose();
     super.dispose();
   }
 
@@ -164,8 +159,6 @@ class _ProductionScrapStatisticsPageState
         page: targetPage,
         pageSize: _pageSize,
         keyword: _keywordController.text.trim(),
-        productName: _productNameController.text.trim(),
-        processCode: _processCodeController.text.trim(),
         progress: _progress,
         startDate: _startDate,
         endDate: _endDate,
@@ -234,12 +227,6 @@ class _ProductionScrapStatisticsPageState
         keyword: _keywordController.text.trim().isEmpty
             ? null
             : _keywordController.text.trim(),
-        productName: _productNameController.text.trim().isEmpty
-            ? null
-            : _productNameController.text.trim(),
-        processCode: _processCodeController.text.trim().isEmpty
-            ? null
-            : _processCodeController.text.trim(),
         progress: _progress,
         startDate: _startDate,
         endDate: _endDate,
@@ -392,107 +379,31 @@ class _ProductionScrapStatisticsPageState
     );
   }
 
-  Widget _buildFilterPanel() {
-    return QualityWorkbenchFilterPanel(
-      child: Wrap(
-        runSpacing: 12,
-        spacing: 12,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          SizedBox(
-            width: 240,
-            child: TextField(
-              controller: _keywordController,
-              decoration: const InputDecoration(
-                labelText: '关键词（订单/原因/工序名称）',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onSubmitted: (_) => _loadItems(page: 1),
-            ),
-          ),
-          SizedBox(
-            width: 220,
-            child: TextField(
-              controller: _productNameController,
-              decoration: const InputDecoration(
-                labelText: '产品名称（精确）',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onSubmitted: (_) => _loadItems(page: 1),
-            ),
-          ),
-          SizedBox(
-            width: 180,
-            child: TextField(
-              controller: _processCodeController,
-              decoration: const InputDecoration(
-                labelText: '工序编码（精确）',
-                hintText: '关键词已支持工序名称',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onSubmitted: (_) => _loadItems(page: 1),
-            ),
-          ),
-          SizedBox(
-            width: 160,
-            child: DropdownButtonFormField<String>(
-              initialValue: _progress,
-              decoration: const InputDecoration(
-                labelText: '进度',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              items: const [
-                DropdownMenuItem(value: 'all', child: Text('全部')),
-                DropdownMenuItem(value: 'pending_apply', child: Text('待处理')),
-                DropdownMenuItem(value: 'applied', child: Text('已处理')),
-              ],
-              onChanged: (value) {
-                if (value == null) {
-                  return;
-                }
-                setState(() {
-                  _progress = value;
-                  _page = 1;
-                });
-              },
-            ),
-          ),
-          OutlinedButton(
-            onPressed: _loading ? null : () => _pickDate(isStart: true),
-            child: Text(_startDate == null ? '开始日期' : _formatDate(_startDate!)),
-          ),
-          OutlinedButton(
-            onPressed: _loading ? null : () => _pickDate(isStart: false),
-            child: Text(_endDate == null ? '结束日期' : _formatDate(_endDate!)),
-          ),
-          FilledButton.icon(
-            onPressed: _loading ? null : () => _loadItems(page: 1),
-            icon: const Icon(Icons.search),
-            label: const Text('查询'),
-          ),
-          OutlinedButton.icon(
-            onPressed: (!widget.canExport || _exporting) ? null : _export,
-            icon: const Icon(Icons.download),
-            label: const Text('导出'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return MesCrudPageScaffold(
       header: ProductionScrapStatisticsPageHeader(
         loading: _loading,
+        keywordController: _keywordController,
+        progress: _progress,
+        startDateText: _startDate == null ? '开始日期' : _formatDate(_startDate!),
+        endDateText: _endDate == null ? '结束日期' : _formatDate(_endDate!),
+        canExport: widget.canExport,
+        exporting: _exporting,
+        onKeywordSubmitted: (_) => _loadItems(page: 1),
+        onProgressChanged: (value) {
+          setState(() {
+            _progress = value;
+            _page = 1;
+          });
+        },
+        onPickStartDate: () => _pickDate(isStart: true),
+        onPickEndDate: () => _pickDate(isStart: false),
+        onSearch: () => _loadItems(page: 1),
+        onExport: _export,
         onRefresh: _loadItems,
       ),
-      filters: _buildFilterPanel(),
       banner: _message.isEmpty
           ? _buildSummarySection()
           : Column(

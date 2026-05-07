@@ -185,6 +185,7 @@ class QualityTrendResult(BaseModel):
 class QualityStatsExportRequest(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
+    keyword: str | None = None
     product_name: str | None = None
     process_code: str | None = None
     operator_username: str | None = None

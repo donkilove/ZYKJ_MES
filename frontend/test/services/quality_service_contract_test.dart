@@ -49,6 +49,7 @@ void main() {
           final body = request.decodedBody as Map<String, dynamic>? ?? const {};
           expect(body['start_date'], '2026-03-01');
           expect(body['end_date'], '2026-03-07');
+          expect(body['keyword'], '产品A');
           return TestResponse.json(
             200,
             body: {
@@ -70,6 +71,7 @@ void main() {
       final exportFile = await service.exportQualityStats(
         startDate: DateTime(2026, 3, 1),
         endDate: DateTime(2026, 3, 7),
+        keyword: '产品A',
       );
 
       expect(exportFile.filename, 'quality_stats.csv');
@@ -482,7 +484,10 @@ void main() {
         ],
         scrapReplenished: false,
         returnAllocations: [
-          const RepairReturnAllocationInput(targetOrderProcessId: 9, quantity: 3),
+          const RepairReturnAllocationInput(
+            targetOrderProcessId: 9,
+            quantity: 3,
+          ),
         ],
       );
       final repairExport = await service.exportRepairOrders(keyword: 'RW-7');

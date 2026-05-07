@@ -219,6 +219,7 @@ class _RecordedQualityStatsQuery {
   const _RecordedQualityStatsQuery({
     this.startDate,
     this.endDate,
+    this.keyword,
     this.productName,
     this.processCode,
     this.operatorUsername,
@@ -227,6 +228,7 @@ class _RecordedQualityStatsQuery {
 
   final DateTime? startDate;
   final DateTime? endDate;
+  final String? keyword;
   final String? productName;
   final String? processCode;
   final String? operatorUsername;
@@ -320,6 +322,7 @@ class _FakeQualityService extends QualityService {
   Future<QualityStatsOverview> getQualityOverview({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,
@@ -329,6 +332,7 @@ class _FakeQualityService extends QualityService {
     lastQualityStatsQuery = _RecordedQualityStatsQuery(
       startDate: startDate,
       endDate: endDate,
+      keyword: keyword,
       productName: productName,
       processCode: processCode,
       operatorUsername: operatorUsername,
@@ -362,6 +366,7 @@ class _FakeQualityService extends QualityService {
   Future<List<QualityProcessStatItem>> getQualityProcessStats({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,
@@ -383,6 +388,7 @@ class _FakeQualityService extends QualityService {
   Future<List<QualityOperatorStatItem>> getQualityOperatorStats({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,
@@ -404,6 +410,7 @@ class _FakeQualityService extends QualityService {
   Future<List<QualityProductStatItem>> getQualityProductStats({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,
@@ -425,6 +432,7 @@ class _FakeQualityService extends QualityService {
   Future<List<QualityTrendItem>> getQualityTrend({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,
@@ -446,6 +454,7 @@ class _FakeQualityService extends QualityService {
   Future<QualityExportFile> exportQualityStats({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,
@@ -455,6 +464,7 @@ class _FakeQualityService extends QualityService {
     lastQualityStatsQuery = _RecordedQualityStatsQuery(
       startDate: startDate,
       endDate: endDate,
+      keyword: keyword,
       productName: productName,
       processCode: processCode,
       operatorUsername: operatorUsername,
@@ -807,6 +817,14 @@ void main() {
               qualitySupplierManagementTabCode,
             ],
             capabilityCodes: const {
+              'feature.quality.first_articles.detail',
+              'feature.quality.first_articles.disposition',
+              'feature.quality.scrap_statistics.export',
+              'feature.quality.repair_orders.manage',
+              'feature.quality.repair_orders.export',
+              'feature.quality.defect_analysis.export',
+            },
+            permissionCodes: const {
               'quality.first_articles.detail',
               'quality.first_articles.disposition',
               'quality.scrap_statistics.export',
@@ -867,7 +885,8 @@ void main() {
             firstArticleManagementTabCode,
             qualitySupplierManagementTabCode,
           ],
-          capabilityCodes: const {'quality.first_articles.detail'},
+          capabilityCodes: const {'feature.quality.first_articles.detail'},
+          permissionCodes: const {'quality.first_articles.detail'},
           preferredTabCode: qualitySupplierManagementTabCode,
           firstArticleService: _FakeQualityService(),
           supplierService: _FakeQualitySupplierService([
@@ -890,6 +909,10 @@ void main() {
             qualityRepairOrdersTabCode,
           ],
           capabilityCodes: const {
+            'feature.quality.repair_orders.manage',
+            'feature.quality.repair_orders.export',
+          },
+          permissionCodes: const {
             'quality.repair_orders.complete',
             'quality.repair_orders.export',
           },
@@ -996,7 +1019,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
-    expect(find.byType(MesFilterBar), findsOneWidget);
+    expect(find.byType(MesFilterBar), findsNothing);
+    expect(
+      find.byKey(const ValueKey('quality-data-keyword-field')),
+      findsOneWidget,
+    );
+    expect(find.text('维度观察'), findsNothing);
   });
 
   testWidgets('质量趋势页第一页批改版后仍接入统一页头和工作台骨架', (tester) async {
@@ -1147,9 +1175,10 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextField).at(0), '产品A');
-    await tester.enterText(find.byType(TextField).at(1), 'QA-01');
-    await tester.enterText(find.byType(TextField).at(2), 'worker_a');
+    await tester.enterText(
+      find.byKey(const ValueKey('quality-data-keyword-field')),
+      '产品A QA-01 worker_a',
+    );
     await tester.tap(
       find.byWidgetPredicate((widget) => widget is DropdownButton),
     );
@@ -1159,9 +1188,10 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, '查询'));
     await tester.pumpAndSettle();
 
-    expect(service.lastQualityStatsQuery?.productName, '产品A');
-    expect(service.lastQualityStatsQuery?.processCode, 'QA-01');
-    expect(service.lastQualityStatsQuery?.operatorUsername, 'worker_a');
+    expect(service.lastQualityStatsQuery?.keyword, '产品A QA-01 worker_a');
+    expect(service.lastQualityStatsQuery?.productName, isNull);
+    expect(service.lastQualityStatsQuery?.processCode, isNull);
+    expect(service.lastQualityStatsQuery?.operatorUsername, isNull);
     expect(service.lastQualityStatsQuery?.result, 'failed');
 
     expect(find.text('2026-04-03'), findsNothing);
@@ -1181,16 +1211,10 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final overviewCompleter = Completer<QualityStatsOverview>();
-    final processCompleter = Completer<List<QualityProcessStatItem>>();
-    final operatorCompleter = Completer<List<QualityOperatorStatItem>>();
-    final productCompleter = Completer<List<QualityProductStatItem>>();
     final trendCompleter = Completer<List<QualityTrendItem>>();
 
     final service = _FakeQualityService(
       overviewCompleter: overviewCompleter,
-      processCompleter: processCompleter,
-      operatorCompleter: operatorCompleter,
-      productCompleter: productCompleter,
       trendCompleter: trendCompleter,
     );
 
@@ -1202,9 +1226,9 @@ void main() {
     await tester.pump();
 
     expect(service.overviewCalls, 1);
-    expect(service.processCalls, 1);
-    expect(service.operatorCalls, 1);
-    expect(service.productCalls, 1);
+    expect(service.processCalls, 0);
+    expect(service.operatorCalls, 0);
+    expect(service.productCalls, 0);
     expect(service.trendCalls, 1);
 
     overviewCompleter.complete(
@@ -1222,9 +1246,6 @@ void main() {
         latestFirstArticleAt: null,
       ),
     );
-    processCompleter.complete(const []);
-    operatorCompleter.complete(const []);
-    productCompleter.complete(const []);
     trendCompleter.complete(const []);
     await tester.pumpAndSettle();
 
@@ -1249,7 +1270,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('暂无趋势数据'), findsOneWidget);
-    expect(find.text('暂无工序品质数据'), findsOneWidget);
+    expect(find.text('暂无工序品质数据'), findsNothing);
 
     final errorService = _FakeQualityService()
       ..qualityStatsError = ApiException('服务异常', 500);

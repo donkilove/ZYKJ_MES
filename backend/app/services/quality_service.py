@@ -177,6 +177,7 @@ def _quality_stats_cache_key(
     *,
     start_date: date | None,
     end_date: date | None,
+    keyword: str | None = None,
     product_name: str | None,
     process_code: str | None,
     operator_username: str | None,
@@ -185,6 +186,7 @@ def _quality_stats_cache_key(
     return (
         start_date,
         end_date,
+        _normalize_cache_text(keyword),
         _normalize_cache_text(product_name),
         _normalize_cache_text(process_code),
         _normalize_cache_text(operator_username),
@@ -273,6 +275,7 @@ def _aggregate_quality_related_totals(
     *,
     start_date: date | None,
     end_date: date | None,
+    keyword: str | None = None,
     product_name: str | None = None,
     process_code: str | None = None,
     operator_username: str | None = None,
@@ -280,6 +283,7 @@ def _aggregate_quality_related_totals(
     cache_key = _quality_stats_cache_key(
         start_date=start_date,
         end_date=end_date,
+        keyword=keyword,
         product_name=product_name,
         process_code=process_code,
         operator_username=operator_username,
@@ -315,6 +319,7 @@ def _aggregate_quality_related_totals(
             *_build_scrap_filters(
                 start_date=start_date,
                 end_date=end_date,
+                keyword=keyword,
                 product_name=product_name,
                 process_code=process_code,
                 operator_username=operator_username,
@@ -374,6 +379,7 @@ def _aggregate_quality_related_totals(
             *_build_repair_filters(
                 start_date=start_date,
                 end_date=end_date,
+                keyword=keyword,
                 product_name=product_name,
                 process_code=process_code,
                 operator_username=operator_username,
@@ -433,6 +439,7 @@ def _aggregate_quality_related_totals(
             *_build_defect_filters(
                 start_date=start_date,
                 end_date=end_date,
+                keyword=keyword,
                 product_name=product_name,
                 process_code=process_code,
                 operator_username=operator_username,
@@ -519,6 +526,7 @@ def _build_scrap_filters(
     *,
     start_date: date | None,
     end_date: date | None,
+    keyword: str | None = None,
     product_name: str | None = None,
     process_code: str | None = None,
     operator_username: str | None = None,
@@ -528,6 +536,17 @@ def _build_scrap_filters(
         start_date=start_date,
         end_date=end_date,
     )
+    normalized_keyword = (keyword or "").strip()
+    if normalized_keyword:
+        like_pattern = f"%{normalized_keyword}%"
+        filters.append(
+            or_(
+                ProductionScrapStatistics.product_name.ilike(like_pattern),
+                ProductionScrapStatistics.process_code.ilike(like_pattern),
+                ProductionScrapStatistics.process_name.ilike(like_pattern),
+                ProductionScrapStatistics.operator_username.ilike(like_pattern),
+            )
+        )
     _append_exact_or_like_filter(
         filters,
         ProductionScrapStatistics.product_name,
@@ -551,6 +570,7 @@ def _build_repair_filters(
     *,
     start_date: date | None,
     end_date: date | None,
+    keyword: str | None = None,
     product_name: str | None = None,
     process_code: str | None = None,
     operator_username: str | None = None,
@@ -560,6 +580,17 @@ def _build_repair_filters(
         start_date=start_date,
         end_date=end_date,
     )
+    normalized_keyword = (keyword or "").strip()
+    if normalized_keyword:
+        like_pattern = f"%{normalized_keyword}%"
+        filters.append(
+            or_(
+                RepairOrder.product_name.ilike(like_pattern),
+                RepairOrder.source_process_code.ilike(like_pattern),
+                RepairOrder.source_process_name.ilike(like_pattern),
+                RepairOrder.sender_username.ilike(like_pattern),
+            )
+        )
     _append_exact_or_like_filter(filters, RepairOrder.product_name, product_name)
     _append_exact_or_like_filter(
         filters,
@@ -579,6 +610,7 @@ def _build_defect_filters(
     *,
     start_date: date | None,
     end_date: date | None,
+    keyword: str | None = None,
     product_name: str | None = None,
     process_code: str | None = None,
     operator_username: str | None = None,
@@ -588,6 +620,17 @@ def _build_defect_filters(
         start_date=start_date,
         end_date=end_date,
     )
+    normalized_keyword = (keyword or "").strip()
+    if normalized_keyword:
+        like_pattern = f"%{normalized_keyword}%"
+        filters.append(
+            or_(
+                RepairDefectPhenomenon.product_name.ilike(like_pattern),
+                RepairDefectPhenomenon.process_code.ilike(like_pattern),
+                RepairDefectPhenomenon.process_name.ilike(like_pattern),
+                RepairDefectPhenomenon.operator_username.ilike(like_pattern),
+            )
+        )
     _append_exact_or_like_filter(
         filters,
         RepairDefectPhenomenon.product_name,
@@ -744,6 +787,7 @@ def _load_first_article_rows(
     *,
     start_date: date | None,
     end_date: date | None,
+    keyword: str | None = None,
     product_name: str | None = None,
     process_code: str | None = None,
     operator_username: str | None = None,
@@ -752,6 +796,7 @@ def _load_first_article_rows(
     cache_key = _quality_stats_cache_key(
         start_date=start_date,
         end_date=end_date,
+        keyword=keyword,
         product_name=product_name,
         process_code=process_code,
         operator_username=operator_username,
@@ -796,6 +841,17 @@ def _load_first_article_rows(
         )
     if operator_username and operator_username.strip():
         stmt = stmt.where(User.username.ilike(f"%{operator_username.strip()}%"))
+    normalized_keyword = (keyword or "").strip()
+    if normalized_keyword:
+        like_pattern = f"%{normalized_keyword}%"
+        stmt = stmt.where(
+            or_(
+                Product.name.ilike(like_pattern),
+                ProductionOrderProcess.process_code.ilike(like_pattern),
+                ProductionOrderProcess.process_name.ilike(like_pattern),
+                User.username.ilike(like_pattern),
+            )
+        )
     normalized_result = (result_filter or "").strip().lower()
     if normalized_result in ("passed", "failed"):
         stmt = stmt.where(FirstArticleRecord.result == normalized_result)
@@ -814,6 +870,7 @@ def get_quality_overview(
     *,
     start_date: date | None,
     end_date: date | None,
+    keyword: str | None = None,
     product_name: str | None = None,
     process_code: str | None = None,
     operator_username: str | None = None,
@@ -823,6 +880,7 @@ def get_quality_overview(
         db,
         start_date=start_date,
         end_date=end_date,
+        keyword=keyword,
         product_name=product_name,
         process_code=process_code,
         operator_username=operator_username,
@@ -832,6 +890,7 @@ def get_quality_overview(
         db,
         start_date=start_date,
         end_date=end_date,
+        keyword=keyword,
         product_name=product_name,
         process_code=process_code,
         operator_username=operator_username,
@@ -894,6 +953,7 @@ def get_quality_process_stats(
     *,
     start_date: date | None,
     end_date: date | None,
+    keyword: str | None = None,
     product_name: str | None = None,
     process_code: str | None = None,
     operator_username: str | None = None,
@@ -903,6 +963,7 @@ def get_quality_process_stats(
         db,
         start_date=start_date,
         end_date=end_date,
+        keyword=keyword,
         product_name=product_name,
         process_code=process_code,
         operator_username=operator_username,
@@ -912,6 +973,7 @@ def get_quality_process_stats(
         db,
         start_date=start_date,
         end_date=end_date,
+        keyword=keyword,
         product_name=product_name,
         process_code=process_code,
         operator_username=operator_username,
@@ -994,6 +1056,7 @@ def get_quality_operator_stats(
     *,
     start_date: date | None,
     end_date: date | None,
+    keyword: str | None = None,
     product_name: str | None = None,
     process_code: str | None = None,
     operator_username: str | None = None,
@@ -1003,6 +1066,7 @@ def get_quality_operator_stats(
         db,
         start_date=start_date,
         end_date=end_date,
+        keyword=keyword,
         product_name=product_name,
         process_code=process_code,
         operator_username=operator_username,
@@ -1012,6 +1076,7 @@ def get_quality_operator_stats(
         db,
         start_date=start_date,
         end_date=end_date,
+        keyword=keyword,
         product_name=product_name,
         process_code=process_code,
         operator_username=operator_username,
@@ -1291,6 +1356,7 @@ def get_quality_product_stats(
     *,
     start_date: date | None,
     end_date: date | None,
+    keyword: str | None = None,
     product_name: str | None = None,
     process_code: str | None = None,
     operator_username: str | None = None,
@@ -1300,6 +1366,7 @@ def get_quality_product_stats(
         db,
         start_date=start_date,
         end_date=end_date,
+        keyword=keyword,
         product_name=product_name,
         process_code=process_code,
         operator_username=operator_username,
@@ -1309,6 +1376,7 @@ def get_quality_product_stats(
         db,
         start_date=start_date,
         end_date=end_date,
+        keyword=keyword,
         product_name=product_name,
         process_code=process_code,
         operator_username=operator_username,
@@ -1352,6 +1420,7 @@ def get_quality_product_stats(
             *_build_scrap_filters(
                 start_date=start_date,
                 end_date=end_date,
+                keyword=keyword,
                 product_name=product_name,
                 process_code=process_code,
                 operator_username=operator_username,
@@ -1391,6 +1460,7 @@ def get_quality_product_stats(
             *_build_repair_filters(
                 start_date=start_date,
                 end_date=end_date,
+                keyword=keyword,
                 product_name=product_name,
                 process_code=process_code,
                 operator_username=operator_username,
@@ -1442,6 +1512,7 @@ def get_quality_trend(
     *,
     start_date: date | None,
     end_date: date | None,
+    keyword: str | None = None,
     product_name: str | None = None,
     process_code: str | None = None,
     operator_username: str | None = None,
@@ -1463,6 +1534,18 @@ def get_quality_trend(
         need_joins = True
     if operator_username and operator_username.strip():
         joined_filters.append(User.username.ilike(f"%{operator_username.strip()}%"))
+        need_joins = True
+    normalized_keyword = (keyword or "").strip()
+    if normalized_keyword:
+        like_pattern = f"%{normalized_keyword}%"
+        joined_filters.append(
+            or_(
+                Product.name.ilike(like_pattern),
+                ProductionOrderProcess.process_code.ilike(like_pattern),
+                ProductionOrderProcess.process_name.ilike(like_pattern),
+                User.username.ilike(like_pattern),
+            )
+        )
         need_joins = True
     if result_filter and result_filter.strip():
         base_filters.append(FirstArticleRecord.result == result_filter.strip())
@@ -1518,6 +1601,7 @@ def get_quality_trend(
             *_build_defect_filters(
                 start_date=resolved_start,
                 end_date=resolved_end,
+                keyword=keyword,
                 product_name=product_name,
                 process_code=process_code,
                 operator_username=operator_username,
@@ -1540,6 +1624,7 @@ def get_quality_trend(
             *_build_scrap_filters(
                 start_date=resolved_start,
                 end_date=resolved_end,
+                keyword=keyword,
                 product_name=product_name,
                 process_code=process_code,
                 operator_username=operator_username,
@@ -1562,6 +1647,7 @@ def get_quality_trend(
             *_build_repair_filters(
                 start_date=resolved_start,
                 end_date=resolved_end,
+                keyword=keyword,
                 product_name=product_name,
                 process_code=process_code,
                 operator_username=operator_username,
@@ -1589,6 +1675,7 @@ def export_quality_stats_csv(
     *,
     start_date: date | None,
     end_date: date | None,
+    keyword: str | None = None,
     product_name: str | None = None,
     process_code: str | None = None,
     operator_username: str | None = None,
@@ -1598,6 +1685,7 @@ def export_quality_stats_csv(
         db,
         start_date=start_date,
         end_date=end_date,
+        keyword=keyword,
         product_name=product_name,
         process_code=process_code,
         operator_username=operator_username,
@@ -1607,6 +1695,7 @@ def export_quality_stats_csv(
         db,
         start_date=start_date,
         end_date=end_date,
+        keyword=keyword,
         product_name=product_name,
         process_code=process_code,
         operator_username=operator_username,
@@ -1616,6 +1705,7 @@ def export_quality_stats_csv(
         db,
         start_date=start_date,
         end_date=end_date,
+        keyword=keyword,
         product_name=product_name,
         process_code=process_code,
         operator_username=operator_username,
@@ -1625,6 +1715,7 @@ def export_quality_stats_csv(
         db,
         start_date=start_date,
         end_date=end_date,
+        keyword=keyword,
         product_name=product_name,
         process_code=process_code,
         operator_username=operator_username,
@@ -1634,6 +1725,7 @@ def export_quality_stats_csv(
         db,
         start_date=start_date,
         end_date=end_date,
+        keyword=keyword,
         product_name=product_name,
         process_code=process_code,
         operator_username=operator_username,

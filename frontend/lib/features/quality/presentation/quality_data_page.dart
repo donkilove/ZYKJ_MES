@@ -12,7 +12,6 @@ import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
 import 'package:mes_client/features/quality/presentation/widgets/quality_data_page_header.dart';
-import 'package:mes_client/features/quality/presentation/widgets/quality_workbench_filter_panel.dart';
 import 'package:mes_client/features/quality/presentation/widgets/quality_workbench_summary_grid.dart';
 import 'package:mes_client/features/quality/services/quality_service.dart';
 
@@ -45,10 +44,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
 
   late final QualityService _service;
   final ExportFileService _exportFileService = const ExportFileService();
-  final TextEditingController _productNameController = TextEditingController();
-  final TextEditingController _processCodeController = TextEditingController();
-  final TextEditingController _operatorUsernameController =
-      TextEditingController();
+  final TextEditingController _keywordController = TextEditingController();
 
   bool _loading = false;
   bool _exporting = false;
@@ -69,14 +65,8 @@ class _QualityDataPageState extends State<QualityDataPage> {
     coveredOperatorCount: 0,
     latestFirstArticleAt: null,
   );
-  List<QualityProcessStatItem> _processItems = const [];
-  List<QualityOperatorStatItem> _operatorItems = const [];
-  List<QualityProductStatItem> _productItems = const [];
   List<QualityTrendItem> _trendItems = const [];
   int _trendPage = 1;
-  int _processPage = 1;
-  int _operatorPage = 1;
-  int _productPage = 1;
   String? _lastHandledRoutePayloadJson;
 
   @override
@@ -103,9 +93,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
 
   @override
   void dispose() {
-    _productNameController.dispose();
-    _processCodeController.dispose();
-    _operatorUsernameController.dispose();
+    _keywordController.dispose();
     super.dispose();
   }
 
@@ -200,9 +188,6 @@ class _QualityDataPageState extends State<QualityDataPage> {
 
   void _resetLocalPages() {
     _trendPage = 1;
-    _processPage = 1;
-    _operatorPage = 1;
-    _productPage = 1;
   }
 
   Future<void> _pickDate({
@@ -240,64 +225,28 @@ class _QualityDataPageState extends State<QualityDataPage> {
       }
     });
     try {
-      final productName = _productNameController.text.trim();
-      final processCode = _processCodeController.text.trim();
-      final operatorUsername = _operatorUsernameController.text.trim();
+      final keyword = _keywordController.text.trim();
       final results = await Future.wait<Object>([
         _service.getQualityOverview(
           startDate: _startDate,
           endDate: _endDate,
-          productName: productName,
-          processCode: processCode,
-          operatorUsername: operatorUsername,
-          result: _resultFilter,
-        ),
-        _service.getQualityProcessStats(
-          startDate: _startDate,
-          endDate: _endDate,
-          productName: productName,
-          processCode: processCode,
-          operatorUsername: operatorUsername,
-          result: _resultFilter,
-        ),
-        _service.getQualityOperatorStats(
-          startDate: _startDate,
-          endDate: _endDate,
-          productName: productName,
-          processCode: processCode,
-          operatorUsername: operatorUsername,
-          result: _resultFilter,
-        ),
-        _service.getQualityProductStats(
-          startDate: _startDate,
-          endDate: _endDate,
-          productName: productName,
-          processCode: processCode,
-          operatorUsername: operatorUsername,
+          keyword: keyword,
           result: _resultFilter,
         ),
         _service.getQualityTrend(
           startDate: _startDate,
           endDate: _endDate,
-          productName: productName,
-          processCode: processCode,
-          operatorUsername: operatorUsername,
+          keyword: keyword,
           result: _resultFilter,
         ),
       ]);
       final overview = results[0] as QualityStatsOverview;
-      final processItems = results[1] as List<QualityProcessStatItem>;
-      final operatorItems = results[2] as List<QualityOperatorStatItem>;
-      final productItems = results[3] as List<QualityProductStatItem>;
-      final trendItems = results[4] as List<QualityTrendItem>;
+      final trendItems = results[1] as List<QualityTrendItem>;
       if (!mounted) {
         return;
       }
       setState(() {
         _overview = overview;
-        _processItems = processItems;
-        _operatorItems = operatorItems;
-        _productItems = productItems;
         _trendItems = trendItems;
         _resetLocalPages();
       });
@@ -337,9 +286,7 @@ class _QualityDataPageState extends State<QualityDataPage> {
       final exportFile = await _service.exportQualityStats(
         startDate: _startDate,
         endDate: _endDate,
-        productName: _productNameController.text.trim(),
-        processCode: _processCodeController.text.trim(),
-        operatorUsername: _operatorUsernameController.text.trim(),
+        keyword: _keywordController.text.trim(),
         result: _resultFilter,
       );
       if (!mounted) return;
@@ -375,119 +322,6 @@ class _QualityDataPageState extends State<QualityDataPage> {
     return SizedBox(
       width: 190,
       child: MesMetricCard(label: title, value: value),
-    );
-  }
-
-  Widget _buildFilterPanel(ThemeData theme) {
-    return QualityWorkbenchFilterPanel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              OutlinedButton.icon(
-                onPressed: _loading
-                    ? null
-                    : () => _pickDate(
-                        current: _startDate,
-                        helpText: '选择开始日期',
-                        onChanged: (value) {
-                          setState(() {
-                            _startDate = value;
-                          });
-                        },
-                      ),
-                icon: const Icon(Icons.event),
-                label: Text('开始：${_formatDate(_startDate)}'),
-              ),
-              OutlinedButton.icon(
-                onPressed: _loading
-                    ? null
-                    : () => _pickDate(
-                        current: _endDate,
-                        helpText: '选择结束日期',
-                        onChanged: (value) {
-                          setState(() {
-                            _endDate = value;
-                          });
-                        },
-                      ),
-                icon: const Icon(Icons.event_available),
-                label: Text('结束：${_formatDate(_endDate)}'),
-              ),
-              FilledButton.icon(
-                onPressed: _loading ? null : _loadStats,
-                icon: const Icon(Icons.search),
-                label: const Text('查询'),
-              ),
-              DropdownButton<String?>(
-                value: _resultFilter,
-                hint: const Text('全部结果'),
-                items: const [
-                  DropdownMenuItem(value: null, child: Text('全部结果')),
-                  DropdownMenuItem(value: 'passed', child: Text('合格')),
-                  DropdownMenuItem(value: 'failed', child: Text('不合格')),
-                ],
-                onChanged: _loading
-                    ? null
-                    : (v) => setState(() => _resultFilter = v),
-              ),
-              if (widget.canExport)
-                OutlinedButton.icon(
-                  onPressed: (_loading || _exporting) ? null : _exportCsv,
-                  icon: const Icon(Icons.download),
-                  label: const Text('导出'),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              SizedBox(
-                width: 220,
-                child: TextField(
-                  controller: _productNameController,
-                  decoration: const InputDecoration(
-                    labelText: '产品名称',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadStats(),
-                ),
-              ),
-              SizedBox(
-                width: 220,
-                child: TextField(
-                  controller: _processCodeController,
-                  decoration: const InputDecoration(
-                    labelText: '工序编码',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadStats(),
-                ),
-              ),
-              SizedBox(
-                width: 220,
-                child: TextField(
-                  controller: _operatorUsernameController,
-                  decoration: const InputDecoration(
-                    labelText: '操作员',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onSubmitted: (_) => _loadStats(),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 
@@ -607,7 +441,6 @@ class _QualityDataPageState extends State<QualityDataPage> {
         });
       },
       emptyText: '暂无趋势数据',
-      height: 320,
     );
   }
 
@@ -615,198 +448,57 @@ class _QualityDataPageState extends State<QualityDataPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return DefaultTabController(
-      length: 3,
-      child: MesCrudPageScaffold(
-        header: QualityDataPageHeader(loading: _loading, onRefresh: _loadStats),
-        filters: _buildFilterPanel(theme),
-        banner: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (_message.isNotEmpty)
-              Text(
-                _message,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
-              ),
-            if (_message.isNotEmpty) const SizedBox(height: 12),
-            _buildOverviewSection(theme),
-          ],
+    return MesCrudPageScaffold(
+      header: QualityDataPageHeader(
+        loading: _loading,
+        startDateText: _formatDate(_startDate),
+        endDateText: _formatDate(_endDate),
+        keywordController: _keywordController,
+        resultFilter: _resultFilter,
+        onPickStartDate: () => _pickDate(
+          current: _startDate,
+          helpText: '选择开始日期',
+          onChanged: (value) {
+            setState(() {
+              _startDate = value;
+            });
+          },
         ),
-        content: ListView(
-          children: [
-            const SizedBox(height: 12),
-            MesSectionCard(title: '趋势概览', child: _buildTrendSection()),
-            const SizedBox(height: 12),
-            MesSectionCard(
-              title: '维度观察',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const TabBar(
-                    tabs: [
-                      Tab(text: '按工序'),
-                      Tab(text: '按人员'),
-                      Tab(text: '按产品'),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    height: 420,
-                    child: TabBarView(
-                      children: [
-                        _buildPaginatedTableSection(
-                          cardKey: const ValueKey(
-                            'qualityDataProcessTableCard',
-                          ),
-                          columns: const [
-                            DataColumn(label: Text('工序编码')),
-                            DataColumn(label: Text('工序名称')),
-                            DataColumn(label: Text('首件总数')),
-                            DataColumn(label: Text('通过数')),
-                            DataColumn(label: Text('不通过数')),
-                            DataColumn(label: Text('通过率')),
-                            DataColumn(label: Text('不良数')),
-                            DataColumn(label: Text('报废数')),
-                            DataColumn(label: Text('维修数')),
-                            DataColumn(label: Text('最近首件时间')),
-                          ],
-                          rows: _slicePage(_processItems, _processPage)
-                              .map(
-                                (item) => DataRow(
-                                  cells: [
-                                    DataCell(Text(item.processCode)),
-                                    DataCell(Text(item.processName)),
-                                    DataCell(Text('${item.firstArticleTotal}')),
-                                    DataCell(Text('${item.passedTotal}')),
-                                    DataCell(Text('${item.failedTotal}')),
-                                    DataCell(
-                                      Text(_formatRate(item.passRatePercent)),
-                                    ),
-                                    DataCell(Text('${item.defectTotal}')),
-                                    DataCell(Text('${item.scrapTotal}')),
-                                    DataCell(Text('${item.repairTotal}')),
-                                    DataCell(
-                                      Text(
-                                        _formatDateTime(
-                                          item.latestFirstArticleAt,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                              .toList(),
-                          page: _processPage,
-                          total: _processItems.length,
-                          onPageChanged: (page) {
-                            setState(() {
-                              _processPage = page;
-                            });
-                          },
-                          emptyText: '暂无工序品质数据',
-                        ),
-                        _buildPaginatedTableSection(
-                          cardKey: const ValueKey(
-                            'qualityDataOperatorTableCard',
-                          ),
-                          columns: const [
-                            DataColumn(label: Text('操作员')),
-                            DataColumn(label: Text('首件总数')),
-                            DataColumn(label: Text('通过数')),
-                            DataColumn(label: Text('不通过数')),
-                            DataColumn(label: Text('通过率')),
-                            DataColumn(label: Text('不良数')),
-                            DataColumn(label: Text('报废数')),
-                            DataColumn(label: Text('维修数')),
-                            DataColumn(label: Text('最近首件时间')),
-                          ],
-                          rows: _slicePage(_operatorItems, _operatorPage)
-                              .map(
-                                (item) => DataRow(
-                                  cells: [
-                                    DataCell(Text(item.operatorUsername)),
-                                    DataCell(Text('${item.firstArticleTotal}')),
-                                    DataCell(Text('${item.passedTotal}')),
-                                    DataCell(Text('${item.failedTotal}')),
-                                    DataCell(
-                                      Text(_formatRate(item.passRatePercent)),
-                                    ),
-                                    DataCell(Text('${item.defectTotal}')),
-                                    DataCell(Text('${item.scrapTotal}')),
-                                    DataCell(Text('${item.repairTotal}')),
-                                    DataCell(
-                                      Text(
-                                        _formatDateTime(
-                                          item.latestFirstArticleAt,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                              .toList(),
-                          page: _operatorPage,
-                          total: _operatorItems.length,
-                          onPageChanged: (page) {
-                            setState(() {
-                              _operatorPage = page;
-                            });
-                          },
-                          emptyText: '暂无人员品质数据',
-                        ),
-                        _buildPaginatedTableSection(
-                          cardKey: const ValueKey(
-                            'qualityDataProductTableCard',
-                          ),
-                          columns: const [
-                            DataColumn(label: Text('产品编码')),
-                            DataColumn(label: Text('产品名称')),
-                            DataColumn(label: Text('首件总数')),
-                            DataColumn(label: Text('通过数')),
-                            DataColumn(label: Text('不通过数')),
-                            DataColumn(label: Text('通过率')),
-                            DataColumn(label: Text('不良数')),
-                            DataColumn(label: Text('报废数')),
-                            DataColumn(label: Text('维修数')),
-                          ],
-                          rows: _slicePage(_productItems, _productPage)
-                              .map(
-                                (item) => DataRow(
-                                  cells: [
-                                    DataCell(Text(item.productCode)),
-                                    DataCell(Text(item.productName)),
-                                    DataCell(Text('${item.firstArticleTotal}')),
-                                    DataCell(Text('${item.passedTotal}')),
-                                    DataCell(Text('${item.failedTotal}')),
-                                    DataCell(
-                                      Text(_formatRate(item.passRatePercent)),
-                                    ),
-                                    DataCell(Text('${item.defectTotal}')),
-                                    DataCell(Text('${item.scrapTotal}')),
-                                    DataCell(Text('${item.repairTotal}')),
-                                  ],
-                                ),
-                              )
-                              .toList(),
-                          page: _productPage,
-                          total: _productItems.length,
-                          onPageChanged: (page) {
-                            setState(() {
-                              _productPage = page;
-                            });
-                          },
-                          emptyText: '暂无产品品质数据',
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+        onPickEndDate: () => _pickDate(
+          current: _endDate,
+          helpText: '选择结束日期',
+          onChanged: (value) {
+            setState(() {
+              _endDate = value;
+            });
+          },
+        ),
+        onKeywordSubmitted: (_) => _loadStats(),
+        onResultChanged: (v) => setState(() => _resultFilter = v),
+        onSearch: _loadStats,
+        onRefresh: _loadStats,
+        showExportButton: widget.canExport,
+        exporting: _exporting,
+        onExport: _exportCsv,
+      ),
+      banner: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_message.isNotEmpty)
+            Text(
+              _message,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.error,
               ),
             ),
-          ],
-        ),
+          if (_message.isNotEmpty) const SizedBox(height: 12),
+          _buildOverviewSection(theme),
+        ],
+      ),
+      content: MesSectionCard(
+        title: '趋势概览',
+        expandChild: true,
+        child: _buildTrendSection(),
       ),
     );
   }

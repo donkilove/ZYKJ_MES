@@ -274,6 +274,10 @@ void main() {
             onLogout: () {},
             visibleTabCodes: const [firstArticleManagementTabCode],
             capabilityCodes: const {
+              'feature.quality.first_articles.detail',
+              'feature.quality.first_articles.disposition',
+            },
+            permissionCodes: const {
               'quality.first_articles.detail',
               'quality.first_articles.disposition',
             },

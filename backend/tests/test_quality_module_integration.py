@@ -605,6 +605,53 @@ class QualityModuleIntegrationTest(unittest.TestCase):
         self.assertIn(record.order.order_code, csv_lines[1])
         self.assertIn("不通过", csv_lines[1])
 
+    def test_quality_stats_keyword_matches_product_process_and_operator(self) -> None:
+        product_record = self._create_first_article_record(result="failed")
+        product_keyword = f"prod-key-{self._suffix}"
+        product_order = self.db.get(ProductionOrder, product_record.order_id)
+        self.assertIsNotNone(product_order)
+        assert product_order is not None
+        product_order.product.name = product_keyword
+
+        process_record = self._create_first_article_record(result="failed")
+        process_keyword = f"proc-key-{self._suffix}"
+        process_row = self.db.get(ProductionOrderProcess, process_record.order_process_id)
+        self.assertIsNotNone(process_row)
+        assert process_row is not None
+        process_row.process_code = process_keyword
+
+        operator_record = self._create_first_article_record(result="failed")
+        operator_keyword = f"operator-key-{self._suffix}"
+        operator_user = self._create_operator_user(token=operator_keyword)
+        operator_record.operator_user_id = operator_user.id
+        self.db.commit()
+
+        cases = [
+            (product_keyword, product_record.id),
+            (process_keyword, process_record.id),
+            (operator_keyword, operator_record.id),
+        ]
+
+        for keyword, expected_record_id in cases:
+            response = self.client.get(
+                "/api/v1/quality/stats/overview",
+                headers=self._headers(),
+                params={
+                    "start_date": "2026-03-01",
+                    "end_date": "2026-03-03",
+                    "keyword": keyword,
+                },
+            )
+            self.assertEqual(response.status_code, 200, response.text)
+            payload = response.json()["data"]
+            self.assertEqual(payload["first_article_total"], 1, keyword)
+            matched = next(
+                item
+                for item in [product_record, process_record, operator_record]
+                if item.id == expected_record_id
+            )
+            self.assertIsNotNone(matched)
+
     def test_first_article_keyword_only_matches_order_code_and_operator_username(self) -> None:
         matched_record = self._create_first_article_record(result="failed")
         keyword = f"needle-{self._suffix}"

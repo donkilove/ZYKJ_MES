@@ -18,7 +18,6 @@ import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
-import 'package:mes_client/features/quality/presentation/widgets/quality_workbench_filter_panel.dart';
 import 'package:mes_client/features/quality/presentation/widgets/quality_workbench_summary_grid.dart';
 
 enum _RepairOrderAction { detail, summary, complete }
@@ -483,70 +482,6 @@ class _ProductionRepairOrdersPageState
     );
   }
 
-  Widget _buildFilterPanel() {
-    return QualityWorkbenchFilterPanel(
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        children: [
-          SizedBox(
-            width: 240,
-            child: TextField(
-              controller: _keywordController,
-              decoration: const InputDecoration(
-                labelText: '关键词（维修单/订单/产品）',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onSubmitted: (_) => _loadItems(page: 1),
-            ),
-          ),
-          SizedBox(
-            width: 160,
-            child: DropdownButtonFormField<String>(
-              initialValue: _status,
-              decoration: const InputDecoration(
-                labelText: '状态',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              items: const [
-                DropdownMenuItem(value: 'all', child: Text('全部')),
-                DropdownMenuItem(value: 'in_repair', child: Text('维修中')),
-                DropdownMenuItem(value: 'completed', child: Text('已完成')),
-              ],
-              onChanged: (value) {
-                if (value == null) return;
-                setState(() {
-                  _status = value;
-                  _page = 1;
-                });
-              },
-            ),
-          ),
-          OutlinedButton(
-            onPressed: _loading ? null : () => _pickDate(isStart: true),
-            child: Text(_startDate == null ? '开始日期' : _formatDate(_startDate!)),
-          ),
-          OutlinedButton(
-            onPressed: _loading ? null : () => _pickDate(isStart: false),
-            child: Text(_endDate == null ? '结束日期' : _formatDate(_endDate!)),
-          ),
-          FilledButton.icon(
-            onPressed: _loading ? null : () => _loadItems(page: 1),
-            icon: const Icon(Icons.search),
-            label: const Text('查询'),
-          ),
-          OutlinedButton.icon(
-            onPressed: (!widget.canExport || _exporting) ? null : _export,
-            icon: const Icon(Icons.download),
-            label: const Text('导出'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -554,9 +489,25 @@ class _ProductionRepairOrdersPageState
     return MesCrudPageScaffold(
       header: ProductionRepairOrdersPageHeader(
         loading: _loading,
+        keywordController: _keywordController,
+        status: _status,
+        startDateText: _startDate == null ? '开始日期' : _formatDate(_startDate!),
+        endDateText: _endDate == null ? '结束日期' : _formatDate(_endDate!),
+        canExport: widget.canExport,
+        exporting: _exporting,
+        onKeywordSubmitted: (_) => _loadItems(page: 1),
+        onStatusChanged: (value) {
+          setState(() {
+            _status = value;
+            _page = 1;
+          });
+        },
+        onPickStartDate: () => _pickDate(isStart: true),
+        onPickEndDate: () => _pickDate(isStart: false),
+        onSearch: () => _loadItems(page: 1),
+        onExport: _export,
         onRefresh: _loadItems,
       ),
-      filters: _buildFilterPanel(),
       banner: _message.isEmpty
           ? _buildSummarySection()
           : Column(

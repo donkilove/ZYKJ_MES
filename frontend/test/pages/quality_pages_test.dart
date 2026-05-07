@@ -112,7 +112,7 @@ void main() {
     expect(service.overviewCallCount, 0);
   });
 
-  testWidgets('质量数据页展示总览与工序人员质量口径', (tester) async {
+  testWidgets('质量数据页展示总览与趋势口径', (tester) async {
     final service = _FakeQualityService(
       overviewResult: QualityStatsOverview(
         firstArticleTotal: 0,
@@ -199,13 +199,10 @@ void main() {
     expect(find.text('报废总数'), findsOneWidget);
     expect(find.text('维修总数'), findsOneWidget);
     expect(find.text('2026-03-02'), findsOneWidget);
-    expect(find.text('检验'), findsOneWidget);
-    await tester.tap(find.text('按人员'));
-    await tester.pumpAndSettle();
-    expect(find.text('quality_worker'), findsOneWidget);
-    await tester.tap(find.text('按产品'));
-    await tester.pumpAndSettle();
-    expect(find.text('产品A'), findsOneWidget);
+    expect(find.text('检验'), findsNothing);
+    expect(find.text('维度观察'), findsNothing);
+    expect(find.text('按人员'), findsNothing);
+    expect(find.text('按产品'), findsNothing);
   });
 
   testWidgets('质量数据页首屏使用统一工作台骨架', (tester) async {
@@ -290,11 +287,22 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byType(MesFilterBar), findsOneWidget);
+    expect(find.byType(MesFilterBar), findsNothing);
     expect(find.byType(MesMetricCard), findsAtLeastNWidgets(4));
-    expect(find.text('筛选控制台'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('quality-data-keyword-field')),
+      findsOneWidget,
+    );
+    expect(find.text('搜索产品/工序/操作员'), findsOneWidget);
     expect(find.text('质量总览'), findsOneWidget);
-    expect(find.byType(MesSectionCard), findsAtLeastNWidgets(3));
+    expect(find.text('维度观察'), findsNothing);
+    expect(find.byType(MesSectionCard), findsAtLeastNWidgets(2));
+
+    final trendCard = find.ancestor(
+      of: find.text('趋势概览'),
+      matching: find.byType(MesSectionCard),
+    );
+    expect(tester.getSize(trendCard).height, greaterThan(500));
   });
 
   testWidgets('不良分析页在非法日期范围时即时提示', (tester) async {
@@ -378,7 +386,8 @@ void main() {
             session: session,
             onLogout: () {},
             visibleTabCodes: const [qualityScrapStatisticsTabCode],
-            capabilityCodes: const {'quality.scrap_statistics.export'},
+            capabilityCodes: const {'feature.quality.scrap_statistics.export'},
+            permissionCodes: const {'quality.scrap_statistics.export'},
             preferredTabCode: qualityScrapStatisticsTabCode,
             routePayloadJson: '{"action":"detail","scrap_id":21}',
             repairScrapService: _FakeQualityRepairScrapService(),
@@ -405,6 +414,10 @@ void main() {
             onLogout: () {},
             visibleTabCodes: const [qualityRepairOrdersTabCode],
             capabilityCodes: const {
+              'feature.quality.repair_orders.manage',
+              'feature.quality.repair_orders.export',
+            },
+            permissionCodes: const {
               'quality.repair_orders.complete',
               'quality.repair_orders.export',
             },
@@ -434,6 +447,10 @@ void main() {
             onLogout: () {},
             visibleTabCodes: const [firstArticleManagementTabCode],
             capabilityCodes: const {
+              'feature.quality.first_articles.detail',
+              'feature.quality.first_articles.disposition',
+            },
+            permissionCodes: const {
               'quality.first_articles.detail',
               'quality.first_articles.disposition',
             },
@@ -481,6 +498,34 @@ void main() {
     expect(find.text('外观、尺寸复核'), findsOneWidget);
     expect(find.text('10.2'), findsOneWidget);
     expect(find.text('worker_b (李四)'), findsOneWidget);
+  });
+
+  testWidgets('质量页仅凭 permissionCodes 也会展示品质报废导出操作菜单', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1800, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: QualityPage(
+            session: session,
+            onLogout: () {},
+            visibleTabCodes: const [qualityScrapStatisticsTabCode],
+            capabilityCodes: const <String>{},
+            permissionCodes: const {'quality.scrap_statistics.export'},
+            preferredTabCode: qualityScrapStatisticsTabCode,
+            repairScrapService: _FakeQualityRepairScrapService(),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('production-scrap-statistics-operation-menu')),
+      findsOneWidget,
+    );
   });
 }
 
@@ -559,6 +604,7 @@ class _FakeQualityService extends QualityService {
   Future<QualityStatsOverview> getQualityOverview({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,
@@ -585,6 +631,7 @@ class _FakeQualityService extends QualityService {
   Future<List<QualityProcessStatItem>> getQualityProcessStats({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,
@@ -595,6 +642,7 @@ class _FakeQualityService extends QualityService {
   Future<List<QualityOperatorStatItem>> getQualityOperatorStats({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,
@@ -605,6 +653,7 @@ class _FakeQualityService extends QualityService {
   Future<List<QualityProductStatItem>> getQualityProductStats({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,
@@ -615,6 +664,7 @@ class _FakeQualityService extends QualityService {
   Future<List<QualityTrendItem>> getQualityTrend({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,

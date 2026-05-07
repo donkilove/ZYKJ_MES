@@ -21,6 +21,7 @@ class _FakeQualityTrendService extends QualityService {
   Future<List<QualityTrendItem>> getQualityTrend({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,
@@ -55,6 +56,7 @@ class _FakeQualityTrendService extends QualityService {
   Future<QualityStatsOverview> getQualityOverview({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,
@@ -80,6 +82,7 @@ class _FakeQualityTrendService extends QualityService {
   Future<List<QualityProductStatItem>> getQualityProductStats({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,
@@ -106,6 +109,7 @@ class _FakeQualityTrendService extends QualityService {
   Future<List<QualityProcessStatItem>> getQualityProcessStats({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,
@@ -132,6 +136,7 @@ class _FakeQualityTrendService extends QualityService {
   Future<List<QualityOperatorStatItem>> getQualityOperatorStats({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     String? productName,
     String? processCode,
     String? operatorUsername,
@@ -193,7 +198,10 @@ void main() {
     expect(service.processCalls, 1);
     expect(service.operatorCalls, 1);
 
-    expect(find.byKey(const ValueKey('quality-trend-page-header')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('quality-trend-page-header')),
+      findsOneWidget,
+    );
     expect(find.text('整体通过率'), findsOneWidget);
     expect(find.text('80.0%'), findsWidgets);
     expect(find.text('不良总数'), findsOneWidget);

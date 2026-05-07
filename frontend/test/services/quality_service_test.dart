@@ -107,6 +107,7 @@ void main() {
           'GET /quality/stats/overview': (request) {
             expect(request.uri.queryParameters['start_date'], '2026-03-01');
             expect(request.uri.queryParameters['end_date'], '2026-03-06');
+            expect(request.uri.queryParameters['keyword'], '产品A');
             return TestResponse.json(
               200,
               body: {
@@ -126,6 +127,7 @@ void main() {
           'GET /quality/stats/processes': (request) {
             expect(request.uri.queryParameters['start_date'], '2026-03-01');
             expect(request.uri.queryParameters['end_date'], '2026-03-06');
+            expect(request.uri.queryParameters['keyword'], '产品A');
             return TestResponse.json(
               200,
               body: {
@@ -148,6 +150,7 @@ void main() {
           'GET /quality/stats/operators': (request) {
             expect(request.uri.queryParameters['start_date'], '2026-03-01');
             expect(request.uri.queryParameters['end_date'], '2026-03-06');
+            expect(request.uri.queryParameters['keyword'], '产品A');
             return TestResponse.json(
               200,
               body: {
@@ -183,10 +186,12 @@ void main() {
         final overview = await service.getQualityOverview(
           startDate: DateTime(2026, 3, 1),
           endDate: DateTime(2026, 3, 6),
+          keyword: '  产品A ',
         );
         final processStats = await service.getQualityProcessStats(
           startDate: DateTime(2026, 3, 1),
           endDate: DateTime(2026, 3, 6),
+          keyword: '  产品A ',
         );
         final detail = await service.getFirstArticleDetail(1);
         final dispositionDetail = await service
@@ -194,6 +199,7 @@ void main() {
         final operatorStats = await service.getQualityOperatorStats(
           startDate: DateTime(2026, 3, 1),
           endDate: DateTime(2026, 3, 6),
+          keyword: '  产品A ',
         );
 
         expect(firstArticles.total, 1);
