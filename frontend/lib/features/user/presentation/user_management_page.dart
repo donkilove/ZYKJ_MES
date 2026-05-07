@@ -19,7 +19,6 @@ import 'package:mes_client/features/user/presentation/widgets/user_reset_passwor
 import 'package:mes_client/features/user/presentation/widgets/user_action_dialogs.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_import_dialog.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_management_feedback_banner.dart';
-import 'package:mes_client/features/user/presentation/widgets/user_management_filter_section.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_management_page_header.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_management_table_section.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_data_table.dart';
@@ -1002,9 +1001,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
       header: UserManagementPageHeader(
         loading: _loading,
         onRefresh: _refreshUsersFromHeader,
-        actionsBeforeRefresh: _buildHeaderActionButtons(),
-      ),
-      filters: UserManagementFilterSection(
         keywordController: _keywordController,
         filterRoleCode: _filterRoleCode,
         filterIsActive: _filterIsActive,
@@ -1023,8 +1019,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
           _applyFiltersAndReload();
         },
         onSearch: _applyFiltersAndReload,
-        topActions: _buildTopToolbarButtons(),
+        actionsBeforeRefresh: _buildHeaderActionButtons(),
         actions: const [],
+        topActions: _buildTopToolbarButtons(),
       ),
       banner: _message.isEmpty
           ? null

@@ -740,7 +740,22 @@ void main() {
       canImport: true,
     );
 
+    expect(
+      find.byKey(const ValueKey('user-management-page-header')),
+      findsOneWidget,
+    );
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('user-management-filter-section')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('user-management-page-header')),
+        matching: find.byKey(const ValueKey('user-management-filter-section')),
+      ),
+      findsOneWidget,
+    );
     expect(find.byTooltip('刷新'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, '新建用户'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, '批量导入'), findsOneWidget);
