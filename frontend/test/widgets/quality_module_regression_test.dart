@@ -239,6 +239,7 @@ class _RecordedDefectQuery {
   const _RecordedDefectQuery({
     this.startDate,
     this.endDate,
+    this.keyword,
     this.productName,
     this.processCode,
     this.operatorUsername,
@@ -247,6 +248,7 @@ class _RecordedDefectQuery {
 
   final DateTime? startDate;
   final DateTime? endDate;
+  final String? keyword;
   final String? productName;
   final String? processCode;
   final String? operatorUsername;
@@ -485,6 +487,7 @@ class _FakeQualityService extends QualityService {
   Future<DefectAnalysisResult> getDefectAnalysis({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     int? productId,
     String? productName,
     String? processCode,
@@ -495,6 +498,7 @@ class _FakeQualityService extends QualityService {
     lastDefectQuery = _RecordedDefectQuery(
       startDate: startDate,
       endDate: endDate,
+      keyword: keyword,
       productName: productName,
       processCode: processCode,
       operatorUsername: operatorUsername,
@@ -521,6 +525,7 @@ class _FakeQualityService extends QualityService {
   Future<QualityExportFile> exportDefectAnalysis({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     int? productId,
     String? productName,
     String? processCode,
@@ -532,6 +537,7 @@ class _FakeQualityService extends QualityService {
     lastDefectQuery = _RecordedDefectQuery(
       startDate: startDate,
       endDate: endDate,
+      keyword: keyword,
       productName: productName,
       processCode: processCode,
       operatorUsername: operatorUsername,
@@ -1410,27 +1416,25 @@ void main() {
     expect(find.text('虚焊'), findsWidgets);
     expect(find.text('治具偏移'), findsOneWidget);
 
-    await tester.enterText(find.byType(TextField).at(0), 'QA-01');
-    await tester.enterText(find.byType(TextField).at(1), '产品A');
-    await tester.enterText(find.byType(TextField).at(2), 'worker_a');
-    await tester.enterText(find.byType(TextField).at(3), '虚焊');
+    await tester.enterText(
+      find.byKey(const ValueKey('quality-defect-keyword-field')),
+      'QA-01 产品A worker_a 虚焊',
+    );
     await tester.tap(find.widgetWithText(FilledButton, '查询'));
     await tester.pumpAndSettle();
 
-    expect(service.lastDefectQuery?.processCode, 'QA-01');
-    expect(service.lastDefectQuery?.productName, '产品A');
-    expect(service.lastDefectQuery?.operatorUsername, 'worker_a');
-    expect(service.lastDefectQuery?.phenomenon, '虚焊');
+    expect(service.lastDefectQuery?.keyword, 'QA-01 产品A worker_a 虚焊');
+    expect(service.lastDefectQuery?.processCode, isNull);
+    expect(service.lastDefectQuery?.productName, isNull);
+    expect(service.lastDefectQuery?.operatorUsername, isNull);
+    expect(service.lastDefectQuery?.phenomenon, isNull);
     expect(service.lastDefectQuery?.startDate, DateTime(2026, 3, 1));
 
-    await tester.tap(find.text('清除日期'));
+    await tester.tap(
+      find.byKey(const ValueKey('quality-defect-operation-menu')),
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, '查询'));
-    await tester.pumpAndSettle();
-    expect(service.lastDefectQuery?.startDate, isNull);
-    expect(service.lastDefectQuery?.endDate, isNull);
-
-    await tester.tap(find.widgetWithText(OutlinedButton, '导出'));
+    await tester.tap(find.text('导出').last);
     await tester.pumpAndSettle();
 
     expect(service.exportDefectAnalysisCalls, 1);
@@ -1484,12 +1488,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byType(MesFilterBar), findsOneWidget);
+    expect(find.byType(MesFilterBar), findsNothing);
     expect(find.byType(MesMetricCard), findsAtLeastNWidgets(4));
-    expect(find.text('筛选控制台'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('quality-defect-keyword-field')),
+      findsOneWidget,
+    );
     expect(find.text('质量总览'), findsOneWidget);
     expect(find.text('关键分布'), findsOneWidget);
-    expect(find.byType(MesSectionCard), findsAtLeastNWidgets(3));
+    expect(find.text('维度观察'), findsNothing);
+    expect(find.byType(MesSectionCard), findsAtLeastNWidgets(2));
   });
 
   testWidgets('不良分析页处理空态 错误态 与 401', (tester) async {

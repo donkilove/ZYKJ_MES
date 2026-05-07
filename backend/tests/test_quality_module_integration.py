@@ -963,6 +963,69 @@ class QualityModuleIntegrationTest(unittest.TestCase):
             1,
         )
 
+    def test_defect_analysis_keyword_matches_process_product_operator_and_phenomenon(
+        self,
+    ) -> None:
+        process_record = self._create_first_article_record(result="failed")
+        process_repair_order = self._create_repair_order(record=process_record)
+        process_keyword = f"defect-proc-{self._suffix}"
+        process_defect_row = self._create_repair_defect(
+            repair_order=process_repair_order,
+            phenomenon="划伤",
+            quantity=1,
+        )
+        process_defect_row.process_code = process_keyword
+        process_defect_row.process_name = process_keyword
+        self.db.commit()
+
+        product_record = self._create_first_article_record(result="failed")
+        product_repair_order = self._create_repair_order(record=product_record)
+        product_keyword = f"defect-product-{self._suffix}"
+        product_defect_row = self._create_repair_defect(
+            repair_order=product_repair_order,
+            phenomenon="偏位",
+            quantity=1,
+        )
+        product_defect_row.product_name = product_keyword
+        self.db.commit()
+
+        operator_record = self._create_first_article_record(result="failed")
+        operator_repair_order = self._create_repair_order(record=operator_record)
+        operator_keyword = f"defect-operator-{self._suffix}"
+        operator_user = self._create_operator_user(token=operator_keyword)
+        defect_row = self._create_repair_defect(
+            repair_order=operator_repair_order,
+            phenomenon="虚焊",
+            quantity=1,
+        )
+        defect_row.operator_user_id = operator_user.id
+        defect_row.operator_username = operator_user.username
+        self.db.commit()
+
+        phenomenon_record = self._create_first_article_record(result="failed")
+        phenomenon_repair_order = self._create_repair_order(record=phenomenon_record)
+        phenomenon_keyword = f"defect-phenomenon-{self._suffix}"
+        self._create_repair_defect(
+            repair_order=phenomenon_repair_order,
+            phenomenon=phenomenon_keyword,
+            quantity=1,
+        )
+
+        for keyword in (
+            process_keyword,
+            product_keyword,
+            operator_keyword,
+            phenomenon_keyword,
+        ):
+            response = self.client.get(
+                "/api/v1/quality/defect-analysis",
+                headers=self._headers(),
+                params={"keyword": keyword},
+            )
+            self.assertEqual(response.status_code, 200, response.text)
+            payload = response.json()["data"]
+            self.assertEqual(payload["total_defect_quantity"], 1, keyword)
+
     def test_quality_scrap_and_repair_contracts_are_available(self) -> None:
         record = self._create_first_article_record(result="failed")
         repair_order = self._create_repair_order(record=record)

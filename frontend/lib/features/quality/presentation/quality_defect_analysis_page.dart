@@ -15,7 +15,6 @@ import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
-import 'package:mes_client/features/quality/presentation/widgets/quality_workbench_filter_panel.dart';
 import 'package:mes_client/features/quality/presentation/widgets/quality_workbench_summary_grid.dart';
 
 class QualityDefectAnalysisPage extends StatefulWidget {
@@ -53,10 +52,7 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
 
   DateTime? _startDate;
   DateTime? _endDate;
-  final _processCodeController = TextEditingController();
-  final _productNameController = TextEditingController();
-  final _operatorController = TextEditingController();
-  final _phenomenonController = TextEditingController();
+  final _keywordController = TextEditingController();
   bool _exporting = false;
   int _topReasonsPage = 1;
   int _topDefectsPage = 1;
@@ -78,10 +74,7 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
 
   @override
   void dispose() {
-    _processCodeController.dispose();
-    _productNameController.dispose();
-    _operatorController.dispose();
-    _phenomenonController.dispose();
+    _keywordController.dispose();
     super.dispose();
   }
 
@@ -119,18 +112,9 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
       final result = await _service.getDefectAnalysis(
         startDate: _startDate,
         endDate: _endDate,
-        productName: _productNameController.text.trim().isEmpty
+        keyword: _keywordController.text.trim().isEmpty
             ? null
-            : _productNameController.text.trim(),
-        processCode: _processCodeController.text.trim().isEmpty
-            ? null
-            : _processCodeController.text.trim(),
-        operatorUsername: _operatorController.text.trim().isEmpty
-            ? null
-            : _operatorController.text.trim(),
-        phenomenon: _phenomenonController.text.trim().isEmpty
-            ? null
-            : _phenomenonController.text.trim(),
+            : _keywordController.text.trim(),
       );
       if (!mounted) return;
       setState(() {
@@ -193,18 +177,9 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
       final exportFile = await _service.exportDefectAnalysis(
         startDate: _startDate,
         endDate: _endDate,
-        productName: _productNameController.text.trim().isEmpty
+        keyword: _keywordController.text.trim().isEmpty
             ? null
-            : _productNameController.text.trim(),
-        processCode: _processCodeController.text.trim().isEmpty
-            ? null
-            : _processCodeController.text.trim(),
-        operatorUsername: _operatorController.text.trim().isEmpty
-            ? null
-            : _operatorController.text.trim(),
-        phenomenon: _phenomenonController.text.trim().isEmpty
-            ? null
-            : _phenomenonController.text.trim(),
+            : _keywordController.text.trim(),
       );
       if (!mounted) return;
       if (exportFile.contentBase64.isEmpty) {
@@ -278,18 +253,27 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
     return MesCrudPageScaffold(
       header: QualityDefectAnalysisPageHeader(
         loading: _loading,
+        keywordController: _keywordController,
         canExport: widget.canExport,
         exporting: _exporting,
+        startDateText: _startDate != null ? _formatDate(_startDate!) : '开始日期',
+        endDateText: _endDate != null ? _formatDate(_endDate!) : '结束日期',
+        onKeywordSubmitted: (_) => _load(),
+        onPickStartDate: () => _pickDate(isStart: true),
+        onPickEndDate: () => _pickDate(isStart: false),
+        onSearch: _load,
         onRefresh: _load,
         onExport: _export,
       ),
-      filters: _buildFilterBar(theme),
       banner: _message.isEmpty
           ? _buildSummarySection()
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_message, style: TextStyle(color: theme.colorScheme.error)),
+                Text(
+                  _message,
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
                 const SizedBox(height: 12),
                 _buildSummarySection(),
               ],
@@ -299,90 +283,6 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
           : _result == null
           ? const Center(child: Text('暂无数据'))
           : _buildContent(theme),
-    );
-  }
-
-  Widget _buildFilterBar(ThemeData theme) {
-    return QualityWorkbenchFilterPanel(
-      child: Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          OutlinedButton.icon(
-            onPressed: () => _pickDate(isStart: true),
-            icon: const Icon(Icons.calendar_today, size: 16),
-            label: Text(_startDate != null ? _formatDate(_startDate!) : '开始日期'),
-          ),
-          OutlinedButton.icon(
-            onPressed: () => _pickDate(isStart: false),
-            icon: const Icon(Icons.calendar_today, size: 16),
-            label: Text(_endDate != null ? _formatDate(_endDate!) : '结束日期'),
-          ),
-          if (_startDate != null || _endDate != null)
-            TextButton(
-              onPressed: () => setState(() {
-                _startDate = null;
-                _endDate = null;
-                _syncDateRangeMessage();
-              }),
-              child: const Text('清除日期'),
-            ),
-          SizedBox(
-            width: 160,
-            child: TextField(
-              controller: _processCodeController,
-              decoration: const InputDecoration(
-                labelText: '工序编码',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onSubmitted: (_) => _load(),
-            ),
-          ),
-          SizedBox(
-            width: 160,
-            child: TextField(
-              controller: _productNameController,
-              decoration: const InputDecoration(
-                labelText: '产品名称',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onSubmitted: (_) => _load(),
-            ),
-          ),
-          SizedBox(
-            width: 150,
-            child: TextField(
-              controller: _operatorController,
-              decoration: const InputDecoration(
-                labelText: '操作员',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onSubmitted: (_) => _load(),
-            ),
-          ),
-          SizedBox(
-            width: 150,
-            child: TextField(
-              controller: _phenomenonController,
-              decoration: const InputDecoration(
-                labelText: '不良类型',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onSubmitted: (_) => _load(),
-            ),
-          ),
-          FilledButton.icon(
-            onPressed: _loading ? null : _load,
-            icon: const Icon(Icons.search),
-            label: const Text('查询'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -673,22 +573,25 @@ class _QualityDefectAnalysisPageState extends State<QualityDefectAnalysisPage> {
                     DataColumn(label: Text('报废数')),
                     DataColumn(label: Text('维修数')),
                   ],
-                  rows: _slicePage(
-                    result.productQualityComparison,
-                    _productComparisonPage,
-                  ).map(
-                    (item) => DataRow(
-                      cells: [
-                        DataCell(Text(item.productName)),
-                        DataCell(Text('${item.firstArticleTotal}')),
-                        DataCell(Text('${item.passedTotal}')),
-                        DataCell(Text('${item.failedTotal}')),
-                        DataCell(Text('${item.passRatePercent}%')),
-                        DataCell(Text('${item.scrapTotal}')),
-                        DataCell(Text('${item.repairTotal}')),
-                      ],
-                    ),
-                  ).toList(),
+                  rows:
+                      _slicePage(
+                            result.productQualityComparison,
+                            _productComparisonPage,
+                          )
+                          .map(
+                            (item) => DataRow(
+                              cells: [
+                                DataCell(Text(item.productName)),
+                                DataCell(Text('${item.firstArticleTotal}')),
+                                DataCell(Text('${item.passedTotal}')),
+                                DataCell(Text('${item.failedTotal}')),
+                                DataCell(Text('${item.passRatePercent}%')),
+                                DataCell(Text('${item.scrapTotal}')),
+                                DataCell(Text('${item.repairTotal}')),
+                              ],
+                            ),
+                          )
+                          .toList(),
                   page: _productComparisonPage,
                   total: result.productQualityComparison.length,
                   onPageChanged: (page) {

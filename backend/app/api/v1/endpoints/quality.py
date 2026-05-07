@@ -1230,6 +1230,7 @@ def export_quality_repair_orders_api(
 def get_defect_analysis_api(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
+    keyword: str | None = Query(default=None),
     product_id: int | None = Query(default=None),
     product_name: str | None = Query(default=None),
     process_code: str | None = Query(default=None),
@@ -1244,6 +1245,7 @@ def get_defect_analysis_api(
         db,
         start_date=start_date,
         end_date=end_date,
+        keyword=keyword,
         product_id=product_id,
         product_name=product_name,
         process_code=process_code,
@@ -1260,6 +1262,7 @@ def get_defect_analysis_api(
 def export_defect_analysis_api(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
+    keyword: str | None = Query(default=None),
     product_id: int | None = Query(default=None),
     product_name: str | None = Query(default=None),
     process_code: str | None = Query(default=None),
@@ -1273,6 +1276,7 @@ def export_defect_analysis_api(
         db,
         start_date=start_date,
         end_date=end_date,
+        keyword=keyword,
         product_id=product_id,
         product_name=product_name,
         process_code=process_code,

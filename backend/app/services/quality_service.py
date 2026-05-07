@@ -1990,6 +1990,7 @@ def get_defect_analysis(
     *,
     start_date: date | None = None,
     end_date: date | None = None,
+    keyword: str | None = None,
     product_id: int | None = None,
     product_name: str | None = None,
     process_code: str | None = None,
@@ -2017,6 +2018,18 @@ def get_defect_analysis(
         stmt = stmt.where(
             RepairDefectPhenomenon.production_time
             < datetime.combine(end_date + timedelta(days=1), time.min)
+        )
+    normalized_keyword = (keyword or "").strip()
+    if normalized_keyword:
+        like_pattern = f"%{normalized_keyword}%"
+        stmt = stmt.where(
+            or_(
+                RepairDefectPhenomenon.product_name.ilike(like_pattern),
+                RepairDefectPhenomenon.process_code.ilike(like_pattern),
+                RepairDefectPhenomenon.process_name.ilike(like_pattern),
+                RepairDefectPhenomenon.operator_username.ilike(like_pattern),
+                RepairDefectPhenomenon.phenomenon.ilike(like_pattern),
+            )
         )
     if product_id is not None:
         stmt = stmt.where(RepairDefectPhenomenon.product_id == product_id)
@@ -2168,6 +2181,7 @@ def export_defect_analysis_csv(
     *,
     start_date: date | None = None,
     end_date: date | None = None,
+    keyword: str | None = None,
     product_id: int | None = None,
     product_name: str | None = None,
     process_code: str | None = None,
@@ -2186,6 +2200,18 @@ def export_defect_analysis_csv(
         stmt = stmt.where(
             RepairDefectPhenomenon.production_time
             < datetime.combine(end_date + timedelta(days=1), time.min)
+        )
+    normalized_keyword = (keyword or "").strip()
+    if normalized_keyword:
+        like_pattern = f"%{normalized_keyword}%"
+        stmt = stmt.where(
+            or_(
+                RepairDefectPhenomenon.product_name.ilike(like_pattern),
+                RepairDefectPhenomenon.process_code.ilike(like_pattern),
+                RepairDefectPhenomenon.process_name.ilike(like_pattern),
+                RepairDefectPhenomenon.operator_username.ilike(like_pattern),
+                RepairDefectPhenomenon.phenomenon.ilike(like_pattern),
+            )
         )
     if product_id is not None:
         stmt = stmt.where(RepairDefectPhenomenon.product_id == product_id)

@@ -851,6 +851,7 @@ class QualityService implements RepairScrapService {
   Future<DefectAnalysisResult> getDefectAnalysis({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     int? productId,
     String? productName,
     String? processCode,
@@ -861,6 +862,9 @@ class QualityService implements RepairScrapService {
     final query = <String, String>{'top_n': '$topN'};
     if (startDate != null) query['start_date'] = _formatDate(startDate);
     if (endDate != null) query['end_date'] = _formatDate(endDate);
+    if (keyword != null && keyword.isNotEmpty) {
+      query['keyword'] = keyword;
+    }
     if (productId != null) query['product_id'] = '$productId';
     if (productName != null && productName.isNotEmpty) {
       query['product_name'] = productName;
@@ -893,6 +897,7 @@ class QualityService implements RepairScrapService {
   Future<QualityExportFile> exportDefectAnalysis({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     int? productId,
     String? productName,
     String? processCode,
@@ -902,6 +907,9 @@ class QualityService implements RepairScrapService {
     final query = <String, String>{};
     if (startDate != null) query['start_date'] = _formatDate(startDate);
     if (endDate != null) query['end_date'] = _formatDate(endDate);
+    if (keyword != null && keyword.isNotEmpty) {
+      query['keyword'] = keyword;
+    }
     if (productId != null) query['product_id'] = '$productId';
     if (productName != null && productName.isNotEmpty) {
       query['product_name'] = productName;

@@ -675,6 +675,7 @@ class _FakeQualityService extends QualityService {
   Future<DefectAnalysisResult> getDefectAnalysis({
     DateTime? startDate,
     DateTime? endDate,
+    String? keyword,
     int? productId,
     String? productName,
     String? processCode,
