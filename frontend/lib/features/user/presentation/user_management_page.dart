@@ -998,30 +998,32 @@ class _UserManagementPageState extends State<UserManagementPage> {
     final emptyListHint = _emptyListMessage;
 
     return MesCrudPageScaffold(
-      header: UserManagementPageHeader(
-        loading: _loading,
-        onRefresh: _refreshUsersFromHeader,
-        keywordController: _keywordController,
-        filterRoleCode: _filterRoleCode,
-        filterIsActive: _filterIsActive,
-        deletedScope: _deletedScope,
-        roles: _roles,
-        onFilterRoleCodeChanged: (value) {
-          setState(() => _filterRoleCode = value);
-          _applyFiltersAndReload();
-        },
-        onFilterIsActiveChanged: (value) {
-          setState(() => _filterIsActive = value);
-          _applyFiltersAndReload();
-        },
-        onFilterDeletedScopeChanged: (value) {
-          setState(() => _deletedScope = value);
-          _applyFiltersAndReload();
-        },
-        onSearch: _applyFiltersAndReload,
-        actionsBeforeRefresh: _buildHeaderActionButtons(),
-        actions: const [],
-        topActions: _buildTopToolbarButtons(),
+      header: SizedBox(
+        width: double.infinity,
+        child: UserManagementPageHeader(
+          loading: _loading,
+          onRefresh: _refreshUsersFromHeader,
+          keywordController: _keywordController,
+          filterRoleCode: _filterRoleCode,
+          filterIsActive: _filterIsActive,
+          deletedScope: _deletedScope,
+          roles: _roles,
+          onFilterRoleCodeChanged: (value) {
+            setState(() => _filterRoleCode = value);
+            _applyFiltersAndReload();
+          },
+          onFilterIsActiveChanged: (value) {
+            setState(() => _filterIsActive = value);
+            _applyFiltersAndReload();
+          },
+          onFilterDeletedScopeChanged: (value) {
+            setState(() => _deletedScope = value);
+            _applyFiltersAndReload();
+          },
+          onSearch: _applyFiltersAndReload,
+          actionsBeforeRefresh: _buildHeaderActionButtons(),
+          topActions: _buildTopToolbarButtons(),
+        ),
       ),
       banner: _message.isEmpty
           ? null

@@ -15,6 +15,7 @@ class UserFilterToolbar extends StatelessWidget {
 
   final List<Widget> actions;
   final List<Widget> topActions;
+  final bool forceSingleRow;
 
   const UserFilterToolbar({
     super.key,
@@ -29,6 +30,7 @@ class UserFilterToolbar extends StatelessWidget {
     required this.onSearch,
     required this.actions,
     this.topActions = const [],
+    this.forceSingleRow = false,
   });
 
   Widget _buildKeywordField() {
@@ -117,7 +119,7 @@ class UserFilterToolbar extends StatelessWidget {
     const statusWidth = 136.0;
     const roleWidth = 150.0;
     const deletedScopeWidth = 136.0;
-    const twoRowLayoutMinWidth = 1200.0;
+    const twoRowLayoutMinWidth = 1040.0;
 
     final searchField = _buildKeywordField();
     final statusFilter = SizedBox(
@@ -132,7 +134,7 @@ class UserFilterToolbar extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth < twoRowLayoutMinWidth) {
+        if (!forceSingleRow && constraints.maxWidth < twoRowLayoutMinWidth) {
           return Wrap(
             spacing: spacing,
             runSpacing: 8,

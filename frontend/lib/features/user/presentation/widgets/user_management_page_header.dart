@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
-import 'package:mes_client/features/user/presentation/widgets/user_management_filter_section.dart';
+import 'package:mes_client/features/user/presentation/widgets/user_filter_toolbar.dart';
 
 class UserManagementPageHeader extends StatelessWidget {
   const UserManagementPageHeader({
@@ -18,7 +17,6 @@ class UserManagementPageHeader extends StatelessWidget {
     required this.onFilterDeletedScopeChanged,
     required this.onSearch,
     this.actionsBeforeRefresh = const <Widget>[],
-    this.actions = const <Widget>[],
     this.topActions = const <Widget>[],
   });
 
@@ -34,35 +32,82 @@ class UserManagementPageHeader extends StatelessWidget {
   final ValueChanged<String> onFilterDeletedScopeChanged;
   final VoidCallback onSearch;
   final List<Widget> actionsBeforeRefresh;
-  final List<Widget> actions;
   final List<Widget> topActions;
+
+  Widget _buildRefreshButton() {
+    return Tooltip(
+      message: '刷新',
+      child: SizedBox(
+        width: 40,
+        height: 40,
+        child: IconButton(
+          onPressed: loading ? null : onRefresh,
+          icon: const Icon(Icons.refresh),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return KeyedSubtree(
       key: const ValueKey('user-management-page-header'),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          MesRefreshPageHeader(
-            onRefresh: loading ? null : onRefresh,
-            actionsBeforeRefresh: actionsBeforeRefresh,
-          ),
-          const SizedBox(height: 16),
-          UserManagementFilterSection(
-            keywordController: keywordController,
-            filterRoleCode: filterRoleCode,
-            filterIsActive: filterIsActive,
-            deletedScope: deletedScope,
-            roles: roles,
-            onFilterRoleCodeChanged: onFilterRoleCodeChanged,
-            onFilterIsActiveChanged: onFilterIsActiveChanged,
-            onFilterDeletedScopeChanged: onFilterDeletedScopeChanged,
-            onSearch: onSearch,
-            actions: actions,
-            topActions: topActions,
-          ),
-        ],
+      child: SizedBox(
+        width: double.infinity,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final toolbar = KeyedSubtree(
+              key: const ValueKey('user-management-filter-section'),
+              child: UserFilterToolbar(
+                keywordController: keywordController,
+                filterRoleCode: filterRoleCode,
+                filterIsActive: filterIsActive,
+                deletedScope: deletedScope,
+                roles: roles,
+                onFilterRoleCodeChanged: onFilterRoleCodeChanged,
+                onFilterIsActiveChanged: onFilterIsActiveChanged,
+                onFilterDeletedScopeChanged: onFilterDeletedScopeChanged,
+                onSearch: onSearch,
+                actions: const <Widget>[],
+                topActions: [...topActions, _buildRefreshButton()],
+                forceSingleRow: constraints.maxWidth >= 1200,
+              ),
+            );
+
+            if (constraints.maxWidth >= 1200) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (actionsBeforeRefresh.isNotEmpty) ...[
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: actionsBeforeRefresh,
+                    ),
+                    const SizedBox(width: 16),
+                  ],
+                  Expanded(child: toolbar),
+                ],
+              );
+            }
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (actionsBeforeRefresh.isNotEmpty)
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: actionsBeforeRefresh,
+                  ),
+                if (actionsBeforeRefresh.isNotEmpty) const SizedBox(height: 16),
+                toolbar,
+              ],
+            );
+          },
+        ),
       ),
     );
   }

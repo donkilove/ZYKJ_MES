@@ -9,7 +9,6 @@ import 'package:mes_client/features/craft/services/craft_service.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
-import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 
 class _FakeUserService extends UserService {
@@ -744,18 +743,11 @@ void main() {
       find.byKey(const ValueKey('user-management-page-header')),
       findsOneWidget,
     );
-    expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(
       find.byKey(const ValueKey('user-management-filter-section')),
       findsOneWidget,
     );
-    expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('user-management-page-header')),
-        matching: find.byKey(const ValueKey('user-management-filter-section')),
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('筛选条件'), findsNothing);
     expect(find.byTooltip('刷新'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, '新建用户'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, '批量导入'), findsOneWidget);
@@ -1129,7 +1121,7 @@ void main() {
     expect(find.text('导出任务'), findsOneWidget);
   });
 
-  testWidgets('桌面筛选卡首行搜索框占满剩余宽度且角色管理入口已移除', (tester) async {
+  testWidgets('桌面页头一排展示按钮和筛选组件且角色管理入口已移除', (tester) async {
     final userService = _FakeUserService(initialUsers: const []);
     final craftService = _FakeCraftService();
     await _pumpPage(
@@ -1168,7 +1160,7 @@ void main() {
     );
     final refreshButtonRect = tester.getRect(find.byTooltip('刷新'));
 
-    expect(searchRect.width, greaterThan(320));
+    expect(searchRect.width, greaterThan(150));
     expect(searchRect.center.dy, closeTo(statusRect.center.dy, 1));
     expect(roleRect.center.dy, closeTo(statusRect.center.dy, 1));
     expect(deletedScopeRect.center.dy, closeTo(statusRect.center.dy, 1));
@@ -1177,16 +1169,17 @@ void main() {
     expect(roleRect.left, lessThan(deletedScopeRect.left));
     expect(searchRect.right, closeTo(statusRect.left - 12, 2));
     expect(searchRect.left, greaterThanOrEqualTo(filterSectionRect.left));
-
+    expect(createButtonRect.center.dy, closeTo(searchRect.center.dy, 1));
+    expect(importButtonRect.center.dy, closeTo(searchRect.center.dy, 1));
+    expect(refreshButtonRect.center.dy, closeTo(searchRect.center.dy, 1));
     expect(queryButtonRect.center.dy, closeTo(searchRect.center.dy, 1));
     expect(exportButtonRect.center.dy, closeTo(searchRect.center.dy, 1));
     expect(exportTaskButtonRect.center.dy, closeTo(searchRect.center.dy, 1));
-
-    expect(createButtonRect.center.dy, lessThan(searchRect.center.dy));
-    expect(importButtonRect.center.dy, closeTo(createButtonRect.center.dy, 1));
     expect(createButtonRect.right, lessThan(importButtonRect.left));
-    expect(importButtonRect.right, lessThan(refreshButtonRect.left));
+    expect(importButtonRect.right, lessThan(searchRect.left));
+    expect(searchRect.right, lessThan(queryButtonRect.left));
     expect(find.widgetWithText(OutlinedButton, '角色管理'), findsNothing);
+    expect(find.text('筛选条件'), findsNothing);
 
     expect(tester.takeException(), isNull);
   });
@@ -1204,14 +1197,17 @@ void main() {
     final queryButtonRect = tester.getRect(find.text('查询用户'));
     final exportButtonRect = tester.getRect(find.text('导出当前筛选结果'));
     final exportTaskButtonRect = tester.getRect(find.text('导出任务'));
+    final refreshButtonRect = tester.getRect(find.byTooltip('刷新'));
 
     expect(exportButtonRect.center.dy, closeTo(queryButtonRect.center.dy, 1));
     expect(
       exportTaskButtonRect.center.dy,
       closeTo(queryButtonRect.center.dy, 1),
     );
+    expect(refreshButtonRect.center.dy, closeTo(queryButtonRect.center.dy, 1));
     expect(queryButtonRect.right, lessThan(exportButtonRect.left));
     expect(exportButtonRect.right, lessThan(exportTaskButtonRect.left));
+    expect(exportTaskButtonRect.right, lessThan(refreshButtonRect.left));
   });
 
   testWidgets('窄宽度工具栏仍按顺序折返', (tester) async {

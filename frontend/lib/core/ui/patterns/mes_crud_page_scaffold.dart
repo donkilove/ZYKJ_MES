@@ -27,7 +27,7 @@ class MesCrudPageScaffold extends StatelessWidget {
     return Padding(
       padding: padding ?? EdgeInsets.all(spacing),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           header,
           if (filters != null) ...[MesGap.vertical(spacing), filters!],
