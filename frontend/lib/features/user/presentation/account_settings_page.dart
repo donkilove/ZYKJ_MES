@@ -470,7 +470,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     }
   }
 
-  Widget _buildProfileCard() {
+  Widget _buildProfileSessionCard() {
     final profile = _profile;
     if (profile == null) {
       return const SizedBox.shrink();
@@ -481,9 +481,15 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     final stageLabel = profile.stageName?.trim().isNotEmpty == true
         ? profile.stageName!
         : '/';
+    final currentSession = _session;
+    final sessionRemaining = currentSession == null
+        ? null
+        : _normalizedRemainingSeconds(currentSession);
     return MesSectionCard(
-      title: '个人资料',
-      subtitle: '保留账号核心信息，避免与会话信息重复展示。',
+      title: widget.canViewSession ? '个人资料与会话' : '个人资料',
+      subtitle: widget.canViewSession
+          ? '统一查看个人资料与当前登录会话状态。'
+          : '保留账号核心信息，避免与会话信息重复展示。',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -508,6 +514,45 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
               ),
             ],
           ),
+          if (widget.canViewSession) ...[
+            const SizedBox(height: 16),
+            if (currentSession == null)
+              const MesEmptyState(
+                title: '未查询到当前在线会话记录',
+                description: '系统暂未返回当前会话信息，可下拉页面后重试。',
+              )
+            else ...[
+              Row(
+                children: [
+                  Expanded(child: _buildSessionStatusRow(currentSession)),
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    onPressed: _loggingOut ? null : _logout,
+                    icon: const Icon(Icons.logout),
+                    label: Text(_loggingOut ? '退出中...' : '退出当前登录'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              _buildFieldGroup(
+                children: [
+                  _buildInfoItem(
+                    '登录时间',
+                    _formatDateTime(currentSession.loginTime),
+                  ),
+                  _buildInfoItem(
+                    '最后活跃时间',
+                    _formatDateTime(currentSession.lastActiveAt),
+                  ),
+                  _buildInfoItem(
+                    '过期时间',
+                    _formatDateTime(currentSession.expiresAt),
+                  ),
+                  _buildInfoItem('剩余时间', _formatDuration(sessionRemaining!)),
+                ],
+              ),
+            ],
+          ],
         ],
       ),
     );
@@ -682,59 +727,6 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildSessionCard() {
-    if (!widget.canViewSession) {
-      return const SizedBox.shrink();
-    }
-    final currentSession = _session;
-    final sessionRemaining = currentSession == null
-        ? null
-        : _normalizedRemainingSeconds(currentSession);
-    return MesSectionCard(
-      title: '当前会话',
-      subtitle: '自动刷新当前登录状态，支持直接退出本次登录。',
-      child: currentSession == null
-          ? const MesEmptyState(
-              title: '未查询到当前在线会话记录',
-              description: '系统暂未返回当前会话信息，可下拉页面后重试。',
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(child: _buildSessionStatusRow(currentSession)),
-                    const SizedBox(width: 12),
-                    OutlinedButton.icon(
-                      onPressed: _loggingOut ? null : _logout,
-                      icon: const Icon(Icons.logout),
-                      label: Text(_loggingOut ? '退出中...' : '退出当前登录'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _buildFieldGroup(
-                  children: [
-                    _buildInfoItem(
-                      '登录时间',
-                      _formatDateTime(currentSession.loginTime),
-                    ),
-                    _buildInfoItem(
-                      '最后活跃时间',
-                      _formatDateTime(currentSession.lastActiveAt),
-                    ),
-                    _buildInfoItem(
-                      '过期时间',
-                      _formatDateTime(currentSession.expiresAt),
-                    ),
-                    _buildInfoItem('剩余时间', _formatDuration(sessionRemaining!)),
-                  ],
-                ),
-              ],
-            ),
     );
   }
 
@@ -1023,20 +1015,19 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Expanded(flex: 5, child: _buildProfileCard()),
+                            Expanded(
+                              flex: 5,
+                              child: _buildProfileSessionCard(),
+                            ),
                             const SizedBox(width: 16),
                             Expanded(flex: 5, child: _buildPasswordCard()),
                           ],
                         ),
                       )
                     else ...[
-                      _buildProfileCard(),
+                      _buildProfileSessionCard(),
                       const SizedBox(height: 16),
                       _buildPasswordCard(),
-                    ],
-                    if (widget.canViewSession) ...[
-                      const SizedBox(height: 16),
-                      _buildSessionCard(),
                     ],
                   ],
                 ),
