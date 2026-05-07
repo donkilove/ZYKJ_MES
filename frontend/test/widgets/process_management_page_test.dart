@@ -301,10 +301,13 @@ Future<void> _pumpProcessManagementPage(
 }
 
 void main() {
-  Finder _popupMenuButtons() {
-    return find.byWidgetPredicate(
-      (widget) => widget.runtimeType.toString().startsWith('PopupMenuButton'),
+  Future<void> _tapCreateMenuItem(WidgetTester tester, String label) async {
+    await tester.tap(
+      find.byKey(const ValueKey('process-management-create-menu')),
     );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(label).last);
+    await tester.pumpAndSettle();
   }
 
   testWidgets('默认进入工序主视图并显示视图切换按钮', (tester) async {
@@ -337,9 +340,17 @@ void main() {
     expect(find.byKey(const ValueKey('process-stage-panel')), findsNothing);
     expect(find.byKey(const ValueKey('process-focus-panel')), findsNothing);
     expect(find.widgetWithText(FilledButton, '查询'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('process-management-search-field')),
+      findsOneWidget,
+    );
     expect(find.text('全部状态'), findsNothing);
     expect(find.byTooltip('导出工段'), findsNothing);
     expect(find.byTooltip('导出工序'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('process-stage-filter-bar')),
+      findsNothing,
+    );
   });
 
   testWidgets('点击工段列表按钮后切换到工段视图', (tester) async {
@@ -358,7 +369,7 @@ void main() {
     expect(find.byKey(const ValueKey('process-item-panel')), findsNothing);
   });
 
-  testWidgets('工段视图筛选区接入统一 MesFilterBar', (tester) async {
+  testWidgets('工段视图筛选组件迁入页眉且工段下拉禁用', (tester) async {
     await _pumpProcessManagementPage(tester, size: const Size(1400, 1200));
 
     await tester.tap(find.byKey(const ValueKey('process-view-switch-stage')));
@@ -366,49 +377,58 @@ void main() {
 
     expect(
       find.byKey(const ValueKey('process-stage-filter-bar')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('process-management-search-field')),
       findsOneWidget,
     );
+
+    final stageFilter = tester.widget<DropdownButton<int?>>(
+      find.byKey(const ValueKey('process-management-stage-filter')),
+    );
+    expect(stageFilter.onChanged, isNull);
   });
 
-  testWidgets('页眉左侧展示视图切换，右侧展示新建与刷新操作', (tester) async {
+  testWidgets('页眉左侧展示筛选，右侧展示视图切换 新建菜单与刷新操作', (tester) async {
     await _pumpProcessManagementPage(tester, size: const Size(1600, 1200));
 
     final header = find.byType(ProcessManagementPageHeader);
+    final searchField = find.byKey(
+      const ValueKey('process-management-search-field'),
+    );
+    final stageFilter = find.byKey(
+      const ValueKey('process-management-stage-filter'),
+    );
     final viewSwitch = find.byKey(
       const ValueKey('process-management-view-switch'),
     );
-    final createStageButton = find.byKey(
-      const ValueKey('process-management-create-stage-button'),
-    );
-    final createProcessButton = find.byKey(
-      const ValueKey('process-management-create-process-button'),
+    final createMenu = find.byKey(
+      const ValueKey('process-management-create-menu'),
     );
     final refreshButton = find.byTooltip('刷新');
 
+    expect(find.descendant(of: header, matching: searchField), findsOneWidget);
+    expect(find.descendant(of: header, matching: stageFilter), findsOneWidget);
     expect(find.descendant(of: header, matching: viewSwitch), findsOneWidget);
-    expect(
-      find.descendant(of: header, matching: createStageButton),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: header, matching: createProcessButton),
-      findsOneWidget,
-    );
+    expect(find.descendant(of: header, matching: createMenu), findsOneWidget);
     expect(
       find.descendant(of: header, matching: refreshButton),
       findsOneWidget,
     );
 
+    final searchLeft = tester.getTopLeft(searchField).dx;
     final switchLeft = tester.getTopLeft(viewSwitch).dx;
-    final createStageLeft = tester.getTopLeft(createStageButton).dx;
+    final createMenuLeft = tester.getTopLeft(createMenu).dx;
     final switchTop = tester.getTopLeft(viewSwitch).dy;
-    final createStageTop = tester.getTopLeft(createStageButton).dy;
+    final createMenuTop = tester.getTopLeft(createMenu).dy;
     final refreshLeft = tester.getTopLeft(refreshButton).dx;
 
-    expect(switchLeft, lessThan(80));
-    expect(createStageLeft - switchLeft, greaterThan(500));
-    expect(refreshLeft, greaterThan(createStageLeft));
-    expect((switchTop - createStageTop).abs(), lessThan(4));
+    expect(searchLeft, lessThan(80));
+    expect(switchLeft - searchLeft, greaterThan(500));
+    expect(createMenuLeft, greaterThan(switchLeft));
+    expect(refreshLeft, greaterThan(createMenuLeft));
+    expect((switchTop - createMenuTop).abs(), lessThan(4));
   });
 
   testWidgets('工序列表加载态与空态文案使用统一口径', (tester) async {
@@ -593,14 +613,25 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    await tester.enterText(find.widgetWithText(TextField, '搜索工序'), '激');
+    await tester.enterText(
+      find.byKey(const ValueKey('process-management-search-field')),
+      '激',
+    );
     await tester.pump();
 
-    expect(find.widgetWithText(TextField, '搜索工序'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('process-management-search-field')),
+      findsOneWidget,
+    );
     expect(find.text('工艺视图加载中...'), findsNothing);
     expect(craftService.lastProcessPage, 1);
     expect(
-      tester.widget<TextField>(find.widgetWithText(TextField, '搜索工序')).controller?.text,
+      tester
+          .widget<TextField>(
+            find.byKey(const ValueKey('process-management-search-field')),
+          )
+          .controller
+          ?.text,
       '激',
     );
 
@@ -614,7 +645,7 @@ void main() {
   testWidgets('工序管理引用弹窗展示编码字段', (tester) async {
     await _pumpProcessManagementPage(tester, size: const Size(1600, 1200));
 
-    await tester.tap(_popupMenuButtons().first);
+    await tester.tap(find.byKey(const ValueKey('process-item-action-menu-11')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('查看引用').last);
     await tester.pump();
@@ -691,10 +722,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    await tester.tap(
-      find.byKey(const ValueKey('process-management-create-process-button')),
-    );
-    await tester.pumpAndSettle();
+    await _tapCreateMenuItem(tester, '新建工序');
     await tester.enterText(
       find.widgetWithText(TextFormField, '工序编码序号（两位）'),
       '02',
@@ -707,7 +735,13 @@ void main() {
     expect(craftService.lastCreatedProcess?.code, 'CUT-02');
     expect(find.text('折弯'), findsOneWidget);
 
-    await tester.tap(_popupMenuButtons().at(1));
+    await tester.tap(
+      find.byKey(
+        ValueKey(
+          'process-item-action-menu-${craftService.lastCreatedProcess?.id}',
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('删除').last);
     await tester.pumpAndSettle();
@@ -746,10 +780,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    await tester.tap(
-      find.byKey(const ValueKey('process-management-create-process-button')),
-    );
-    await tester.pumpAndSettle();
+    await _tapCreateMenuItem(tester, '新建工序');
 
     final codeField = tester.widget<TextFormField>(
       find.widgetWithText(TextFormField, '工序编码序号（两位）'),
@@ -783,10 +814,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    await tester.tap(
-      find.byKey(const ValueKey('process-management-create-process-button')),
-    );
-    await tester.pumpAndSettle();
+    await _tapCreateMenuItem(tester, '新建工序');
     await tester.enterText(
       find.widgetWithText(TextFormField, '工序编码序号（两位）'),
       '01',
@@ -837,10 +865,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    await tester.tap(
-      find.byKey(const ValueKey('process-management-create-stage-button')),
-    );
-    await tester.pumpAndSettle();
+    await _tapCreateMenuItem(tester, '新建工段');
 
     final sortField = tester.widget<TextFormField>(
       find.widgetWithText(TextFormField, '排序'),
@@ -875,7 +900,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('process-view-switch-stage')));
     await tester.pumpAndSettle();
-    await tester.tap(_popupMenuButtons().first);
+    await tester.tap(find.byKey(const ValueKey('process-stage-action-menu-1')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('启用/停用').last);
     await tester.pumpAndSettle();
@@ -916,7 +941,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    await tester.tap(_popupMenuButtons().first);
+    await tester.tap(find.byKey(const ValueKey('process-item-action-menu-11')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('启用/停用').last);
     await tester.pumpAndSettle();

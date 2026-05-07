@@ -677,6 +677,35 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
         loading: _viewState.loading,
         canWrite: widget.canWrite,
         activeView: _viewState.activeView,
+        searchController: switch (_viewState.activeView) {
+          ProcessManagementPrimaryView.processList => _processSearchController,
+          ProcessManagementPrimaryView.stageList => _stageSearchController,
+        },
+        searchHintText: switch (_viewState.activeView) {
+          ProcessManagementPrimaryView.processList => '搜索工序',
+          ProcessManagementPrimaryView.stageList => '搜索工段',
+        },
+        stageFilter: _viewState.processStageFilter,
+        stageOptions: _stages,
+        stageFilterEnabled:
+            _viewState.activeView == ProcessManagementPrimaryView.processList,
+        onKeywordChanged: switch (_viewState.activeView) {
+          ProcessManagementPrimaryView.processList =>
+            (value) => _pageState.setProcessKeyword(value),
+          ProcessManagementPrimaryView.stageList =>
+            (value) => _pageState.setStageKeyword(value),
+        },
+        onStageFilterChanged: (value) {
+          _pageState.setProcessStageFilter(value);
+        },
+        onSearch: switch (_viewState.activeView) {
+          ProcessManagementPrimaryView.processList => () => unawaited(
+            _pageState.reloadProcesses(page: 1),
+          ),
+          ProcessManagementPrimaryView.stageList => () => unawaited(
+            _pageState.reloadStages(page: 1),
+          ),
+        },
         onViewChanged: _pageState.setActiveView,
         onRefresh: _loadData,
         onCreateStage: _showStageDialog,

@@ -116,6 +116,7 @@ class UnifiedListTableHeaderStyle {
   }
 
   static Widget actionMenuButton<T>({
+    Key? key,
     required ThemeData theme,
     required List<PopupMenuEntry<T>> Function(BuildContext context) itemBuilder,
     required ValueChanged<T> onSelected,
@@ -124,6 +125,7 @@ class UnifiedListTableHeaderStyle {
     double height = _actionButtonHeight,
   }) {
     return PopupMenuButton<T>(
+      key: key,
       color: theme.colorScheme.primaryContainer,
       padding: EdgeInsets.zero,
       onSelected: onSelected,

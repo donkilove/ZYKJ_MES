@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/ui/patterns/mes_empty_state.dart';
-import 'package:mes_client/core/ui/patterns/mes_filter_bar.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
@@ -40,23 +39,6 @@ class ProcessStagePanel extends StatelessWidget {
   final VoidCallback? onNextPage;
   final void Function(StageAction action, CraftStageItem item) onActionSelected;
 
-  Widget _buildSearchField() {
-    return SizedBox(
-      width: 220,
-      child: TextField(
-        controller: searchController,
-        decoration: const InputDecoration(
-          prefixIcon: Icon(Icons.search, size: 16),
-          isDense: true,
-          border: OutlineInputBorder(),
-          contentPadding: EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-          hintText: '搜索工段',
-        ),
-        onChanged: onKeywordChanged,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -68,24 +50,6 @@ class ProcessStagePanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            KeyedSubtree(
-              key: const ValueKey('process-stage-filter-bar'),
-              child: MesFilterBar(
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    _buildSearchField(),
-                    FilledButton(
-                      onPressed: loading ? null : onSearch,
-                      child: const Text('查询'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
             Expanded(
               child: CrudListTableSection(
                 loading: loading,
@@ -125,9 +89,15 @@ class ProcessStagePanel extends StatelessWidget {
                           ),
                         ),
                         DataCell(
-                          UnifiedListTableHeaderStyle.actionMenuButton<StageAction>(
+                          UnifiedListTableHeaderStyle.actionMenuButton<
+                            StageAction
+                          >(
+                            key: ValueKey(
+                              'process-stage-action-menu-${item.id}',
+                            ),
                             theme: theme,
-                            onSelected: (action) => onActionSelected(action, item),
+                            onSelected: (action) =>
+                                onActionSelected(action, item),
                             itemBuilder: (context) {
                               final items = <PopupMenuEntry<StageAction>>[
                                 const PopupMenuItem(
