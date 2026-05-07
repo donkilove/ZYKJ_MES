@@ -13,7 +13,6 @@ import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/features/auth/services/auth_service.dart';
 import 'package:mes_client/features/user/presentation/widgets/account_settings_action_dialogs.dart';
-import 'package:mes_client/features/user/presentation/widgets/account_settings_page_header.dart';
 import 'package:mes_client/features/user/services/user_service.dart';
 
 class AccountSettingsPage extends StatefulWidget {
@@ -56,8 +55,12 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
   ProfileResult? _profile;
   CurrentSessionResult? _session;
   Timer? _sessionRefreshTimer;
+  Timer? _sessionCountdownTimer;
   Timer? _passwordHighlightTimer;
-  bool _timeoutWarningShown = false;
+  int? _displayRemainingSeconds;
+  DateTime? _sessionRemainingDeadline;
+  bool _timeoutWarningDialogVisible = false;
+  String? _lastTimeoutWarningKey;
   String? _lastHandledRoutePayloadJson;
   bool _pendingPasswordSectionLanding = false;
   bool _passwordSectionHighlighted = false;
@@ -94,6 +97,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
   @override
   void dispose() {
     _sessionRefreshTimer?.cancel();
+    _sessionCountdownTimer?.cancel();
     _passwordHighlightTimer?.cancel();
     _oldPasswordFocusNode.dispose();
     _scrollController.dispose();
@@ -115,8 +119,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
         widget.onLogout();
         return;
       }
-      setState(() => _session = currentSession);
-      _checkSessionTimeout(currentSession);
+      _applySessionState(currentSession);
     } catch (error) {
       if (!mounted) return;
       if (_isSessionUnavailable(error)) {
@@ -152,15 +155,93 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     _startSessionPolling();
   }
 
-  void _checkSessionTimeout(CurrentSessionResult session) {
-    if (session.remainingSeconds <= 300 && !_timeoutWarningShown) {
-      _timeoutWarningShown = true;
-      if (mounted) {
-        showAccountSessionTimeoutDialog(
-          context: context,
-          remainingTimeLabel: _formatDuration(session.remainingSeconds),
-        );
+  int _normalizedRemainingSeconds(CurrentSessionResult session) {
+    final value = _displayRemainingSeconds;
+    if (value != null) {
+      return value < 0 ? 0 : value;
+    }
+    return session.remainingSeconds < 0 ? 0 : session.remainingSeconds;
+  }
+
+  void _applySessionState(CurrentSessionResult? currentSession) {
+    final normalizedRemaining = currentSession == null
+        ? null
+        : (currentSession.remainingSeconds < 0
+              ? 0
+              : currentSession.remainingSeconds);
+    final deadline = normalizedRemaining == null
+        ? null
+        : DateTime.now().add(Duration(seconds: normalizedRemaining));
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _session = currentSession;
+      _displayRemainingSeconds = normalizedRemaining;
+      _sessionRemainingDeadline = deadline;
+    });
+    _syncSessionCountdown();
+    if (currentSession != null && normalizedRemaining != null) {
+      _checkSessionTimeout(
+        currentSession,
+        remainingSeconds: normalizedRemaining,
+      );
+    }
+  }
+
+  void _syncSessionCountdown() {
+    _sessionCountdownTimer?.cancel();
+    final deadline = _sessionRemainingDeadline;
+    if (!widget.canViewSession || deadline == null) {
+      _sessionCountdownTimer = null;
+      return;
+    }
+    _sessionCountdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || _session == null || _sessionRemainingDeadline == null) {
+        _sessionCountdownTimer?.cancel();
+        _sessionCountdownTimer = null;
+        return;
       }
+      final next = _sessionRemainingDeadline!
+          .difference(DateTime.now())
+          .inSeconds;
+      final normalized = next < 0 ? 0 : next;
+      if (_displayRemainingSeconds != normalized) {
+        setState(() {
+          _displayRemainingSeconds = normalized;
+        });
+      }
+      _checkSessionTimeout(_session!, remainingSeconds: normalized);
+      if (normalized <= 0) {
+        _sessionCountdownTimer?.cancel();
+        _sessionCountdownTimer = null;
+      }
+    });
+  }
+
+  void _checkSessionTimeout(
+    CurrentSessionResult session, {
+    required int remainingSeconds,
+  }) {
+    if (remainingSeconds > 300) {
+      return;
+    }
+    final warningKey =
+        '${session.sessionTokenId}|${session.expiresAt?.toIso8601String() ?? ''}';
+    if (_timeoutWarningDialogVisible || _lastTimeoutWarningKey == warningKey) {
+      return;
+    }
+    _timeoutWarningDialogVisible = true;
+    _lastTimeoutWarningKey = warningKey;
+    if (mounted) {
+      showAccountSessionTimeoutDialog(
+        context: context,
+        remainingTimeLabel: _formatDuration(remainingSeconds),
+      ).whenComplete(() {
+        _timeoutWarningDialogVisible = false;
+      });
+    } else {
+      _timeoutWarningDialogVisible = false;
     }
   }
 
@@ -293,10 +374,9 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
       }
       setState(() {
         _profile = profile;
-        _session = currentSession;
       });
-      if (currentSession != null) {
-        _checkSessionTimeout(currentSession);
+      if (currentSession != null || _session != null) {
+        _applySessionState(currentSession);
       }
       _tryLandOnPasswordSection();
     } catch (error) {
@@ -454,12 +534,15 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
     final roleLabel = profile?.roleName?.trim().isNotEmpty == true
         ? profile!.roleName!
         : '未分配角色';
+    final sessionRemaining = currentSession == null
+        ? null
+        : _normalizedRemainingSeconds(currentSession);
     final statusColor = currentSession == null
         ? theme.colorScheme.outline
-        : _sessionStatusColor(currentSession.remainingSeconds);
+        : _sessionStatusColor(sessionRemaining!);
     final statusLabel = currentSession == null
         ? (widget.canViewSession ? '未同步' : '不可见')
-        : _sessionStatusLabel(currentSession.remainingSeconds);
+        : _sessionStatusLabel(sessionRemaining!);
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
@@ -559,8 +642,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      currentSession != null &&
-                              currentSession.remainingSeconds <= 600
+                      currentSession != null && sessionRemaining! <= 600
                           ? Icons.warning_amber_rounded
                           : Icons.monitor_heart_outlined,
                       color: statusColor,
@@ -608,6 +690,9 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
       return const SizedBox.shrink();
     }
     final currentSession = _session;
+    final sessionRemaining = currentSession == null
+        ? null
+        : _normalizedRemainingSeconds(currentSession);
     return MesSectionCard(
       title: '当前会话',
       subtitle: '自动刷新当前登录状态，支持直接退出本次登录。',
@@ -645,10 +730,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
                       '过期时间',
                       _formatDateTime(currentSession.expiresAt),
                     ),
-                    _buildInfoItem(
-                      '剩余时间',
-                      _formatDuration(currentSession.remainingSeconds),
-                    ),
+                    _buildInfoItem('剩余时间', _formatDuration(sessionRemaining!)),
                   ],
                 ),
               ],
@@ -657,8 +739,9 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
   }
 
   Widget _buildSessionStatusRow(CurrentSessionResult session) {
-    final color = _sessionStatusColor(session.remainingSeconds);
-    final label = _sessionStatusLabel(session.remainingSeconds);
+    final remainingSeconds = _normalizedRemainingSeconds(session);
+    final color = _sessionStatusColor(remainingSeconds);
+    final label = _sessionStatusLabel(remainingSeconds);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
@@ -676,7 +759,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
-              session.remainingSeconds <= 600
+              remainingSeconds <= 600
                   ? Icons.warning_amber_rounded
                   : Icons.shield_outlined,
               color: color,
@@ -918,10 +1001,7 @@ class _AccountSettingsPageState extends State<AccountSettingsPage> {
       container: true,
       label: '个人中心主区域',
       child: MesCrudPageScaffold(
-        header: AccountSettingsPageHeader(
-          loading: _loading,
-          onRefresh: _loadData,
-        ),
+        header: const SizedBox.shrink(),
         banner: _message.isEmpty
             ? null
             : MesInlineBanner.error(message: _message),

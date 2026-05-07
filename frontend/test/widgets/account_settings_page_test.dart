@@ -14,6 +14,13 @@ Finder _findSemanticsLabel(String label) {
   );
 }
 
+Finder _findTextByPattern(RegExp pattern) {
+  return find.byWidgetPredicate(
+    (widget) => widget is Text && pattern.hasMatch(widget.data ?? ''),
+    description: 'Text matching ${pattern.pattern}',
+  );
+}
+
 class _FakeUserService extends UserService {
   _FakeUserService() : super(AppSession(baseUrl: '', accessToken: ''));
 
@@ -277,9 +284,9 @@ void main() {
     final userService = _FakeUserService()
       ..currentSession = CurrentSessionResult(
         sessionTokenId: 'session-warning',
-        loginTime: DateTime.parse('2026-03-21T08:00:00Z'),
-        lastActiveAt: DateTime.parse('2026-03-21T08:30:00Z'),
-        expiresAt: DateTime.parse('2026-03-21T08:34:00Z'),
+        loginTime: DateTime.now().subtract(const Duration(minutes: 1)),
+        lastActiveAt: DateTime.now(),
+        expiresAt: DateTime.now().add(const Duration(minutes: 4)),
         status: 'active',
         remainingSeconds: 240,
       );
@@ -306,6 +313,45 @@ void main() {
     expect(find.text('会话即将过期'), findsOneWidget);
     expect(find.textContaining('当前会话将在 4 分钟 后过期'), findsOneWidget);
     expect(find.text('即将过期'), findsWidgets);
+
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+    expect(find.text('会话即将过期'), findsOneWidget);
+  });
+
+  testWidgets('账号设置页剩余时间会实时倒计时', (tester) async {
+    final userService = _FakeUserService()
+      ..currentSession = CurrentSessionResult(
+        sessionTokenId: 'session-countdown',
+        loginTime: DateTime.now().subtract(const Duration(minutes: 1)),
+        lastActiveAt: DateTime.now(),
+        expiresAt: DateTime.now().add(const Duration(seconds: 65)),
+        status: 'active',
+        remainingSeconds: 65,
+      );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AccountSettingsPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canChangePassword: true,
+            canViewSession: true,
+            userService: userService,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 分 5 秒'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+
+    expect(find.text('1 分 5 秒'), findsNothing);
+    expect(_findTextByPattern(RegExp(r'^1 分 [0-4] 秒$')), findsWidgets);
   });
 
   testWidgets('账号设置页会话失效后自动登出并提示', (tester) async {
