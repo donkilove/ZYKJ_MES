@@ -765,6 +765,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('筛选条件'), findsNothing);
+    expect(find.text('用户列表'), findsNothing);
     expect(
       find.byKey(const ValueKey('user-management-operation-menu')),
       findsOneWidget,

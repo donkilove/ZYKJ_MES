@@ -224,6 +224,7 @@ void main() {
       find.byKey(const ValueKey('registration-approval-status-filter')),
       findsOneWidget,
     );
+    expect(find.text('申请列表'), findsNothing);
     final filterLeft = tester.getTopLeft(
       find.byKey(const ValueKey('registration-approval-status-filter')),
     );
@@ -306,6 +307,7 @@ void main() {
       find.byKey(const ValueKey('registration-approval-table-section')),
       findsOneWidget,
     );
+    expect(find.text('申请列表'), findsNothing);
     expect(find.byType(MesPaginationBar), findsOneWidget);
     expect(find.textContaining('已定位注册申请 #572'), findsOneWidget);
   });

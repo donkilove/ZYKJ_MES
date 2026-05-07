@@ -19,9 +19,9 @@ class RegistrationApprovalPageHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return MesRefreshPageHeader(
       onRefresh: loading ? null : onRefresh,
-      actionsBeforeRefresh: [
-        SizedBox(
-          key: const ValueKey('registration-approval-status-filter'),
+      leading: KeyedSubtree(
+        key: const ValueKey('registration-approval-status-filter'),
+        child: SizedBox(
           width: 160,
           child: DropdownButtonFormField<String?>(
             key: ValueKey('registration-approval-status-field-$statusFilter'),
@@ -44,7 +44,7 @@ class RegistrationApprovalPageHeader extends StatelessWidget {
             onChanged: loading ? null : onStatusChanged,
           ),
         ),
-      ],
+      ),
     );
   }
 }

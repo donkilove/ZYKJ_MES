@@ -3,7 +3,6 @@ import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/features/user/presentation/widgets/shared/user_module_status_chip.dart';
-import 'package:mes_client/features/user/presentation/widgets/shared/user_module_table_shell.dart';
 
 class RegistrationApprovalTableSection extends StatelessWidget {
   const RegistrationApprovalTableSection({
@@ -29,9 +28,8 @@ class RegistrationApprovalTableSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return UserModuleTableShell(
-      sectionKey: const ValueKey('registration-approval-table-section'),
-      title: '申请列表',
+    return KeyedSubtree(
+      key: const ValueKey('registration-approval-table-section'),
       child: CrudListTableSection(
         loading: loading,
         isEmpty: items.isEmpty,

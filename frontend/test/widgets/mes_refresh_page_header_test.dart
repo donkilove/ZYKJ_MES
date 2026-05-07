@@ -58,5 +58,22 @@ void main() {
     expect(find.text('用于校验公共页头副标题'), findsOneWidget);
     expect(find.widgetWithText(TextField, '筛选项'), findsOneWidget);
     expect(find.byTooltip('刷新'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.widgetWithText(TextField, '筛选项')).dx,
+      lessThan(tester.getTopLeft(find.byTooltip('刷新')).dx),
+    );
+  });
+
+  testWidgets('公共页头支持关闭内置刷新按钮', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: MesRefreshPageHeader(title: '测试页', showRefreshButton: false),
+        ),
+      ),
+    );
+
+    expect(find.text('测试页'), findsOneWidget);
+    expect(find.byTooltip('刷新'), findsNothing);
   });
 }

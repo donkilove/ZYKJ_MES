@@ -8,25 +8,25 @@ class MesRefreshPageHeader extends StatelessWidget {
     super.key,
     this.title,
     this.subtitle,
+    this.leading,
     this.actionsBeforeTitle = const <Widget>[],
     this.onRefresh,
     this.actionsBeforeRefresh = const <Widget>[],
+    this.showRefreshButton = true,
   });
 
   final String? title;
   final String? subtitle;
+  final Widget? leading;
   final List<Widget> actionsBeforeTitle;
   final VoidCallback? onRefresh;
   final List<Widget> actionsBeforeRefresh;
+  final bool showRefreshButton;
 
-  @override
-  Widget build(BuildContext context) {
-    return MesPageHeader(
-      title: title,
-      subtitle: subtitle,
-      actionsBeforeTitle: actionsBeforeTitle,
-      actions: [
-        ...actionsBeforeRefresh,
+  List<Widget> _buildTrailingActions() {
+    return [
+      ...actionsBeforeRefresh,
+      if (showRefreshButton)
         Tooltip(
           message: '刷新',
           child: SizedBox(
@@ -38,7 +38,38 @@ class MesRefreshPageHeader extends StatelessWidget {
             ),
           ),
         ),
-      ],
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final trailingActions = _buildTrailingActions();
+    if (leading != null &&
+        (title ?? '').trim().isEmpty &&
+        (subtitle ?? '').trim().isEmpty &&
+        actionsBeforeTitle.isEmpty) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(child: leading!),
+          if (trailingActions.isNotEmpty) ...[
+            const SizedBox(width: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: trailingActions,
+            ),
+          ],
+        ],
+      );
+    }
+
+    return MesPageHeader(
+      title: title,
+      subtitle: subtitle,
+      actionsBeforeTitle: actionsBeforeTitle,
+      actions: trailingActions,
     );
   }
 }

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
-import 'package:mes_client/features/user/presentation/widgets/shared/user_module_table_shell.dart';
 import 'package:mes_client/features/user/presentation/widgets/user_data_table.dart';
 
 class UserManagementTableSection extends StatelessWidget {
@@ -31,9 +30,8 @@ class UserManagementTableSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return UserModuleTableShell(
-      sectionKey: const ValueKey('user-management-table-section'),
-      title: '用户列表',
+    return KeyedSubtree(
+      key: const ValueKey('user-management-table-section'),
       child: UserDataTable(
         users: users,
         loading: loading,

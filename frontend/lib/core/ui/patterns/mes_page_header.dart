@@ -65,8 +65,7 @@ class MesPageHeader extends StatelessWidget {
               ],
             ),
           ),
-        if (!hasTitle && !hasSubtitle && hasLeadActions && hasTrailingActions)
-          const Spacer(),
+        if (!hasTitle && !hasSubtitle && hasTrailingActions) const Spacer(),
         if (actions.isNotEmpty) ...[
           if (hasTitle || hasSubtitle)
             MesGap.horizontal(tokens?.spacing.md ?? 16),
