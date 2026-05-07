@@ -192,14 +192,14 @@ void main() {
             height: 1800,
             child: Column(
               children: [
-                ProductManagementPageHeader(loading: false, onRefresh: () {}),
-                ProductManagementFilterSection(
+                ProductManagementPageHeader(
+                  loading: false,
+                  onRefresh: () {},
                   keywordController: keywordController,
                   categoryOptions: const ['贴片', 'DTU', '套件'],
                   selectedCategory: '',
                   selectedStatus: '',
                   selectedEffectiveVersion: '',
-                  loading: false,
                   canCreateProduct: true,
                   canExportProducts: true,
                   onCategoryChanged: (_) {},
@@ -248,6 +248,13 @@ void main() {
     expect(find.byTooltip('刷新'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('product-management-filter-section')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('product-management-page-header')),
+        matching: find.byKey(const ValueKey('product-management-filter-section')),
+      ),
       findsOneWidget,
     );
     expect(
@@ -353,7 +360,7 @@ void main() {
 
     expect(find.byType(MesCrudPageScaffold), findsOneWidget);
     expect(find.byType(ProductManagementPageHeader), findsOneWidget);
-    expect(find.byType(ProductManagementFilterSection), findsOneWidget);
+    expect(find.byType(ProductManagementFilterSection), findsNothing);
     expect(find.byType(ProductManagementTableSection), findsOneWidget);
     expect(find.byType(ProductManagementFeedbackBanner), findsNothing);
   });

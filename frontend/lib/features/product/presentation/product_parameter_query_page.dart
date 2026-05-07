@@ -11,7 +11,6 @@ import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_action_dialogs.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_feedback_banner.dart';
-import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_filter_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_page_header.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_query_table_section.dart';
 import 'package:mes_client/features/product/presentation/product_category_options.dart';
@@ -332,12 +331,9 @@ class _ProductParameterQueryPageState extends State<ProductParameterQueryPage> {
       header: ProductParameterQueryPageHeader(
         loading: _loading,
         onRefresh: _reloadProductsFromUserAction,
-      ),
-      filters: ProductParameterQueryFilterSection(
         keywordController: _keywordController,
         categoryOptions: productCategoryOptions,
         selectedCategory: _selectedCategoryFilter,
-        loading: _loading,
         canExportParameters: widget.canExportParameters,
         onCategoryChanged: (value) {
           setState(() {

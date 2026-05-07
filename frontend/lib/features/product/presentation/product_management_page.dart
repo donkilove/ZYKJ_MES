@@ -10,7 +10,6 @@ import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_feedback_banner.dart';
-import 'package:mes_client/features/product/presentation/widgets/product_management_filter_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_page_header.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_management_table_section.dart'
     show ProductManagementTableAction, ProductManagementTableSection;
@@ -1244,14 +1243,11 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
       header: ProductManagementPageHeader(
         loading: _loading,
         onRefresh: _loadProducts,
-      ),
-      filters: ProductManagementFilterSection(
         keywordController: _keywordController,
         categoryOptions: productCategoryOptions,
         selectedCategory: _selectedCategoryFilter,
         selectedStatus: _selectedStatusFilter,
         selectedEffectiveVersion: _selectedEffectiveVersionFilter,
-        loading: _loading,
         canCreateProduct: widget.canCreateProduct,
         canExportProducts: widget.canExportProducts,
         onCategoryChanged: (value) {

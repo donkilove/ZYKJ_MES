@@ -127,12 +127,12 @@ void main() {
         home: Scaffold(
           body: Column(
             children: [
-              ProductParameterQueryPageHeader(loading: false, onRefresh: () {}),
-              ProductParameterQueryFilterSection(
+              ProductParameterQueryPageHeader(
+                loading: false,
+                onRefresh: () {},
                 keywordController: keywordController,
                 categoryOptions: const ['贴片', 'DTU', '套件'],
                 selectedCategory: '',
-                loading: false,
                 canExportParameters: true,
                 onCategoryChanged: (_) {},
                 onSearch: () {},
@@ -162,6 +162,13 @@ void main() {
     expect(find.byTooltip('刷新'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('product-parameter-query-filter-section')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('product-parameter-query-page-header')),
+        matching: find.byKey(const ValueKey('product-parameter-query-filter-section')),
+      ),
       findsOneWidget,
     );
     expect(
@@ -237,10 +244,7 @@ void main() {
 
     expect(find.byType(MesCrudPageScaffold), findsOneWidget);
     expect(find.byType(ProductParameterQueryPageHeader), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey('product-parameter-query-filter-section')),
-      findsOneWidget,
-    );
+    expect(find.byType(ProductParameterQueryFilterSection), findsNothing);
     expect(
       find.byKey(const ValueKey('product-parameter-query-table-section')),
       findsOneWidget,

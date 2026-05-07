@@ -203,11 +203,8 @@ void main() {
               ProductParameterManagementPageHeader(
                 loading: false,
                 onRefresh: () {},
-              ),
-              ProductParameterManagementFilterSection(
                 keywordController: keywordController,
                 selectedCategory: '',
-                loading: false,
                 onCategoryChanged: (_) {},
                 onSearch: () {},
               ),
@@ -260,6 +257,15 @@ void main() {
       findsOneWidget,
     );
     expect(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey('product-parameter-management-page-header'),
+        ),
+        matching: find.byKey(const ValueKey('product-parameter-filter-section')),
+      ),
+      findsOneWidget,
+    );
+    expect(
       find.byKey(const ValueKey('product-parameter-feedback-banner')),
       findsOneWidget,
     );
@@ -301,10 +307,7 @@ void main() {
 
     expect(find.byType(MesCrudPageScaffold), findsOneWidget);
     expect(find.byType(ProductParameterManagementPageHeader), findsOneWidget);
-    expect(
-      find.byType(ProductParameterManagementFilterSection),
-      findsOneWidget,
-    );
+    expect(find.byType(ProductParameterManagementFilterSection), findsNothing);
     expect(find.byType(ProductParameterVersionTableSection), findsOneWidget);
     expect(find.byType(ProductParameterManagementFeedbackBanner), findsNothing);
   });

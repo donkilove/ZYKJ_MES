@@ -15,7 +15,6 @@ import 'package:mes_client/features/product/presentation/widgets/product_paramet
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_table.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_editor_toolbar.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_feedback_banner.dart';
-import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_filter_section.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_management_page_header.dart';
 import 'package:mes_client/features/product/presentation/widgets/product_parameter_version_table_section.dart'
     show
@@ -1130,11 +1129,8 @@ class _ProductParameterManagementPageState
       header: ProductParameterManagementPageHeader(
         loading: _loading,
         onRefresh: _loadProducts,
-      ),
-      filters: ProductParameterManagementFilterSection(
         keywordController: _keywordController,
         selectedCategory: _selectedCategoryFilter,
-        loading: _loading,
         onCategoryChanged: (value) {
           setState(() {
             _selectedCategoryFilter = value;
