@@ -754,49 +754,6 @@ class _FunctionPermissionConfigPageState
     );
   }
 
-  Widget _buildFilterCard() {
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                initialValue: _selectedModuleCode,
-                decoration: const InputDecoration(
-                  labelText: '模块',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                items: _moduleCodes
-                    .map(
-                      (code) => DropdownMenuItem<String>(
-                        value: code,
-                        child: Text(_moduleLabel(code)),
-                      ),
-                    )
-                    .toList(),
-                onChanged: _saving ? null : _switchModule,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Semantics(
-              container: true,
-              label: '功能权限配置保存按钮',
-              button: true,
-              child: FilledButton.icon(
-                onPressed: _saving || !_hasDirty ? null : _save,
-                icon: const Icon(Icons.save),
-                label: Text(_saving ? '保存中...' : '保存'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -840,8 +797,14 @@ class _FunctionPermissionConfigPageState
         header: FunctionPermissionConfigPageHeader(
           loading: _loading,
           onRefresh: _refreshCurrentModule,
+          moduleCodes: _moduleCodes,
+          selectedModuleCode: _selectedModuleCode,
+          moduleLabelBuilder: _moduleLabel,
+          onModuleChanged: _switchModule,
+          onSave: _save,
+          canSave: !_saving && _hasDirty,
+          saving: _saving,
         ),
-        filters: _buildFilterCard(),
         banner: _message.isEmpty
             ? null
             : Align(alignment: Alignment.centerLeft, child: Text(_message)),

@@ -1321,6 +1321,21 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('function-permission-module-selector')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey('function-permission-config-page-header'),
+        ),
+        matching: find.byKey(
+          const ValueKey('function-permission-module-selector'),
+        ),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('统一配置模块权限能力包。'), findsNothing);
     expect(find.byTooltip('刷新'), findsOneWidget);
   });
