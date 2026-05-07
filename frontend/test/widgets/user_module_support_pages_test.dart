@@ -421,6 +421,13 @@ Future<void> _pumpPage(WidgetTester tester, Widget child) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> _openRoleOperationMenu(WidgetTester tester) async {
+  await tester.tap(
+    find.byKey(const ValueKey('role-management-operation-menu')),
+  );
+  await tester.pumpAndSettle();
+}
+
 void main() {
   final userService = _FakeSupportUserService();
   final authzService = _FakeSupportAuthzService();
@@ -447,6 +454,12 @@ void main() {
     );
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(find.byTooltip('刷新'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('role-management-operation-menu')),
+      findsOneWidget,
+    );
+    expect(find.widgetWithText(TextField, '关键词'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '查询'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('role-management-table-section')),
       findsOneWidget,
@@ -557,7 +570,8 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('新增角色'));
+      await _openRoleOperationMenu(tester);
+      await tester.tap(find.text('新增角色').last);
       await tester.pumpAndSettle();
 
       expect(find.text('角色编码'), findsNothing);
@@ -1140,7 +1154,7 @@ void main() {
     expect(find.text('第 2 / 2 页'), findsOneWidget);
 
     await tester.enterText(find.widgetWithText(TextField, '关键词'), '复核');
-    await tester.tap(find.widgetWithText(OutlinedButton, '查询'));
+    await tester.tap(find.widgetWithText(FilledButton, '查询'));
     await tester.pumpAndSettle();
     expect(userService.lastRolePage, 1);
     expect(userService.lastRoleKeyword, '复核');

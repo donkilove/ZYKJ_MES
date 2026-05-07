@@ -229,28 +229,10 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
       header: RoleManagementPageHeader(
         loading: _loading,
         onRefresh: () => _loadRoles(page: _page),
+        keywordController: _keywordController,
+        onSearch: () => _loadRoles(page: 1),
         canCreateRole: widget.canCreateRole,
         onCreateRole: widget.canCreateRole ? () => _showRoleDialog() : null,
-      ),
-      filters: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _keywordController,
-              decoration: const InputDecoration(
-                labelText: '关键词',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              onSubmitted: (_) => _loadRoles(page: 1),
-            ),
-          ),
-          const SizedBox(width: 10),
-          OutlinedButton(
-            onPressed: () => _loadRoles(page: 1),
-            child: const Text('查询'),
-          ),
-        ],
       ),
       banner: _message.isEmpty
           ? null

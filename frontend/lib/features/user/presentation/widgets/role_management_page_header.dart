@@ -6,12 +6,16 @@ class RoleManagementPageHeader extends StatelessWidget {
     super.key,
     required this.onRefresh,
     required this.loading,
+    required this.keywordController,
+    required this.onSearch,
     this.canCreateRole = false,
     this.onCreateRole,
   });
 
   final VoidCallback onRefresh;
   final bool loading;
+  final TextEditingController keywordController;
+  final VoidCallback onSearch;
   final bool canCreateRole;
   final VoidCallback? onCreateRole;
 
@@ -23,8 +27,45 @@ class RoleManagementPageHeader extends StatelessWidget {
         onRefresh: loading ? null : onRefresh,
         actionsBeforeRefresh: [
           if (canCreateRole && onCreateRole != null)
-            FilledButton(onPressed: onCreateRole, child: const Text('新增角色')),
+            PopupMenuButton<String>(
+              key: const ValueKey('role-management-operation-menu'),
+              tooltip: '操作',
+              onSelected: loading
+                  ? null
+                  : (value) {
+                      if (value == 'create_role') {
+                        onCreateRole?.call();
+                      }
+                    },
+              itemBuilder: (context) => const [
+                PopupMenuItem<String>(
+                  value: 'create_role',
+                  child: Text('新增角色'),
+                ),
+              ],
+              icon: const Icon(Icons.more_horiz),
+            ),
         ],
+        leading: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: keywordController,
+                decoration: const InputDecoration(
+                  labelText: '关键词',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onSubmitted: (_) => onSearch(),
+              ),
+            ),
+            const SizedBox(width: 10),
+            FilledButton(
+              onPressed: loading ? null : onSearch,
+              child: const Text('查询'),
+            ),
+          ],
+        ),
       ),
     );
   }
