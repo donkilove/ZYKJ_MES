@@ -149,7 +149,7 @@ void main() {
     await tester.enterText(find.widgetWithText(TextField, '子订单ID'), '21');
     await tester.enterText(find.widgetWithText(TextField, '工序'), '切割');
     await tester.enterText(find.widgetWithText(TextField, '实例编号'), 'ABCD1234');
-    await tester.tap(find.byTooltip('查询'));
+    await tester.tap(find.widgetWithText(FilledButton, '查询'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 

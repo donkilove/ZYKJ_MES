@@ -4,13 +4,13 @@ import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 class ProductionPipelineInstancesPageHeader extends StatelessWidget {
   const ProductionPipelineInstancesPageHeader({
     super.key,
-    required this.title,
     required this.loading,
+    required this.leading,
     required this.onRefresh,
   });
 
-  final String title;
   final bool loading;
+  final Widget leading;
   final VoidCallback onRefresh;
 
   @override
@@ -18,7 +18,7 @@ class ProductionPipelineInstancesPageHeader extends StatelessWidget {
     return KeyedSubtree(
       key: const ValueKey('production-pipeline-instances-page-header'),
       child: MesRefreshPageHeader(
-        title: title,
+        leading: leading,
         onRefresh: loading ? null : onRefresh,
       ),
     );

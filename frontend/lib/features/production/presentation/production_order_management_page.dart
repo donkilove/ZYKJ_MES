@@ -479,91 +479,112 @@ class _ProductionOrderManagementPageState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    final filtersToolbar = Row(
-      children: [
-        Expanded(
-          child: TextField(
-            controller: _keywordController,
-            decoration: const InputDecoration(
-              labelText: '搜索订单号/产品',
-              border: OutlineInputBorder(),
-            ),
-            onSubmitted: (_) => _searchFromFirstPage(),
-          ),
-        ),
-        const SizedBox(width: 12),
-        SizedBox(
-          width: 150,
-          child: DropdownButtonFormField<String?>(
-            initialValue: _statusFilter,
-            decoration: const InputDecoration(
-              labelText: '状态',
-              border: OutlineInputBorder(),
-            ),
-            items: const [
-              DropdownMenuItem<String?>(value: null, child: Text('全部')),
-              DropdownMenuItem<String?>(value: 'pending', child: Text('待生产')),
-              DropdownMenuItem<String?>(
-                value: 'in_progress',
-                child: Text('生产中'),
-              ),
-              DropdownMenuItem<String?>(
-                value: 'completed',
-                child: Text('生产完成'),
-              ),
-            ],
-            onChanged: (value) {
-              setState(() {
-                _statusFilter = value;
-              });
-              _searchFromFirstPage();
-            },
-          ),
-        ),
-        const SizedBox(width: 12),
-        SizedBox(
-          width: 140,
-          child: DropdownButtonFormField<bool?>(
-            initialValue: _pipelineEnabledFilter,
-            decoration: const InputDecoration(
-              labelText: '并行模式',
-              border: OutlineInputBorder(),
-            ),
-            items: const [
-              DropdownMenuItem<bool?>(value: null, child: Text('全部')),
-              DropdownMenuItem<bool?>(value: true, child: Text('开启')),
-              DropdownMenuItem<bool?>(value: false, child: Text('关闭')),
-            ],
-            onChanged: (value) {
-              setState(() {
-                _pipelineEnabledFilter = value;
-              });
-              _searchFromFirstPage();
-            },
-          ),
-        ),
-        const SizedBox(width: 12),
-        FilledButton.icon(
-          onPressed: _loading ? null : _searchFromFirstPage,
-          icon: const Icon(Icons.search),
-          label: const Text('查询'),
-        ),
-        const SizedBox(width: 8),
-        FilledButton.icon(
-          onPressed: _loading || !widget.canCreateOrder
-              ? null
-              : () => _showOrderDialog(),
-          icon: const Icon(Icons.add),
-          label: const Text('创建'),
-        ),
-      ],
-    );
-
     return MesCrudPageScaffold(
       header: MesRefreshPageHeader(
+        leading: Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SizedBox(
+              width: 260,
+              child: TextField(
+                key: const ValueKey(
+                  'production-order-management-keyword-field',
+                ),
+                controller: _keywordController,
+                decoration: const InputDecoration(
+                  labelText: '搜索订单号/产品',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onSubmitted: (_) => _searchFromFirstPage(),
+              ),
+            ),
+            SizedBox(
+              width: 150,
+              child: DropdownButtonFormField<String?>(
+                initialValue: _statusFilter,
+                decoration: const InputDecoration(
+                  labelText: '状态',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: const [
+                  DropdownMenuItem<String?>(value: null, child: Text('全部')),
+                  DropdownMenuItem<String?>(
+                    value: 'pending',
+                    child: Text('待生产'),
+                  ),
+                  DropdownMenuItem<String?>(
+                    value: 'in_progress',
+                    child: Text('生产中'),
+                  ),
+                  DropdownMenuItem<String?>(
+                    value: 'completed',
+                    child: Text('生产完成'),
+                  ),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _statusFilter = value;
+                  });
+                  _searchFromFirstPage();
+                },
+              ),
+            ),
+            SizedBox(
+              width: 140,
+              child: DropdownButtonFormField<bool?>(
+                initialValue: _pipelineEnabledFilter,
+                decoration: const InputDecoration(
+                  labelText: '并行模式',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                items: const [
+                  DropdownMenuItem<bool?>(value: null, child: Text('全部')),
+                  DropdownMenuItem<bool?>(value: true, child: Text('开启')),
+                  DropdownMenuItem<bool?>(value: false, child: Text('关闭')),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    _pipelineEnabledFilter = value;
+                  });
+                  _searchFromFirstPage();
+                },
+              ),
+            ),
+            FilledButton.icon(
+              onPressed: _loading ? null : _searchFromFirstPage,
+              icon: const Icon(Icons.search),
+              label: const Text('查询'),
+            ),
+          ],
+        ),
         onRefresh: _loading ? null : () => _loadOrders(page: _page),
+        actionsBeforeRefresh: [
+          PopupMenuButton<String>(
+            key: const ValueKey('production-order-management-operation-menu'),
+            tooltip: '操作',
+            onSelected: _loading
+                ? null
+                : (action) {
+                    if (action == 'create') {
+                      _showOrderDialog();
+                    }
+                  },
+            itemBuilder: (_) => [
+              PopupMenuItem<String>(
+                value: 'create',
+                enabled: widget.canCreateOrder,
+                child: const Text('创建'),
+              ),
+            ],
+            icon: const Icon(Icons.more_horiz),
+          ),
+        ],
       ),
-      filters: filtersToolbar,
       banner: _message.isEmpty
           ? null
           : Text(

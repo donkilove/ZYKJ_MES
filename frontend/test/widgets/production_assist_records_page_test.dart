@@ -186,6 +186,10 @@ void main() {
 
     expect(find.text('状态筛选'), findsNothing);
     expect(find.text('代班审批已取消，发起后将直接生效。本页仅用于记录查询与详情查看。'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('production-assist-order-field')),
+      findsOneWidget,
+    );
     expect(find.widgetWithText(TextButton, '详情'), findsOneWidget);
     expect(find.widgetWithText(TextButton, '通过'), findsNothing);
     expect(find.widgetWithText(TextButton, '拒绝'), findsNothing);
@@ -237,7 +241,10 @@ void main() {
     expect(find.text('第 1 / 3 页'), findsOneWidget);
     expect(service.listPageHistory.last, 1);
 
-    await tester.enterText(find.byType(TextField).first, 'PO-RESET');
+    await tester.enterText(
+      find.byKey(const ValueKey('production-assist-order-field')),
+      'PO-RESET',
+    );
     await tester.tap(find.widgetWithText(FilledButton, '查询'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));

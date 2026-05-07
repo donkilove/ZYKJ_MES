@@ -684,6 +684,10 @@ void main() {
     expect(find.text('产品型号'), findsAtLeastNWidgets(1));
     expect(find.text('供应商'), findsAtLeastNWidgets(1));
     expect(find.text('搜索订单号/产品/供应商/工序'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('production-order-query-keyword-field')),
+      findsOneWidget,
+    );
     expect(find.text('数量概况'), findsAtLeastNWidgets(1));
     expect(find.text('交货日期'), findsAtLeastNWidgets(1));
     expect(find.text('备注'), findsAtLeastNWidgets(1));
@@ -701,7 +705,10 @@ void main() {
       equals(['订单编号', '产品型号', '供应商', '工序', '数量概况', '状态', '交货日期', '备注', '操作']),
     );
 
-    await tester.enterText(find.byType(TextField).first, 'PO-QUERY');
+    await tester.enterText(
+      find.byKey(const ValueKey('production-order-query-keyword-field')),
+      'PO-QUERY',
+    );
     await tester.tap(find.widgetWithText(FilledButton, '查询'));
     await tester.pump();
 
@@ -775,7 +782,10 @@ void main() {
 
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
-    expect(find.widgetWithText(FilledButton, '导出CSV'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('production-order-query-operation-menu')),
+      findsNothing,
+    );
 
     await tester.pumpWidget(
       MaterialApp(
@@ -798,7 +808,10 @@ void main() {
 
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
-    expect(find.widgetWithText(FilledButton, '导出CSV'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('production-order-query-operation-menu')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('订单查询页导出按钮触发导出主链路', (tester) async {
@@ -837,8 +850,15 @@ void main() {
 
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
-    await tester.enterText(find.byType(TextField).first, 'PO-QUERY');
-    await tester.tap(find.widgetWithText(FilledButton, '导出CSV'));
+    await tester.enterText(
+      find.byKey(const ValueKey('production-order-query-keyword-field')),
+      'PO-QUERY',
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('production-order-query-operation-menu')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('导出CSV').last);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
@@ -888,7 +908,10 @@ void main() {
     expect(find.text('第 2 / 3 页'), findsOneWidget);
     expect(find.text('PO-QUERY-002'), findsOneWidget);
 
-    await tester.enterText(find.byType(TextField).first, 'RESET');
+    await tester.enterText(
+      find.byKey(const ValueKey('production-order-query-keyword-field')),
+      'RESET',
+    );
     await tester.tap(find.widgetWithText(FilledButton, '查询'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));

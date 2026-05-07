@@ -385,7 +385,14 @@ void main() {
     expect(service.requestedPageSizes, [200]);
     expect(find.text('总数：401'), findsWidgets);
     expect(find.text('第 1 / 3 页'), findsOneWidget);
-    expect(find.widgetWithText(TextField, '搜索订单号/产品'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('production-order-management-keyword-field')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('production-order-management-operation-menu')),
+      findsOneWidget,
+    );
     expect(find.widgetWithText(TextField, '产品名称'), findsNothing);
     expect(find.text('订单编号'), findsAtLeastNWidgets(1));
     expect(find.text('产品名称'), findsAtLeastNWidgets(1));
@@ -413,7 +420,10 @@ void main() {
     expect(service.requestedPages, [1, 2, 1]);
     expect(find.text('第 1 / 3 页'), findsOneWidget);
 
-    await tester.enterText(find.widgetWithText(TextField, '搜索订单号/产品'), '产品A');
+    await tester.enterText(
+      find.byKey(const ValueKey('production-order-management-keyword-field')),
+      '产品A',
+    );
     await tester.tap(find.widgetWithText(FilledButton, '查询'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
@@ -455,7 +465,11 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    await tester.tap(find.widgetWithText(FilledButton, '创建'));
+    await tester.tap(
+      find.byKey(const ValueKey('production-order-management-operation-menu')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('创建').last);
     await tester.pumpAndSettle();
     await tester.enterText(
       find.widgetWithText(TextFormField, '订单号'),

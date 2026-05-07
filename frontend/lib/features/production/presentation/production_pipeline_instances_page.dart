@@ -205,16 +205,11 @@ class _ProductionPipelineInstancesPageState
   }
 
   Widget _buildHeader() {
-    final title = _standaloneMode ? '并行实例追踪' : '并行实例 - ${widget.orderCode}';
     return ProductionPipelineInstancesPageHeader(
-      title: title,
       loading: _loading,
+      leading: _buildFilterBar(),
       onRefresh: _load,
     );
-  }
-
-  Widget _buildFilters() {
-    return _buildFilterBar();
   }
 
   Widget _buildTraceGroupCard(
@@ -347,6 +342,7 @@ class _ProductionPipelineInstancesPageState
     return Wrap(
       spacing: 12,
       runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         if (_standaloneMode) ...[
           SizedBox(
@@ -427,15 +423,10 @@ class _ProductionPipelineInstancesPageState
                   },
           ),
         ),
-        IconButton(
-          tooltip: '查询',
+        FilledButton.icon(
           onPressed: _loading ? null : () => _load(page: 1),
           icon: const Icon(Icons.search),
-        ),
-        IconButton(
-          tooltip: '刷新',
-          onPressed: _loading ? null : _load,
-          icon: const Icon(Icons.refresh),
+          label: const Text('查询'),
         ),
       ],
     );
@@ -578,7 +569,6 @@ class _ProductionPipelineInstancesPageState
         ),
         body: MesCrudPageScaffold(
           header: _buildHeader(),
-          filters: _buildFilters(),
           banner: _buildBanner(),
           content: _buildContent(),
           pagination: _buildPagination(),
@@ -587,7 +577,6 @@ class _ProductionPipelineInstancesPageState
     }
     return MesCrudPageScaffold(
       header: _buildHeader(),
-      filters: _buildFilters(),
       banner: _buildBanner(),
       content: _buildContent(),
       pagination: _buildPagination(),

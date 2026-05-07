@@ -897,240 +897,267 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     }
     final processDropdownValue = _currentProcessIdFilter;
 
-    final keywordRow = Row(
+    final headerFilters = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Expanded(
-          child: TextField(
-            controller: _keywordController,
-            decoration: const InputDecoration(
-              labelText: '搜索订单号/产品/供应商/工序',
-              border: OutlineInputBorder(),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                key: const ValueKey('production-order-query-keyword-field'),
+                controller: _keywordController,
+                decoration: const InputDecoration(
+                  labelText: '搜索订单号/产品/供应商/工序',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onSubmitted: (_) => _loadOrders(page: 1),
+              ),
             ),
-            onSubmitted: (_) => _loadOrders(page: 1),
+            const SizedBox(width: 12),
+            FilledButton.icon(
+              onPressed: _loading ? null : () => _loadOrders(page: 1),
+              icon: const Icon(Icons.search),
+              label: const Text('查询'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 220,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _viewMode,
+                  decoration: const InputDecoration(
+                    labelText: '工单视角',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: [
+                    const DropdownMenuItem(value: 'own', child: Text('我的工单')),
+                    const DropdownMenuItem(
+                      value: 'assist',
+                      child: Text('我的代班工单'),
+                    ),
+                    if (widget.canProxyView)
+                      const DropdownMenuItem(
+                        value: 'proxy',
+                        child: Text('代理操作员视角'),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null || value == _viewMode) return;
+                    setState(() {
+                      _viewMode = value;
+                      _page = 1;
+                      if (_viewMode != 'proxy') {
+                        _proxyStageId = null;
+                        _proxyOperatorUserId = null;
+                        _proxyViewOperators = const [];
+                      }
+                    });
+                    if (value == 'proxy' && _proxyStages.isEmpty) {
+                      _loadProxyStages();
+                    }
+                    _loadOrders(page: 1);
+                  },
+                ),
+              ),
+              if (widget.canProxyView && _viewMode == 'proxy') ...[
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 220,
+                  child: DropdownButtonFormField<int?>(
+                    key: ValueKey<int?>(_proxyStageId),
+                    isExpanded: true,
+                    decoration: const InputDecoration(
+                      labelText: '代理工段',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    initialValue: _proxyStageId,
+                    items: [
+                      const DropdownMenuItem<int?>(
+                        value: null,
+                        child: Text('请选择工段'),
+                      ),
+                      ..._proxyStages.map(
+                        (entry) => DropdownMenuItem<int?>(
+                          value: entry.id,
+                          child: Text(
+                            entry.name,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value == _proxyStageId) {
+                        return;
+                      }
+                      setState(() {
+                        _proxyStageId = value;
+                        _proxyOperatorUserId = null;
+                        _proxyViewOperators = const [];
+                        _items = const [];
+                        _total = 0;
+                        _page = 1;
+                      });
+                      if (value != null) {
+                        _loadProxyViewOperators(value);
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                SizedBox(
+                  width: 260,
+                  child: DropdownButtonFormField<int>(
+                    key: ValueKey<String>(
+                      'proxyOperator_${_proxyStageId ?? 0}_${_proxyOperatorUserId ?? 0}',
+                    ),
+                    isExpanded: true,
+                    initialValue: _proxyOperatorUserId,
+                    decoration: const InputDecoration(
+                      labelText: '代理操作员',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    items: _proxyViewOperators
+                        .map(
+                          (entry) => DropdownMenuItem<int>(
+                            value: entry.id,
+                            child: Text(
+                              entry.displayName,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    selectedItemBuilder: (context) => _proxyViewOperators
+                        .map(
+                          (entry) => Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              entry.displayName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                    onChanged:
+                        _proxyStageId == null || _proxyViewOperators.isEmpty
+                        ? null
+                        : (value) {
+                            setState(() {
+                              _proxyOperatorUserId = value;
+                              _page = 1;
+                            });
+                            _loadOrders(page: 1);
+                          },
+                  ),
+                ),
+              ],
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 170,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _orderStatusFilter,
+                  decoration: const InputDecoration(
+                    labelText: '状态',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'all', child: Text('全部')),
+                    DropdownMenuItem(value: 'pending', child: Text('待生产')),
+                    DropdownMenuItem(value: 'in_progress', child: Text('生产中')),
+                    DropdownMenuItem(value: 'completed', child: Text('生产完成')),
+                  ],
+                  onChanged: (value) {
+                    if (value == null || value == _orderStatusFilter) {
+                      return;
+                    }
+                    setState(() {
+                      _orderStatusFilter = value;
+                      _page = 1;
+                    });
+                    _loadOrders(page: 1);
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 280,
+                child: DropdownButtonFormField<int?>(
+                  key: ValueKey<int?>(processDropdownValue),
+                  initialValue: processDropdownValue,
+                  decoration: const InputDecoration(
+                    labelText: '当前工序',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: [
+                    const DropdownMenuItem<int?>(
+                      value: null,
+                      child: Text('全部工序'),
+                    ),
+                    ...processFilterOptions.map(
+                      (entry) => DropdownMenuItem<int?>(
+                        value: entry.id,
+                        child: Text('${entry.name} (#${entry.id})'),
+                      ),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value == _currentProcessIdFilter) {
+                      return;
+                    }
+                    setState(() {
+                      _currentProcessIdFilter = value;
+                      _page = 1;
+                    });
+                    _loadOrders(page: 1);
+                  },
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(width: 12),
-        FilledButton.icon(
-          onPressed: _loading ? null : () => _loadOrders(page: 1),
-          icon: const Icon(Icons.search),
-          label: const Text('查询'),
-        ),
-        if (widget.canExportCsv) ...[
-          const SizedBox(width: 12),
-          FilledButton.icon(
-            onPressed: _loading ? null : _exportOrders,
-            icon: const Icon(Icons.download),
-            label: const Text('导出CSV'),
-          ),
-        ],
       ],
     );
 
-    final filterRow = SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          SizedBox(
-            width: 220,
-            child: DropdownButtonFormField<String>(
-              initialValue: _viewMode,
-              decoration: const InputDecoration(
-                labelText: '工单视角',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              items: [
-                const DropdownMenuItem(value: 'own', child: Text('我的工单')),
-                const DropdownMenuItem(value: 'assist', child: Text('我的代班工单')),
-                if (widget.canProxyView)
-                  const DropdownMenuItem(
-                    value: 'proxy',
-                    child: Text('代理操作员视角'),
-                  ),
-              ],
-              onChanged: (value) {
-                if (value == null || value == _viewMode) return;
-                setState(() {
-                  _viewMode = value;
-                  _page = 1;
-                  if (_viewMode != 'proxy') {
-                    _proxyStageId = null;
-                    _proxyOperatorUserId = null;
-                    _proxyViewOperators = const [];
-                  }
-                });
-                if (value == 'proxy' && _proxyStages.isEmpty) {
-                  _loadProxyStages();
-                }
-                _loadOrders(page: 1);
-              },
-            ),
-          ),
-          if (widget.canProxyView && _viewMode == 'proxy') ...[
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 220,
-              child: DropdownButtonFormField<int?>(
-                key: ValueKey<int?>(_proxyStageId),
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: '代理工段',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                initialValue: _proxyStageId,
-                items: [
-                  const DropdownMenuItem<int?>(
-                    value: null,
-                    child: Text('请选择工段'),
-                  ),
-                  ..._proxyStages.map(
-                    (entry) => DropdownMenuItem<int?>(
-                      value: entry.id,
-                      child: Text(entry.name, overflow: TextOverflow.ellipsis),
-                    ),
-                  ),
-                ],
-                onChanged: (value) {
-                  if (value == _proxyStageId) {
-                    return;
-                  }
-                  setState(() {
-                    _proxyStageId = value;
-                    _proxyOperatorUserId = null;
-                    _proxyViewOperators = const [];
-                    _items = const [];
-                    _total = 0;
-                    _page = 1;
-                  });
-                  if (value != null) {
-                    _loadProxyViewOperators(value);
-                  }
-                },
-              ),
-            ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 260,
-              child: DropdownButtonFormField<int>(
-                key: ValueKey<String>(
-                  'proxyOperator_${_proxyStageId ?? 0}_${_proxyOperatorUserId ?? 0}',
-                ),
-                isExpanded: true,
-                initialValue: _proxyOperatorUserId,
-                decoration: const InputDecoration(
-                  labelText: '代理操作员',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                items: _proxyViewOperators
-                    .map(
-                      (entry) => DropdownMenuItem<int>(
-                        value: entry.id,
-                        child: Text(
-                          entry.displayName,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    )
-                    .toList(),
-                selectedItemBuilder: (context) => _proxyViewOperators
-                    .map(
-                      (entry) => Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          entry.displayName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: _proxyStageId == null || _proxyViewOperators.isEmpty
-                    ? null
-                    : (value) {
-                        setState(() {
-                          _proxyOperatorUserId = value;
-                          _page = 1;
-                        });
-                        _loadOrders(page: 1);
-                      },
-              ),
-            ),
-          ],
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 170,
-            child: DropdownButtonFormField<String>(
-              initialValue: _orderStatusFilter,
-              decoration: const InputDecoration(
-                labelText: '状态',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              items: const [
-                DropdownMenuItem(value: 'all', child: Text('全部')),
-                DropdownMenuItem(value: 'pending', child: Text('待生产')),
-                DropdownMenuItem(value: 'in_progress', child: Text('生产中')),
-                DropdownMenuItem(value: 'completed', child: Text('生产完成')),
-              ],
-              onChanged: (value) {
-                if (value == null || value == _orderStatusFilter) {
-                  return;
-                }
-                setState(() {
-                  _orderStatusFilter = value;
-                  _page = 1;
-                });
-                _loadOrders(page: 1);
-              },
-            ),
-          ),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 280,
-            child: DropdownButtonFormField<int?>(
-              key: ValueKey<int?>(processDropdownValue),
-              initialValue: processDropdownValue,
-              decoration: const InputDecoration(
-                labelText: '当前工序',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-              items: [
-                const DropdownMenuItem<int?>(value: null, child: Text('全部工序')),
-                ...processFilterOptions.map(
-                  (entry) => DropdownMenuItem<int?>(
-                    value: entry.id,
-                    child: Text('${entry.name} (#${entry.id})'),
-                  ),
+    return MesCrudPageScaffold(
+      header: MesRefreshPageHeader(
+        leading: headerFilters,
+        onRefresh: _loading ? null : _loadOrders,
+        actionsBeforeRefresh: [
+          if (widget.canExportCsv)
+            PopupMenuButton<String>(
+              key: const ValueKey('production-order-query-operation-menu'),
+              tooltip: '操作',
+              onSelected: _loading
+                  ? null
+                  : (action) {
+                      if (action == 'export_csv') {
+                        _exportOrders();
+                      }
+                    },
+              itemBuilder: (_) => const [
+                PopupMenuItem<String>(
+                  value: 'export_csv',
+                  child: Text('导出CSV'),
                 ),
               ],
-              onChanged: (value) {
-                if (value == _currentProcessIdFilter) {
-                  return;
-                }
-                setState(() {
-                  _currentProcessIdFilter = value;
-                  _page = 1;
-                });
-                _loadOrders(page: 1);
-              },
+              icon: const Icon(Icons.more_horiz),
             ),
-          ),
         ],
       ),
-    );
-
-    final filtersToolbar = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [keywordRow, const SizedBox(height: 12), filterRow],
-    );
-
-    return MesCrudPageScaffold(
-      header: MesRefreshPageHeader(onRefresh: _loading ? null : _loadOrders),
-      filters: filtersToolbar,
       banner: _message.isEmpty
           ? null
           : Text(_message, style: TextStyle(color: theme.colorScheme.error)),

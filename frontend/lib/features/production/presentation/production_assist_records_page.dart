@@ -249,11 +249,15 @@ class _ProductionAssistRecordsPageState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final filtersToolbar = Row(
+    final filtersToolbar = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         SizedBox(
           width: 160,
           child: TextField(
+            key: const ValueKey('production-assist-order-field'),
             controller: _orderCodeController,
             decoration: const InputDecoration(
               labelText: '订单号',
@@ -263,7 +267,6 @@ class _ProductionAssistRecordsPageState
             onSubmitted: (_) => _loadRows(page: 1),
           ),
         ),
-        const SizedBox(width: 8),
         SizedBox(
           width: 160,
           child: TextField(
@@ -276,7 +279,6 @@ class _ProductionAssistRecordsPageState
             onSubmitted: (_) => _loadRows(page: 1),
           ),
         ),
-        const SizedBox(width: 8),
         SizedBox(
           width: 140,
           child: TextField(
@@ -289,7 +291,6 @@ class _ProductionAssistRecordsPageState
             onSubmitted: (_) => _loadRows(page: 1),
           ),
         ),
-        const SizedBox(width: 8),
         SizedBox(
           width: 140,
           child: TextField(
@@ -302,7 +303,6 @@ class _ProductionAssistRecordsPageState
             onSubmitted: (_) => _loadRows(page: 1),
           ),
         ),
-        const SizedBox(width: 8),
         OutlinedButton.icon(
           icon: const Icon(Icons.date_range, size: 16),
           label: Text(
@@ -312,7 +312,6 @@ class _ProductionAssistRecordsPageState
             final ctx = context;
             final from = await _pickDate(ctx, _createdAtFrom);
             if (from == null || !mounted) return;
-            // ignore: use_build_context_synchronously
             final to = await _pickDate(ctx, _createdAtTo ?? from);
             if (!mounted) return;
             setState(() {
@@ -322,8 +321,7 @@ class _ProductionAssistRecordsPageState
             _loadRows(page: 1);
           },
         ),
-        if (_createdAtFrom != null || _createdAtTo != null) ...[
-          const SizedBox(width: 4),
+        if (_createdAtFrom != null || _createdAtTo != null)
           TextButton.icon(
             icon: const Icon(Icons.clear, size: 16),
             label: const Text('清除'),
@@ -335,8 +333,6 @@ class _ProductionAssistRecordsPageState
               _loadRows(page: 1);
             },
           ),
-        ],
-        const SizedBox(width: 8),
         FilledButton.icon(
           onPressed: _loading ? null : () => _loadRows(page: 1),
           icon: const Icon(Icons.search, size: 16),
@@ -365,9 +361,9 @@ class _ProductionAssistRecordsPageState
     return MesCrudPageScaffold(
       header: ProductionAssistRecordsPageHeader(
         loading: _loading,
+        leading: filtersToolbar,
         onRefresh: _loadRows,
       ),
-      filters: filtersToolbar,
       banner: bannerWidgets.isEmpty
           ? null
           : Column(
