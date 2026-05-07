@@ -37,6 +37,13 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const ValueKey('quality-page-tab-bar')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('quality-page-header-slot')),
+        matching: find.byType(Text),
+      ),
+      findsNothing,
+    );
     expect(find.text('每日首件'), findsOneWidget);
     expect(find.text('质量数据'), findsOneWidget);
     expect(find.text('质量趋势'), findsOneWidget);

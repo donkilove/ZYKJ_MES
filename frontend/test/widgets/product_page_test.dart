@@ -61,6 +61,13 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const ValueKey('product-page-tab-bar')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('product-page-header-slot')),
+        matching: find.byType(Text),
+      ),
+      findsNothing,
+    );
     expect(find.text('产品管理'), findsAtLeastNWidgets(1));
     expect(find.text('版本管理'), findsOneWidget);
     expect(find.text('产品参数查询'), findsOneWidget);
@@ -88,6 +95,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(ProductPageHeader), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('product-page-header-slot')),
+        matching: find.byType(Text),
+      ),
+      findsNothing,
+    );
     expect(find.text('tab:$productParameterQueryTabCode'), findsOneWidget);
   });
 
@@ -118,6 +132,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(ProductPageHeader), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('product-page-header-slot')),
+        matching: find.byType(Text),
+      ),
+      findsNothing,
+    );
     final product = _buildProduct();
     expect(managementPage, isNotNull);
 

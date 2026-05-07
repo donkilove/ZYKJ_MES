@@ -37,6 +37,13 @@ void main() {
         findsOneWidget,
       );
       expect(find.byKey(const ValueKey('craft-page-tab-bar')), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('craft-page-header-slot')),
+          matching: find.byType(Text),
+        ),
+        findsNothing,
+      );
       expect(find.byType(TabBar), findsOneWidget);
       expect(find.byType(TabBarView), findsOneWidget);
     });

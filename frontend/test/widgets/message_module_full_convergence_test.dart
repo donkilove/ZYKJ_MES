@@ -41,6 +41,13 @@ void main() {
         find.byKey(const ValueKey('message-page-tab-bar')),
         findsOneWidget,
       );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('message-page-header-slot')),
+          matching: find.byType(Text),
+        ),
+        findsNothing,
+      );
       expect(find.byType(TabBar), findsOneWidget);
       expect(find.byType(TabBarView), findsOneWidget);
     });

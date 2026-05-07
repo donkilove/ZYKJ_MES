@@ -47,6 +47,13 @@ void main() {
         find.byKey(const ValueKey('production-page-tab-bar')),
         findsOneWidget,
       );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('production-page-header-slot')),
+          matching: find.byType(Text),
+        ),
+        findsNothing,
+      );
       expect(find.byType(TabBar), findsOneWidget);
       expect(find.byType(TabBarView), findsOneWidget);
 
@@ -59,7 +66,13 @@ void main() {
       );
 
       expect(find.byType(ProductionPageHeader), findsOneWidget);
-      expect(find.text('统一装配生产模块全部页签。'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(ProductionPageHeader),
+          matching: find.byType(Text),
+        ),
+        findsNothing,
+      );
     });
 
     testWidgets('ProductionOrderStatusChip renders pending status', (

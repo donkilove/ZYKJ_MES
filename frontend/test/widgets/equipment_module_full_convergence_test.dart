@@ -40,6 +40,13 @@ void main() {
         find.byKey(const ValueKey('equipment-page-tab-bar')),
         findsOneWidget,
       );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('equipment-page-header-slot')),
+          matching: find.byType(Text),
+        ),
+        findsNothing,
+      );
       expect(find.byType(TabBar), findsOneWidget);
       expect(find.byType(TabBarView), findsOneWidget);
     });
@@ -50,7 +57,13 @@ void main() {
       );
 
       expect(find.byType(EquipmentPageHeader), findsOneWidget);
-      expect(find.text('统一装配设备模块全部页签。'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(EquipmentPageHeader),
+          matching: find.byType(Text),
+        ),
+        findsNothing,
+      );
     });
   });
 }

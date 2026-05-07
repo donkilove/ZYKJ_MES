@@ -34,6 +34,13 @@ void main() {
     expect(find.byKey(const ValueKey('user-page-shell')), findsOneWidget);
     expect(find.byKey(const ValueKey('user-page-header-slot')), findsOneWidget);
     expect(find.byKey(const ValueKey('user-page-tab-bar')), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('user-page-header-slot')),
+        matching: find.byType(Text),
+      ),
+      findsNothing,
+    );
     expect(find.text('用户管理'), findsWidgets);
     expect(find.text('注册审批'), findsWidgets);
     expect(find.text('角色管理'), findsWidgets);
