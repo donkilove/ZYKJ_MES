@@ -123,6 +123,9 @@ class _UserManagementPageState extends State<UserManagementPage> {
   int? _myUserId;
   String? _myRoleCode;
 
+  bool get _canShowOperationMenu =>
+      widget.canCreateUser || widget.canImport || widget.canExport;
+
   bool _isCurrentUserSystemAdmin() => _myRoleCode == _roleSystemAdmin;
 
   int get _userTotalPages {
@@ -316,6 +319,33 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }
 
   Future<void> _applyFiltersAndReload() => _loadUsers(page: 1);
+
+  Future<void> _showExportFormatDialog() async {
+    final confirmed = await showMesLockedFormDialog<String>(
+      context: context,
+      builder: (context) {
+        return MesDialog(
+          title: const Text('导出筛选结果'),
+          width: 360,
+          content: const Text('请选择导出格式。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop('csv'),
+              child: const Text('导出 CSV'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop('excel'),
+              child: const Text('导出 Excel'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed == null) {
+      return;
+    }
+    await _showCreateExportTaskDialog(format: confirmed);
+  }
 
   Future<void> _handleActionSuccess() =>
       _loadUsers(silent: true, page: _userPage);
@@ -924,68 +954,80 @@ class _UserManagementPageState extends State<UserManagementPage> {
       ),
     ];
 
-    if (widget.canExport) {
+    if (_canShowOperationMenu) {
       buttons.add(
-        PopupMenuButton<String>(
+        PopupMenuButton<_UserManagementOperationAction>(
+          key: const ValueKey('user-management-operation-menu'),
           enabled: !_queryInFlight,
+          tooltip: '操作',
+          icon: const Icon(Icons.more_horiz),
           onSelected: _queryInFlight
               ? null
-              : (value) => _showCreateExportTaskDialog(format: value),
-          itemBuilder: (context) => const [
-            PopupMenuItem(value: 'csv', child: Text('导出 CSV')),
-            PopupMenuItem(value: 'excel', child: Text('导出 Excel')),
-          ],
-          child: IgnorePointer(
-            child: OutlinedButton.icon(
-              onPressed: _queryInFlight ? null : () {},
-              icon: const Icon(Icons.download),
-              label: const Text('导出当前筛选结果'),
-            ),
-          ),
-        ),
-      );
-      buttons.add(
-        OutlinedButton.icon(
-          onPressed: _queryInFlight ? null : _showExportTaskDialog,
-          icon: const Icon(Icons.history),
-          label: const Text('导出任务'),
-        ),
-      );
-    }
-
-    return buttons;
-  }
-
-  List<Widget> _buildHeaderActionButtons() {
-    final buttons = <Widget>[
-      FilledButton.icon(
-        onPressed: (_queryInFlight || !widget.canCreateUser)
-            ? null
-            : () => showUserCreateDialog(
-                context: context,
-                userService: _userService,
-                assignableRoles: _assignableRoles(),
-                allRoles: _roles,
-                loadEnabledStages: _loadEnabledStagesForDialog,
-                onLogout: widget.onLogout,
-                onSuccess: _handleActionSuccess,
+              : (value) async {
+                  switch (value) {
+                    case _UserManagementOperationAction.createUser:
+                      if (!widget.canCreateUser) {
+                        _showNoPermission();
+                        return;
+                      }
+                      await showUserCreateDialog(
+                        context: context,
+                        userService: _userService,
+                        assignableRoles: _assignableRoles(),
+                        allRoles: _roles,
+                        loadEnabledStages: _loadEnabledStagesForDialog,
+                        onLogout: widget.onLogout,
+                        onSuccess: _handleActionSuccess,
+                      );
+                      return;
+                    case _UserManagementOperationAction.importUsers:
+                      if (!widget.canImport) {
+                        _showNoPermission();
+                        return;
+                      }
+                      await showUserImportDialog(
+                        context: context,
+                        userService: _userService,
+                      );
+                      return;
+                    case _UserManagementOperationAction.exportFiltered:
+                      if (!widget.canExport) {
+                        _showNoPermission();
+                        return;
+                      }
+                      await _showExportFormatDialog();
+                      return;
+                    case _UserManagementOperationAction.exportTasks:
+                      if (!widget.canExport) {
+                        _showNoPermission();
+                        return;
+                      }
+                      await _showExportTaskDialog();
+                      return;
+                  }
+                },
+          itemBuilder: (context) => [
+            if (widget.canCreateUser)
+              const PopupMenuItem(
+                value: _UserManagementOperationAction.createUser,
+                child: Text('新建用户'),
               ),
-        icon: const Icon(Icons.person_add),
-        label: const Text('新建用户'),
-      ),
-    ];
-
-    if (widget.canImport) {
-      buttons.add(
-        OutlinedButton.icon(
-          onPressed: _queryInFlight
-              ? null
-              : () => showUserImportDialog(
-                  context: context,
-                  userService: _userService,
-                ),
-          icon: const Icon(Icons.upload_file),
-          label: const Text('批量导入'),
+            if (widget.canImport)
+              const PopupMenuItem(
+                value: _UserManagementOperationAction.importUsers,
+                child: Text('批量导入用户'),
+              ),
+            if (widget.canExport)
+              const PopupMenuItem(
+                value: _UserManagementOperationAction.exportFiltered,
+                child: Text('导出筛选结果'),
+              ),
+            if (widget.canExport)
+              const PopupMenuItem(
+                value: _UserManagementOperationAction.exportTasks,
+                child: Text('导出任务'),
+              ),
+          ],
         ),
       );
     }
@@ -1021,7 +1063,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
             _applyFiltersAndReload();
           },
           onSearch: _applyFiltersAndReload,
-          actionsBeforeRefresh: _buildHeaderActionButtons(),
+          actionsBeforeRefresh: const [],
           topActions: _buildTopToolbarButtons(),
         ),
       ),
@@ -1051,4 +1093,11 @@ class _UserManagementPageState extends State<UserManagementPage> {
       ),
     );
   }
+}
+
+enum _UserManagementOperationAction {
+  createUser,
+  importUsers,
+  exportFiltered,
+  exportTasks,
 }

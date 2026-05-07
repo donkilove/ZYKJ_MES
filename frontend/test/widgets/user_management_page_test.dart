@@ -682,6 +682,19 @@ Rect _toolbarRect(WidgetTester tester, String key) {
   return tester.getRect(find.byKey(ValueKey<String>(key)));
 }
 
+Future<void> _openOperationMenu(WidgetTester tester) async {
+  await tester.tap(
+    find.byKey(const ValueKey('user-management-operation-menu')),
+  );
+  await tester.pumpAndSettle();
+}
+
+Future<void> _tapOperationMenuItem(WidgetTester tester, String label) async {
+  await _openOperationMenu(tester);
+  await tester.tap(find.text(label).last);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('用户管理工具栏仅保留搜索与角色状态范围筛选', (tester) async {
     final userService = _FakeUserService(initialUsers: const []);
@@ -696,7 +709,11 @@ void main() {
     expect(find.text('工段'), findsNothing);
     expect(find.text('在线状态'), findsNothing);
     expect(find.text('查询用户'), findsOneWidget);
-    expect(find.text('导出当前筛选结果'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('user-management-operation-menu')),
+      findsOneWidget,
+    );
+    expect(find.text('导出筛选结果'), findsNothing);
     expect(find.text('用户角色'), findsOneWidget);
     expect(find.text('账号状态'), findsOneWidget);
     expect(find.text('数据范围'), findsOneWidget);
@@ -748,9 +765,18 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('筛选条件'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('user-management-operation-menu')),
+      findsOneWidget,
+    );
     expect(find.byTooltip('刷新'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, '新建用户'), findsOneWidget);
-    expect(find.widgetWithText(OutlinedButton, '批量导入'), findsOneWidget);
+    await _openOperationMenu(tester);
+    expect(find.text('新建用户'), findsOneWidget);
+    expect(find.text('批量导入用户'), findsOneWidget);
+    expect(find.text('导出筛选结果'), findsOneWidget);
+    expect(find.text('导出任务'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '新建用户'), findsNothing);
+    expect(find.widgetWithText(OutlinedButton, '批量导入'), findsNothing);
   });
 
   testWidgets('用户管理页接入 CRUD 骨架并在筛选变化后回到第一页', (tester) async {
@@ -1105,23 +1131,15 @@ void main() {
       craftService: craftService,
     );
 
-    expect(find.text('导出 CSV'), findsNothing);
-    expect(find.text('导出 Excel'), findsNothing);
-
-    final exportMenuButton = find.ancestor(
-      of: find.text('导出当前筛选结果'),
-      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
-    );
-
-    await tester.tap(exportMenuButton);
+    await _openOperationMenu(tester);
+    await tester.tap(find.text('导出筛选结果').last);
     await tester.pumpAndSettle();
 
     expect(find.text('导出 CSV'), findsOneWidget);
     expect(find.text('导出 Excel'), findsOneWidget);
-    expect(find.text('导出任务'), findsOneWidget);
   });
 
-  testWidgets('桌面页头一排展示按钮和筛选组件且角色管理入口已移除', (tester) async {
+  testWidgets('桌面页头一排展示菜单按钮和筛选组件且角色管理入口已移除', (tester) async {
     final userService = _FakeUserService(initialUsers: const []);
     final craftService = _FakeCraftService();
     await _pumpPage(
@@ -1146,21 +1164,12 @@ void main() {
     final queryButtonRect = tester.getRect(
       find.widgetWithText(FilledButton, '查询用户'),
     );
-    final createButtonRect = tester.getRect(
-      find.widgetWithText(FilledButton, '新建用户'),
-    );
-    final importButtonRect = tester.getRect(
-      find.widgetWithText(OutlinedButton, '批量导入'),
-    );
-    final exportButtonRect = tester.getRect(
-      find.widgetWithText(OutlinedButton, '导出当前筛选结果'),
-    );
-    final exportTaskButtonRect = tester.getRect(
-      find.widgetWithText(OutlinedButton, '导出任务'),
+    final operationMenuRect = tester.getRect(
+      find.byKey(const ValueKey('user-management-operation-menu')),
     );
     final refreshButtonRect = tester.getRect(find.byTooltip('刷新'));
 
-    expect(searchRect.width, greaterThan(150));
+    expect(searchRect.width, greaterThan(240));
     expect(searchRect.center.dy, closeTo(statusRect.center.dy, 1));
     expect(roleRect.center.dy, closeTo(statusRect.center.dy, 1));
     expect(deletedScopeRect.center.dy, closeTo(statusRect.center.dy, 1));
@@ -1169,16 +1178,17 @@ void main() {
     expect(roleRect.left, lessThan(deletedScopeRect.left));
     expect(searchRect.right, closeTo(statusRect.left - 12, 2));
     expect(searchRect.left, greaterThanOrEqualTo(filterSectionRect.left));
-    expect(createButtonRect.center.dy, closeTo(searchRect.center.dy, 1));
-    expect(importButtonRect.center.dy, closeTo(searchRect.center.dy, 1));
+    expect(operationMenuRect.center.dy, closeTo(searchRect.center.dy, 1));
     expect(refreshButtonRect.center.dy, closeTo(searchRect.center.dy, 1));
     expect(queryButtonRect.center.dy, closeTo(searchRect.center.dy, 1));
-    expect(exportButtonRect.center.dy, closeTo(searchRect.center.dy, 1));
-    expect(exportTaskButtonRect.center.dy, closeTo(searchRect.center.dy, 1));
-    expect(createButtonRect.right, lessThan(importButtonRect.left));
-    expect(importButtonRect.right, lessThan(searchRect.left));
     expect(searchRect.right, lessThan(queryButtonRect.left));
+    expect(queryButtonRect.right, lessThan(operationMenuRect.left));
+    expect(operationMenuRect.right, lessThan(refreshButtonRect.left));
     expect(find.widgetWithText(OutlinedButton, '角色管理'), findsNothing);
+    expect(find.text('新建用户'), findsNothing);
+    expect(find.text('批量导入用户'), findsNothing);
+    expect(find.text('导出筛选结果'), findsNothing);
+    expect(find.text('导出任务'), findsNothing);
     expect(find.text('筛选条件'), findsNothing);
 
     expect(tester.takeException(), isNull);
@@ -1195,19 +1205,15 @@ void main() {
     );
 
     final queryButtonRect = tester.getRect(find.text('查询用户'));
-    final exportButtonRect = tester.getRect(find.text('导出当前筛选结果'));
-    final exportTaskButtonRect = tester.getRect(find.text('导出任务'));
+    final operationMenuRect = tester.getRect(
+      find.byKey(const ValueKey('user-management-operation-menu')),
+    );
     final refreshButtonRect = tester.getRect(find.byTooltip('刷新'));
 
-    expect(exportButtonRect.center.dy, closeTo(queryButtonRect.center.dy, 1));
-    expect(
-      exportTaskButtonRect.center.dy,
-      closeTo(queryButtonRect.center.dy, 1),
-    );
+    expect(operationMenuRect.center.dy, closeTo(queryButtonRect.center.dy, 1));
     expect(refreshButtonRect.center.dy, closeTo(queryButtonRect.center.dy, 1));
-    expect(queryButtonRect.right, lessThan(exportButtonRect.left));
-    expect(exportButtonRect.right, lessThan(exportTaskButtonRect.left));
-    expect(exportTaskButtonRect.right, lessThan(refreshButtonRect.left));
+    expect(queryButtonRect.right, lessThan(operationMenuRect.left));
+    expect(operationMenuRect.right, lessThan(refreshButtonRect.left));
   });
 
   testWidgets('窄宽度工具栏仍按顺序折返', (tester) async {
@@ -1245,8 +1251,7 @@ void main() {
 
     expect(craftService.listStagesCalls, 1);
 
-    await tester.tap(find.text('新建用户'));
-    await tester.pumpAndSettle();
+    await _tapOperationMenuItem(tester, '新建用户');
 
     expect(craftService.listStagesCalls, 2);
   });
@@ -1269,8 +1274,7 @@ void main() {
       craftService: craftService,
     );
 
-    await tester.tap(find.text('新建用户'));
-    await tester.pumpAndSettle();
+    await _tapOperationMenuItem(tester, '新建用户');
 
     await tester.enterText(find.byType(TextFormField).at(0), 'dup_user');
     await tester.pumpAndSettle();
@@ -1287,8 +1291,7 @@ void main() {
       craftService: craftService,
     );
 
-    await tester.tap(find.text('新建用户'));
-    await tester.pumpAndSettle();
+    await _tapOperationMenuItem(tester, '新建用户');
 
     expect(find.text('请先选择角色，再确定是否需要分配工段'), findsOneWidget);
 
@@ -1310,8 +1313,7 @@ void main() {
       craftService: craftService,
     );
 
-    await tester.tap(find.text('新建用户'));
-    await tester.pumpAndSettle();
+    await _tapOperationMenuItem(tester, '新建用户');
 
     await tester.enterText(find.byType(TextFormField).at(0), 'op_new');
     await tester.enterText(find.byType(TextFormField).at(1), 'OpNew@123');
@@ -1338,8 +1340,7 @@ void main() {
       craftService: craftService,
     );
 
-    await tester.tap(find.text('新建用户'));
-    await tester.pumpAndSettle();
+    await _tapOperationMenuItem(tester, '新建用户');
 
     await tester.enterText(find.byType(TextFormField).at(0), 'op_zero');
     await tester.enterText(find.byType(TextFormField).at(1), 'OpZero@123');
@@ -1365,8 +1366,7 @@ void main() {
       craftService: craftService,
     );
 
-    await tester.tap(find.text('新建用户'));
-    await tester.pumpAndSettle();
+    await _tapOperationMenuItem(tester, '新建用户');
 
     await tester.enterText(find.byType(TextFormField).at(0), 'custom_u');
     await tester.enterText(find.byType(TextFormField).at(1), 'Custom@123');
@@ -1392,8 +1392,7 @@ void main() {
       craftService: craftService,
     );
 
-    await tester.tap(find.text('新建用户'));
-    await tester.pumpAndSettle();
+    await _tapOperationMenuItem(tester, '新建用户');
 
     final editableTexts = tester.widgetList<EditableText>(
       find.byType(EditableText),
@@ -1410,8 +1409,7 @@ void main() {
       craftService: craftService,
     );
 
-    await tester.tap(find.text('新建用户'));
-    await tester.pumpAndSettle();
+    await _tapOperationMenuItem(tester, '新建用户');
 
     expect(find.textContaining('不能与系统中已有用户密码相同'), findsNothing);
     expect(find.text('密码规则：至少6位；不能包含连续4位相同字符。'), findsOneWidget);
@@ -1438,8 +1436,7 @@ void main() {
       craftService: craftService,
     );
 
-    await tester.tap(find.text('新建用户'));
-    await tester.pumpAndSettle();
+    await _tapOperationMenuItem(tester, '新建用户');
 
     await tester.enterText(find.byType(TextFormField).at(0), 'a');
     await tester.pumpAndSettle();
@@ -1735,8 +1732,7 @@ void main() {
       craftService: craftService,
     );
 
-    await tester.tap(find.text('新建用户'));
-    await tester.pumpAndSettle();
+    await _tapOperationMenuItem(tester, '新建用户');
 
     expect(find.text('账号（用户名与姓名统一）'), findsNothing);
     expect(find.text('备注（可选）'), findsNothing);
@@ -2310,11 +2306,13 @@ void main() {
       canToggleUser: true,
       canResetPassword: false,
       canDeleteUser: false,
+      canExport: false,
     );
 
-    await tester.tap(find.text('新建用户'));
-    await tester.pumpAndSettle();
-    expect(find.text('新建用户'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('user-management-operation-menu')),
+      findsNothing,
+    );
 
     final rowActionMenu = find.descendant(
       of: find.byType(DataTable),
@@ -2651,11 +2649,8 @@ void main() {
           },
     );
 
-    final exportMenuButton = find.ancestor(
-      of: find.text('导出当前筛选结果'),
-      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
-    );
-    await tester.tap(exportMenuButton);
+    await _openOperationMenu(tester);
+    await tester.tap(find.text('导出筛选结果').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('导出 CSV').last);
     await tester.pumpAndSettle();
@@ -2693,11 +2688,8 @@ void main() {
           }) async => null,
     );
 
-    final exportMenuButton = find.ancestor(
-      of: find.text('导出当前筛选结果'),
-      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
-    );
-    await tester.tap(exportMenuButton);
+    await _openOperationMenu(tester);
+    await tester.tap(find.text('导出筛选结果').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('导出 Excel').last);
     await tester.pumpAndSettle();
@@ -2729,11 +2721,8 @@ void main() {
           }) async => 'C:/exports/$filename',
     );
 
-    final exportMenuButton = find.ancestor(
-      of: find.text('导出当前筛选结果'),
-      matching: find.byWidgetPredicate((widget) => widget is PopupMenuButton),
-    );
-    await tester.tap(exportMenuButton);
+    await _openOperationMenu(tester);
+    await tester.tap(find.text('导出筛选结果').last);
     await tester.pumpAndSettle();
     await tester.tap(find.text('导出 CSV').last);
     await tester.pumpAndSettle();
