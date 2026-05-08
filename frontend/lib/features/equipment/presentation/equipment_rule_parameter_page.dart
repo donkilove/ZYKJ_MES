@@ -11,6 +11,7 @@ import 'package:mes_client/features/equipment/services/equipment_service.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
 import 'package:mes_client/core/ui/patterns/mes_pagination_bar.dart';
+import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 
 enum _RuleListAction { openParameters, edit, toggle, delete }
@@ -180,11 +181,7 @@ class _EquipmentRuleParameterPageState extends State<EquipmentRuleParameterPage>
       return const Center(child: Text('当前账号没有可访问的规则/参数页面。'));
     }
     return MesCrudPageScaffold(
-      header: EquipmentRuleParameterPageHeader(
-        loading: false,
-        onRefresh: _refreshCurrentTab,
-      ),
-      filters: Material(
+      header: Material(
         color: Theme.of(context).colorScheme.surface,
         child: TabBar(controller: _innerTabController, tabs: tabs),
       ),
@@ -454,12 +451,6 @@ class _RulesTabState extends State<_RulesTab> {
         icon: const Icon(Icons.search),
         label: const Text('查询规则'),
       ),
-      if (widget.canManage)
-        FilledButton.icon(
-          onPressed: _loading ? null : () => _showUpsertDialog(),
-          icon: const Icon(Icons.add),
-          label: const Text('新增规则'),
-        ),
     ];
   }
 
@@ -543,7 +534,31 @@ class _RulesTabState extends State<_RulesTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildToolbar(),
+        MesRefreshPageHeader(
+          leading: _buildToolbar(),
+          onRefresh: _loading ? null : () => _load(page: _page),
+          actionsBeforeRefresh: [
+            if (widget.canManage)
+              PopupMenuButton<String>(
+                key: const ValueKey('equipment-rule-tab-operation-menu'),
+                tooltip: '操作',
+                onSelected: _loading
+                    ? null
+                    : (value) {
+                        if (value == 'create_rule') {
+                          _showUpsertDialog();
+                        }
+                      },
+                itemBuilder: (_) => const [
+                  PopupMenuItem<String>(
+                    value: 'create_rule',
+                    child: Text('新增规则'),
+                  ),
+                ],
+                icon: const Icon(Icons.more_horiz),
+              ),
+          ],
+        ),
         const SizedBox(height: 12),
         Text('总数：$_total', style: theme.textTheme.titleMedium),
         if (_message.isNotEmpty)
@@ -948,12 +963,6 @@ class _ParametersTabState extends State<_ParametersTab> {
         icon: const Icon(Icons.search),
         label: const Text('查询参数'),
       ),
-      if (widget.canManage)
-        FilledButton.icon(
-          onPressed: _loading ? null : () => _showUpsertDialog(),
-          icon: const Icon(Icons.add),
-          label: const Text('新增参数'),
-        ),
     ];
   }
 
@@ -1042,7 +1051,31 @@ class _ParametersTabState extends State<_ParametersTab> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildToolbar(),
+        MesRefreshPageHeader(
+          leading: _buildToolbar(),
+          onRefresh: _loading ? null : () => _load(page: _page),
+          actionsBeforeRefresh: [
+            if (widget.canManage)
+              PopupMenuButton<String>(
+                key: const ValueKey('equipment-parameter-tab-operation-menu'),
+                tooltip: '操作',
+                onSelected: _loading
+                    ? null
+                    : (value) {
+                        if (value == 'create_parameter') {
+                          _showUpsertDialog();
+                        }
+                      },
+                itemBuilder: (_) => const [
+                  PopupMenuItem<String>(
+                    value: 'create_parameter',
+                    child: Text('新增参数'),
+                  ),
+                ],
+                icon: const Icon(Icons.more_horiz),
+              ),
+          ],
+        ),
         const SizedBox(height: 12),
         if (_activeRuleScope != null)
           Container(

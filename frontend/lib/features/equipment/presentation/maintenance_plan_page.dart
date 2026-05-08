@@ -542,23 +542,33 @@ class _MaintenancePlanPageState extends State<MaintenancePlanPage> {
           icon: const Icon(Icons.search),
           label: const Text('查询'),
         ),
-        const SizedBox(width: 12),
-        FilledButton.icon(
-          onPressed: (_loading || !widget.canWrite)
-              ? null
-              : () => _showPlanEditDialog(),
-          icon: const Icon(Icons.add),
-          label: const Text('新增计划'),
-        ),
       ],
     );
 
     return MesCrudPageScaffold(
       header: MaintenancePlanPageHeader(
         loading: _loading,
+        leading: filtersToolbar,
         onRefresh: () => _loadAll(page: _page, reloadOptions: true),
+        actionsBeforeRefresh: [
+          PopupMenuButton<String>(
+            key: const ValueKey('maintenance-plan-operation-menu'),
+            tooltip: '操作',
+            onSelected: _loading
+                ? null
+                : (value) {
+                    if (value == 'create_plan' && widget.canWrite) {
+                      _showPlanEditDialog();
+                    }
+                  },
+            itemBuilder: (_) => const [
+              PopupMenuItem<String>(value: 'create_plan', child: Text('新增计划')),
+            ],
+            enabled: widget.canWrite,
+            icon: const Icon(Icons.more_horiz),
+          ),
+        ],
       ),
-      filters: filtersToolbar,
       banner: _message.isEmpty
           ? null
           : Text(

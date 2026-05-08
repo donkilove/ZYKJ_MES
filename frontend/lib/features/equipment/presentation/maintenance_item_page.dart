@@ -282,23 +282,33 @@ class _MaintenanceItemPageState extends State<MaintenanceItemPage> {
           icon: const Icon(Icons.search),
           label: const Text('搜索'),
         ),
-        const SizedBox(width: 12),
-        FilledButton.icon(
-          onPressed: (_loading || !widget.canWrite)
-              ? null
-              : () => _showEditDialog(),
-          icon: const Icon(Icons.add),
-          label: const Text('新增项目'),
-        ),
       ],
     );
 
     return MesCrudPageScaffold(
       header: MaintenanceItemPageHeader(
         loading: _loading,
+        leading: filtersToolbar,
         onRefresh: () => _loadItems(page: _page),
+        actionsBeforeRefresh: [
+          PopupMenuButton<String>(
+            key: const ValueKey('maintenance-item-operation-menu'),
+            tooltip: '操作',
+            onSelected: _loading
+                ? null
+                : (value) {
+                    if (value == 'create_item' && widget.canWrite) {
+                      _showEditDialog();
+                    }
+                  },
+            itemBuilder: (_) => const [
+              PopupMenuItem<String>(value: 'create_item', child: Text('新增项目')),
+            ],
+            enabled: widget.canWrite,
+            icon: const Icon(Icons.more_horiz),
+          ),
+        ],
       ),
-      filters: filtersToolbar,
       banner: _message.isEmpty
           ? null
           : Text(

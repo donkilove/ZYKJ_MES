@@ -65,7 +65,7 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
   Future<void> _loadEquipmentList() async {
     try {
       final results = await Future.wait<Object>([
-        _equipmentService.listEquipment(page: 1, pageSize: 500),
+        _equipmentService.listEquipment(page: 1, pageSize: 200),
         _equipmentService.listAllOwners(),
       ]);
       final result = results[0] as EquipmentLedgerListResult;
@@ -203,173 +203,166 @@ class _MaintenanceRecordPageState extends State<MaintenanceRecordPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    final filtersToolbar = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          children: [
+    final filtersToolbar = LayoutBuilder(
+      builder: (context, constraints) => Row(
+        children: [
+          SizedBox(
+            width: 260,
+            child: TextField(
+              key: const ValueKey('maintenance-record-keyword-field'),
+              controller: _keywordController,
+              decoration: const InputDecoration(
+                labelText: '搜索设备/项目/结果',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              onSubmitted: (_) => _loadItems(page: 1),
+            ),
+          ),
+          const SizedBox(width: 12),
+          if (_ownerOptions.isNotEmpty)
             Expanded(
-              child: TextField(
-                controller: _keywordController,
+              child: DropdownButtonFormField<int?>(
+                initialValue: _executorIdFilter,
                 decoration: const InputDecoration(
-                  labelText: '搜索设备/项目/结果',
+                  labelText: '执行人',
                   border: OutlineInputBorder(),
+                  isDense: true,
                 ),
-                onSubmitted: (_) => _loadItems(page: 1),
-              ),
-            ),
-            const SizedBox(width: 12),
-            if (_ownerOptions.isNotEmpty)
-              SizedBox(
-                width: 220,
-                child: DropdownButtonFormField<int?>(
-                  initialValue: _executorIdFilter,
-                  decoration: const InputDecoration(
-                    labelText: '执行人',
-                    border: OutlineInputBorder(),
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text('全部执行人'),
                   ),
-                  items: [
-                    const DropdownMenuItem<int?>(
-                      value: null,
-                      child: Text('全部执行人'),
+                  ..._ownerOptions.map(
+                    (owner) => DropdownMenuItem<int?>(
+                      value: owner.userId,
+                      child: Text(owner.displayName),
                     ),
-                    ..._ownerOptions.map(
-                      (owner) => DropdownMenuItem<int?>(
-                        value: owner.userId,
-                        child: Text(owner.displayName),
-                      ),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _executorIdFilter = value);
-                  },
-                ),
-              ),
-            if (_ownerOptions.isNotEmpty) const SizedBox(width: 12),
-            OutlinedButton.icon(
-              onPressed: () async {
-                final picked = await _pickDate(
-                  initialDate: _startDate ?? DateTime.now(),
-                );
-                if (!mounted) {
-                  return;
-                }
-                if (picked != null) {
-                  setState(() {
-                    _startDate = picked;
-                  });
-                }
-              },
-              icon: const Icon(Icons.event),
-              label: Text(
-                _startDate == null ? '开始日期' : _formatDate(_startDate!),
-              ),
-            ),
-            const SizedBox(width: 12),
-            OutlinedButton.icon(
-              onPressed: () async {
-                final picked = await _pickDate(
-                  initialDate: _endDate ?? DateTime.now(),
-                );
-                if (!mounted) {
-                  return;
-                }
-                if (picked != null) {
-                  setState(() {
-                    _endDate = picked;
-                  });
-                }
-              },
-              icon: const Icon(Icons.event_available),
-              label: Text(_endDate == null ? '结束日期' : _formatDate(_endDate!)),
-            ),
-            const SizedBox(width: 12),
-            FilledButton.icon(
-              onPressed: _loading ? null : () => _loadItems(page: 1),
-              icon: const Icon(Icons.search),
-              label: const Text('查询'),
-            ),
-            const SizedBox(width: 12),
-            TextButton(
-              onPressed: _loading
-                  ? null
-                  : () {
-                      setState(() {
-                        _startDate = null;
-                        _endDate = null;
-                        _executorIdFilter = null;
-                        _equipmentIdFilter = null;
-                        _resultSummaryFilter = null;
-                      });
-                      _loadItems(page: 1);
-                    },
-              child: const Text('清空筛选'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            SizedBox(
-              width: 160,
-              child: DropdownButtonFormField<String?>(
-                initialValue: _resultSummaryFilter,
-                items: const [
-                  DropdownMenuItem<String?>(value: null, child: Text('全部结果')),
-                  DropdownMenuItem<String?>(value: '完成', child: Text('完成')),
-                  DropdownMenuItem<String?>(value: '失败', child: Text('失败')),
+                  ),
                 ],
                 onChanged: (value) {
-                  setState(() => _resultSummaryFilter = value);
+                  setState(() => _executorIdFilter = value);
+                },
+              ),
+            ),
+          if (_ownerOptions.isNotEmpty) const SizedBox(width: 12),
+          SizedBox(
+            width: 160,
+            child: DropdownButtonFormField<String?>(
+              initialValue: _resultSummaryFilter,
+              items: const [
+                DropdownMenuItem<String?>(value: null, child: Text('全部结果')),
+                DropdownMenuItem<String?>(value: '完成', child: Text('完成')),
+                DropdownMenuItem<String?>(value: '失败', child: Text('失败')),
+              ],
+              onChanged: (value) {
+                setState(() => _resultSummaryFilter = value);
+              },
+              decoration: const InputDecoration(
+                labelText: '结果',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+          ),
+          if (_equipmentList.isNotEmpty) ...[
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 200,
+              child: DropdownButtonFormField<int?>(
+                initialValue: _equipmentIdFilter,
+                items: [
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text('全部设备'),
+                  ),
+                  ..._equipmentList.map(
+                    (e) => DropdownMenuItem<int?>(
+                      value: e.id,
+                      child: Text(e.name),
+                    ),
+                  ),
+                ],
+                onChanged: (value) {
+                  setState(() => _equipmentIdFilter = value);
                 },
                 decoration: const InputDecoration(
-                  labelText: '结果',
+                  labelText: '设备',
                   border: OutlineInputBorder(),
                   isDense: true,
                 ),
               ),
             ),
-            if (_equipmentList.isNotEmpty) ...[
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 200,
-                child: DropdownButtonFormField<int?>(
-                  initialValue: _equipmentIdFilter,
-                  items: [
-                    const DropdownMenuItem<int?>(
-                      value: null,
-                      child: Text('全部设备'),
-                    ),
-                    ..._equipmentList.map(
-                      (e) => DropdownMenuItem<int?>(
-                        value: e.id,
-                        child: Text(e.name),
-                      ),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _equipmentIdFilter = value);
-                  },
-                  decoration: const InputDecoration(
-                    labelText: '设备',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-              ),
-            ],
           ],
-        ),
-      ],
+          const SizedBox(width: 12),
+          OutlinedButton.icon(
+            onPressed: () async {
+              final picked = await _pickDate(
+                initialDate: _startDate ?? DateTime.now(),
+              );
+              if (!mounted) {
+                return;
+              }
+              if (picked != null) {
+                setState(() {
+                  _startDate = picked;
+                });
+              }
+            },
+            icon: const Icon(Icons.event),
+            label: Text(_startDate == null ? '开始日期' : _formatDate(_startDate!)),
+          ),
+          const SizedBox(width: 12),
+          OutlinedButton.icon(
+            onPressed: () async {
+              final picked = await _pickDate(
+                initialDate: _endDate ?? DateTime.now(),
+              );
+              if (!mounted) {
+                return;
+              }
+              if (picked != null) {
+                setState(() {
+                  _endDate = picked;
+                });
+              }
+            },
+            icon: const Icon(Icons.event_available),
+            label: Text(_endDate == null ? '结束日期' : _formatDate(_endDate!)),
+          ),
+          const SizedBox(width: 12),
+          FilledButton.icon(
+            onPressed: _loading ? null : () => _loadItems(page: 1),
+            icon: const Icon(Icons.search),
+            label: const Text('查询'),
+          ),
+          const SizedBox(width: 12),
+          TextButton(
+            onPressed: _loading
+                ? null
+                : () {
+                    setState(() {
+                      _startDate = null;
+                      _endDate = null;
+                      _executorIdFilter = null;
+                      _equipmentIdFilter = null;
+                      _resultSummaryFilter = null;
+                    });
+                    _loadItems(page: 1);
+                  },
+            child: const Text('清空筛选'),
+          ),
+        ],
+      ),
     );
 
     return MesCrudPageScaffold(
       header: MaintenanceRecordPageHeader(
         loading: _loading,
+        leading: filtersToolbar,
         onRefresh: () => _loadItems(page: _page),
       ),
-      filters: filtersToolbar,
       banner: _message.isEmpty
           ? null
           : Text(

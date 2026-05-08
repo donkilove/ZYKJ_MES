@@ -355,13 +355,6 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
             icon: const Icon(Icons.search),
             label: const Text('搜索'),
           ),
-          FilledButton.icon(
-            onPressed: (_loading || !widget.canWrite)
-                ? null
-                : () => _showEditDialog(),
-            icon: const Icon(Icons.add),
-            label: const Text('新增设备'),
-          ),
         ];
         final desktopToolbarMinWidth =
             desktopSearchMinWidth +
@@ -410,11 +403,32 @@ class _EquipmentLedgerPageState extends State<EquipmentLedgerPage> {
 
     return MesCrudPageScaffold(
       header: MesRefreshPageHeader(
+        leading: filtersToolbar,
         onRefresh: _loading
             ? null
             : () => _loadItems(page: _page, reloadOwners: widget.canWrite),
+        actionsBeforeRefresh: [
+          PopupMenuButton<String>(
+            key: const ValueKey('equipment-ledger-operation-menu'),
+            tooltip: '操作',
+            onSelected: _loading
+                ? null
+                : (value) {
+                    if (value == 'create_equipment' && widget.canWrite) {
+                      _showEditDialog();
+                    }
+                  },
+            itemBuilder: (context) => const [
+              PopupMenuItem<String>(
+                value: 'create_equipment',
+                child: Text('新增设备'),
+              ),
+            ],
+            enabled: widget.canWrite,
+            icon: const Icon(Icons.more_horiz),
+          ),
+        ],
       ),
-      filters: filtersToolbar,
       banner: _message.isEmpty
           ? null
           : Text(

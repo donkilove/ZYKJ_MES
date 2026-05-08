@@ -125,6 +125,7 @@ class _FakeEquipmentService extends EquipmentService {
   final Completer<MaintenanceItemListResult>? maintenanceItemListCompleter;
   final Completer<List<EquipmentOwnerOption>>? ownerListCompleter;
   int equipmentListCalls = 0;
+  int? lastEquipmentListPageSize;
   int maintenanceItemListCalls = 0;
   final List<EquipmentOwnerOption> _owners;
   final List<EquipmentLedgerItem> _equipmentItems;
@@ -151,6 +152,7 @@ class _FakeEquipmentService extends EquipmentService {
     String? ownerName,
   }) async {
     equipmentListCalls += 1;
+    lastEquipmentListPageSize = pageSize;
     final completer = equipmentListCompleter;
     if (completer != null) {
       return completer.future;
@@ -797,7 +799,10 @@ void main() {
 
     expect(find.text('搜索设备编号/名称/型号/位置/负责人'), findsOneWidget);
     expect(find.text('位置筛选'), findsOneWidget);
-    expect(find.text('新增设备'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('equipment-ledger-operation-menu')),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -872,7 +877,11 @@ void main() {
       size: const Size(1600, 1200),
     );
 
-    await tester.tap(find.text('新增设备'));
+    await tester.tap(
+      find.byKey(const ValueKey('equipment-ledger-operation-menu')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新增设备').last);
     await tester.pumpAndSettle();
     await tester.enterText(
       find.widgetWithText(TextFormField, '设备编号'),
@@ -954,7 +963,11 @@ void main() {
       size: const Size(1600, 1200),
     );
 
-    await tester.tap(find.text('新增项目'));
+    await tester.tap(
+      find.byKey(const ValueKey('maintenance-item-operation-menu')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新增项目').last);
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, '项目名称'), '周度点检');
     await tester.enterText(find.widgetWithText(TextField, '默认周期天数'), '7');
@@ -1159,13 +1172,27 @@ void main() {
       size: const Size(1600, 1200),
     );
 
-    await tester.tap(find.text('新增计划'));
+    await tester.tap(
+      find.byKey(const ValueKey('maintenance-plan-operation-menu')),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('maintenance-plan-operation-menu')),
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('maintenance-plan-operation-menu')),
+      warnIfMissed: false,
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.ensureVisible(find.text('新增计划').last);
+    await tester.tap(find.text('新增计划').last, warnIfMissed: false);
     await tester.pumpAndSettle();
     await tester.tap(find.text('保存').last);
     await tester.pumpAndSettle();
     expect(equipmentService.createPlanCalls, 1);
 
-    await tester.tap(_popupMenuButtonFinder().first, warnIfMissed: false);
+    await tester.tap(_popupMenuButtonFinder().at(1), warnIfMissed: false);
     await tester.pumpAndSettle();
     await tester.tap(find.text('编辑').last);
     await tester.pumpAndSettle();
@@ -1173,7 +1200,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(equipmentService.updatePlanCalls, 1);
 
-    await tester.tap(_popupMenuButtonFinder().first, warnIfMissed: false);
+    await tester.tap(_popupMenuButtonFinder().at(1), warnIfMissed: false);
     await tester.pumpAndSettle();
     await tester.tap(find.text('停用').last);
     await tester.pumpAndSettle();
@@ -1185,7 +1212,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(equipmentService.togglePlanCalls, 1);
 
-    await tester.tap(_popupMenuButtonFinder().first, warnIfMissed: false);
+    await tester.tap(_popupMenuButtonFinder().at(1), warnIfMissed: false);
     await tester.pumpAndSettle();
     await tester.tap(find.text('删除').last);
     await tester.pumpAndSettle();
@@ -1337,6 +1364,40 @@ void main() {
     expect(find.text('到期日期'), findsAtLeastNWidgets(1));
     expect(find.text('结果摘要'), findsAtLeastNWidgets(1));
     expect(find.text('#4'), findsOneWidget);
+  });
+
+  testWidgets('保养执行页眉在宽屏下保持单行', (tester) async {
+    final equipmentService = _FakeEquipmentService();
+    await _pumpPage(
+      tester,
+      MaintenanceExecutionPage(
+        session: session,
+        onLogout: () {},
+        canExecute: true,
+        equipmentService: equipmentService,
+        craftService: craftService,
+      ),
+      size: const Size(1800, 1200),
+    );
+
+    final searchField = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField && widget.decoration?.labelText == '搜索设备/项目/结果',
+    );
+    final statusField = find.widgetWithText(
+      DropdownButtonFormField<String?>,
+      '全部状态',
+    );
+    final stageField = find.widgetWithText(
+      DropdownButtonFormField<String?>,
+      '全部工段',
+    );
+    final queryButton = find.widgetWithText(FilledButton, '查询');
+
+    final baseline = tester.getTopLeft(searchField).dy;
+    expect((baseline - tester.getTopLeft(statusField).dy).abs(), lessThan(6));
+    expect((baseline - tester.getTopLeft(stageField).dy).abs(), lessThan(6));
+    expect((baseline - tester.getTopLeft(queryButton).dy).abs(), lessThan(6));
   });
 
   testWidgets('保养执行页工段加载失败时展示反馈', (tester) async {
@@ -1626,5 +1687,47 @@ void main() {
     expect(find.text('完成时间'), findsAtLeastNWidgets(1));
     expect(find.text('执行人'), findsWidgets);
     expect(find.text('执行正常'), findsOneWidget);
+  });
+
+  testWidgets('保养记录页面筛选项加载遵守后端 page_size 上限且页眉保持单行', (tester) async {
+    final equipmentService = _FakeEquipmentService();
+    await _pumpPage(
+      tester,
+      MaintenanceRecordPage(
+        session: session,
+        onLogout: () {},
+        equipmentService: equipmentService,
+      ),
+      size: const Size(1800, 1200),
+    );
+
+    expect(equipmentService.lastEquipmentListPageSize, 200);
+
+    final searchField = find.byKey(
+      const ValueKey('maintenance-record-keyword-field'),
+    );
+    final queryButton = find.widgetWithText(FilledButton, '查询');
+    final executorField = find.widgetWithText(
+      DropdownButtonFormField<int?>,
+      '全部执行人',
+    );
+    final resultField = find.widgetWithText(
+      DropdownButtonFormField<String?>,
+      '全部结果',
+    );
+
+    final searchTop = tester.getTopLeft(searchField).dy;
+    final queryTop = tester.getTopLeft(queryButton).dy;
+    final executorTop = tester.getTopLeft(executorField).dy;
+    final resultTop = tester.getTopLeft(resultField).dy;
+
+    expect((searchTop - queryTop).abs(), lessThan(6));
+    expect((searchTop - executorTop).abs(), lessThan(6));
+    expect((searchTop - resultTop).abs(), lessThan(6));
+
+    final searchRect = tester.getRect(searchField);
+    final executorRect = tester.getRect(executorField);
+    expect(executorRect.width, greaterThan(260));
+    expect(executorRect.left, greaterThan(searchRect.right));
   });
 }

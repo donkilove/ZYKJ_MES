@@ -5,17 +5,22 @@ class MaintenanceExecutionPageHeader extends StatelessWidget {
   const MaintenanceExecutionPageHeader({
     super.key,
     required this.loading,
+    required this.leading,
     required this.onRefresh,
   });
 
   final bool loading;
+  final Widget leading;
   final VoidCallback onRefresh;
 
   @override
   Widget build(BuildContext context) {
     return KeyedSubtree(
       key: const ValueKey('maintenance-execution-page-header'),
-      child: MesRefreshPageHeader(onRefresh: loading ? null : onRefresh),
+      child: MesRefreshPageHeader(
+        leading: leading,
+        onRefresh: loading ? null : onRefresh,
+      ),
     );
   }
 }

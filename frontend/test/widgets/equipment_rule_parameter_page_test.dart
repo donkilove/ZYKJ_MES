@@ -475,7 +475,11 @@ void main() {
 
     await _pumpPage(tester, service: service);
 
-    await tester.tap(find.widgetWithText(FilledButton, '新增规则'));
+    await tester.tap(
+      find.byKey(const ValueKey('equipment-rule-tab-operation-menu')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新增规则').last);
     await tester.pumpAndSettle();
     await tester.enterText(_dialogTextFields().at(0), 'RULE-12');
     await tester.enterText(_dialogTextFields().at(1), '温度规则');
@@ -540,7 +544,11 @@ void main() {
     await tester.tap(find.text('运行参数'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, '新增参数'));
+    await tester.tap(
+      find.byKey(const ValueKey('equipment-parameter-tab-operation-menu')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('新增参数').last);
     await tester.pumpAndSettle();
     await tester.enterText(_dialogTextFields().at(0), 'TEMP');
     await tester.enterText(_dialogTextFields().at(1), '温度');
