@@ -757,6 +757,130 @@ void main() {
     expect(find.text('可见12 / 分配12 / 完成0'), findsNothing);
   });
 
+  testWidgets('订单查询页桌面较窄宽度下仍尽量保持单行', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1320, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final service = _FakeProductionOrderQueryPageService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionOrderQueryPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canFirstArticle: true,
+            canEndProduction: true,
+            canCreateManualRepairOrder: true,
+            canCreateAssistAuthorization: true,
+            canProxyView: false,
+            canExportCsv: true,
+            service: service,
+            pollInterval: Duration.zero,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final viewModeRect = tester.getRect(_findDropdownByLabel('工单视角'));
+    final statusRect = tester.getRect(_findDropdownByLabel('状态'));
+    final processRect = tester.getRect(_findDropdownByLabel('当前工序'));
+    final queryButtonRect = tester.getRect(
+      find.widgetWithText(FilledButton, '查询'),
+    );
+    final operationMenuRect = tester.getRect(
+      find.byKey(const ValueKey('production-order-query-operation-menu')),
+    );
+    final refreshButtonRect = tester.getRect(find.byTooltip('刷新'));
+
+    expect(viewModeRect.center.dy, closeTo(queryButtonRect.center.dy, 1));
+    expect(statusRect.center.dy, closeTo(queryButtonRect.center.dy, 1));
+    expect(processRect.center.dy, closeTo(queryButtonRect.center.dy, 1));
+    expect(operationMenuRect.center.dy, closeTo(queryButtonRect.center.dy, 1));
+    expect(refreshButtonRect.center.dy, closeTo(queryButtonRect.center.dy, 1));
+    expect(viewModeRect.right, lessThan(statusRect.left));
+    expect(statusRect.right, lessThan(processRect.left));
+    expect(processRect.right, lessThan(queryButtonRect.left));
+    expect(queryButtonRect.right, lessThan(operationMenuRect.left));
+    expect(operationMenuRect.right, lessThan(refreshButtonRect.left));
+  });
+
+  testWidgets('订单查询页筛选下拉统一收紧为相同宽度', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1320, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final service = _FakeProductionOrderQueryPageService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionOrderQueryPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canFirstArticle: true,
+            canEndProduction: true,
+            canCreateManualRepairOrder: true,
+            canCreateAssistAuthorization: true,
+            canProxyView: false,
+            canExportCsv: true,
+            service: service,
+            pollInterval: Duration.zero,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final viewModeRect = tester.getRect(_findDropdownByLabel('工单视角'));
+    final statusRect = tester.getRect(_findDropdownByLabel('状态'));
+    final processRect = tester.getRect(_findDropdownByLabel('当前工序'));
+
+    expect(viewModeRect.width, closeTo(statusRect.width, 1));
+    expect(statusRect.width, closeTo(processRect.width, 1));
+    expect(processRect.width, lessThan(200));
+  });
+
+  testWidgets('订单查询页宽度明显不足时查询按钮折到下一行', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(1100, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final service = _FakeProductionOrderQueryPageService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionOrderQueryPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canFirstArticle: true,
+            canEndProduction: true,
+            canCreateManualRepairOrder: true,
+            canCreateAssistAuthorization: true,
+            canProxyView: false,
+            canExportCsv: true,
+            service: service,
+            pollInterval: Duration.zero,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    final viewModeRect = tester.getRect(_findDropdownByLabel('工单视角'));
+    final queryButtonRect = tester.getRect(
+      find.widgetWithText(FilledButton, '查询'),
+    );
+
+    expect(queryButtonRect.center.dy, greaterThan(viewModeRect.center.dy + 20));
+  });
+
   testWidgets('订单查询页仅在具备权限时显示导出按钮', (tester) async {
     await _setWideViewport(tester);
     final service = _FakeProductionOrderQueryPageService();
