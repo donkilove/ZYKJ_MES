@@ -324,20 +324,6 @@ const fallbackPageCatalog = <PageCatalogItem>[
   ),
 
   PageCatalogItem(
-    code: 'equipment_rule_parameter',
-
-    name: '规则与参数',
-
-    pageType: 'tab',
-
-    parentCode: 'equipment',
-
-    alwaysVisible: false,
-
-    sortOrder: 46,
-  ),
-
-  PageCatalogItem(
     code: 'production',
 
     name: '生产',

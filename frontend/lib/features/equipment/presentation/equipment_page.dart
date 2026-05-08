@@ -6,7 +6,6 @@ import 'package:mes_client/core/models/authz_models.dart';
 import 'package:mes_client/features/equipment/presentation/widgets/equipment_page_header.dart';
 import 'package:mes_client/features/equipment/presentation/widgets/equipment_page_shell.dart';
 import 'package:mes_client/features/equipment/presentation/equipment_ledger_page.dart';
-import 'package:mes_client/features/equipment/presentation/equipment_rule_parameter_page.dart';
 import 'package:mes_client/features/equipment/presentation/maintenance_execution_page.dart';
 import 'package:mes_client/features/equipment/presentation/maintenance_item_page.dart';
 import 'package:mes_client/features/equipment/presentation/maintenance_plan_page.dart';
@@ -17,7 +16,6 @@ const String maintenanceItemTabCode = 'maintenance_item';
 const String maintenancePlanTabCode = 'maintenance_plan';
 const String maintenanceExecutionTabCode = 'maintenance_execution';
 const String maintenanceRecordTabCode = 'maintenance_record';
-const String equipmentRuleParameterTabCode = 'equipment_rule_parameter';
 
 const List<String> _defaultTabOrder = [
   equipmentLedgerTabCode,
@@ -25,7 +23,6 @@ const List<String> _defaultTabOrder = [
   maintenancePlanTabCode,
   maintenanceExecutionTabCode,
   maintenanceRecordTabCode,
-  equipmentRuleParameterTabCode,
 ];
 
 class EquipmentPage extends StatefulWidget {
@@ -167,8 +164,6 @@ class _EquipmentPageState extends State<EquipmentPage>
         return '保养执行';
       case maintenanceRecordTabCode:
         return '保养记录';
-      case equipmentRuleParameterTabCode:
-        return '规则与参数';
       default:
         return code;
     }
@@ -222,30 +217,6 @@ class _EquipmentPageState extends State<EquipmentPage>
           MaintenanceRecordPage(
             session: widget.session,
             onLogout: widget.onLogout,
-          ),
-        );
-      case equipmentRuleParameterTabCode:
-        return _wrapTabContent(
-          code,
-          EquipmentRuleParameterPage(
-            session: widget.session,
-            onLogout: widget.onLogout,
-            canViewRules:
-                _hasPermission(EquipmentFeaturePermissionCodes.rulesView) ||
-                _hasPermission(EquipmentFeaturePermissionCodes.rulesManage),
-            canManageRules: _hasPermission(
-              EquipmentFeaturePermissionCodes.rulesManage,
-            ),
-            canViewParameters:
-                _hasPermission(
-                  EquipmentFeaturePermissionCodes.runtimeParametersView,
-                ) ||
-                _hasPermission(
-                  EquipmentFeaturePermissionCodes.runtimeParametersManage,
-                ),
-            canManageParameters: _hasPermission(
-              EquipmentFeaturePermissionCodes.runtimeParametersManage,
-            ),
           ),
         );
       default:

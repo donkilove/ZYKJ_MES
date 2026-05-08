@@ -43,15 +43,12 @@ void main() {
         session: session,
         onLogout: () {},
         visibleTabCodes: const [
-          equipmentRuleParameterTabCode,
           'unknown_tab',
           maintenanceExecutionTabCode,
           equipmentLedgerTabCode,
         ],
         capabilityCodes: const {
           EquipmentFeaturePermissionCodes.executionsOperate,
-          EquipmentFeaturePermissionCodes.rulesView,
-          EquipmentFeaturePermissionCodes.runtimeParametersView,
         },
         preferredTabCode: maintenanceExecutionTabCode,
         routePayloadJson: payload,
@@ -68,7 +65,7 @@ void main() {
         .widgetList<Tab>(find.byType(Tab))
         .map((widget) => widget.text)
         .toList();
-    expect(tabs, ['设备台账', '保养执行', '规则与参数']);
+    expect(tabs, ['设备台账', '保养执行']);
     expect(find.text('tab:$maintenanceExecutionTabCode'), findsOneWidget);
     expect(find.text('payload:$payload'), findsOneWidget);
 

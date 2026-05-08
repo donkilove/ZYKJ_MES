@@ -16,7 +16,6 @@ import 'package:mes_client/features/craft/presentation/craft_kanban_page.dart';
 import 'package:mes_client/features/craft/presentation/craft_page.dart';
 import 'package:mes_client/features/craft/presentation/craft_reference_analysis_page.dart';
 import 'package:mes_client/features/equipment/presentation/equipment_page.dart';
-import 'package:mes_client/features/equipment/presentation/equipment_rule_parameter_page.dart';
 import 'package:mes_client/features/misc/presentation/force_change_password_page.dart';
 import 'package:mes_client/features/user/presentation/function_permission_config_page.dart';
 import 'package:mes_client/features/misc/presentation/login_page.dart';
@@ -788,7 +787,7 @@ void main() {
     expect(authService.lastUsername, 'tester');
   });
 
-  testWidgets('登录后进入设备总页并完成详情链路与规则参数关键动作', (tester) async {
+  testWidgets('登录后进入设备总页并完成保养执行详情链路', (tester) async {
     final authService = _FakeAuthService();
     final equipmentService = _FakeIntegrationEquipmentService();
     final craftService = _FakeIntegrationCraftService();
@@ -804,14 +803,9 @@ void main() {
           visibleTabCodes: const [
             equipmentLedgerTabCode,
             maintenanceExecutionTabCode,
-            equipmentRuleParameterTabCode,
           ],
           capabilityCodes: const {
             EquipmentFeaturePermissionCodes.executionsOperate,
-            EquipmentFeaturePermissionCodes.rulesView,
-            EquipmentFeaturePermissionCodes.rulesManage,
-            EquipmentFeaturePermissionCodes.runtimeParametersView,
-            EquipmentFeaturePermissionCodes.runtimeParametersManage,
           },
           preferredTabCode: maintenanceExecutionTabCode,
           routePayloadJson: '{"action":"detail","work_order_id":4}',
@@ -824,17 +818,6 @@ void main() {
                 jumpPayloadJson: child.jumpPayloadJson,
                 equipmentService: equipmentService,
                 craftService: craftService,
-              );
-            }
-            if (child is EquipmentRuleParameterPage) {
-              return EquipmentRuleParameterPage(
-                session: child.session,
-                onLogout: child.onLogout,
-                canViewRules: child.canViewRules,
-                canManageRules: child.canManageRules,
-                canViewParameters: child.canViewParameters,
-                canManageParameters: child.canManageParameters,
-                service: equipmentService,
               );
             }
             return child;
@@ -859,18 +842,6 @@ void main() {
 
     await tester.pageBack();
     await tester.pumpAndSettle();
-
-    await tester.tap(find.widgetWithText(Tab, '规则与参数'));
-    await tester.pumpAndSettle();
-    expect(find.text('压力规则'), findsOneWidget);
-
-    await tester.tap(
-      find.byKey(const Key('equipment-rule-open-parameters-11')),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.textContaining('当前按规则作用范围查看参数'), findsOneWidget);
-    expect(find.text('压力'), findsOneWidget);
 
     expect(authService.lastUsername, 'tester');
   });
@@ -1729,45 +1700,7 @@ class _FakeIntegrationQualitySupplierService extends QualitySupplierService {
 
 class _FakeIntegrationEquipmentService extends EquipmentService {
   _FakeIntegrationEquipmentService()
-    : _rules = <EquipmentRuleItem>[
-        EquipmentRuleItem(
-          id: 11,
-          equipmentId: 101,
-          equipmentType: '冲压机',
-          equipmentCode: 'EQ-101',
-          equipmentName: '冲压机-1',
-          ruleCode: 'RULE-11',
-          ruleName: '压力规则',
-          ruleType: '阈值',
-          conditionDesc: '压力超限',
-          isEnabled: true,
-          effectiveAt: DateTime.parse('2026-03-01T00:00:00Z'),
-          remark: '集成规则',
-          createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
-          updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
-        ),
-      ],
-      _parameters = <EquipmentRuntimeParameterItem>[
-        EquipmentRuntimeParameterItem(
-          id: 21,
-          equipmentId: 101,
-          equipmentType: '冲压机',
-          equipmentCode: 'EQ-101',
-          equipmentName: '冲压机-1',
-          paramCode: 'PRESSURE',
-          paramName: '压力',
-          unit: 'bar',
-          standardValue: '1.2',
-          upperLimit: '1.5',
-          lowerLimit: '1.0',
-          effectiveAt: DateTime.parse('2026-03-01T00:00:00Z'),
-          isEnabled: true,
-          remark: '集成参数',
-          createdAt: DateTime.parse('2026-03-01T00:00:00Z'),
-          updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
-        ),
-      ],
-      _workOrders = <MaintenanceWorkOrderItem>[
+    : _workOrders = <MaintenanceWorkOrderItem>[
         MaintenanceWorkOrderItem(
           id: 4,
           planId: 3,
@@ -1798,8 +1731,6 @@ class _FakeIntegrationEquipmentService extends EquipmentService {
 
   int detailCalls = 0;
   int startCalls = 0;
-  final List<EquipmentRuleItem> _rules;
-  final List<EquipmentRuntimeParameterItem> _parameters;
   final List<MaintenanceWorkOrderItem> _workOrders;
 
   @override
@@ -1914,40 +1845,6 @@ class _FakeIntegrationEquipmentService extends EquipmentService {
       recordId: null,
     );
   }
-
-  @override
-  Future<EquipmentRuleListResult> listEquipmentRules({
-    int? equipmentId,
-    String? keyword,
-    bool? isEnabled,
-    int page = 1,
-    int pageSize = 20,
-  }) async {
-    return EquipmentRuleListResult(total: _rules.length, items: _rules);
-  }
-
-  @override
-  Future<EquipmentRuntimeParameterListResult> listRuntimeParameters({
-    int? equipmentId,
-    String? equipmentType,
-    String? keyword,
-    bool? isEnabled,
-    int page = 1,
-    int pageSize = 20,
-  }) async {
-    final filtered = _parameters.where((item) {
-      final equipmentMatched =
-          equipmentId == null || item.equipmentId == equipmentId;
-      final typeMatched =
-          equipmentType == null || item.equipmentType == equipmentType;
-      final statusMatched = isEnabled == null || item.isEnabled == isEnabled;
-      return equipmentMatched && typeMatched && statusMatched;
-    }).toList();
-    return EquipmentRuntimeParameterListResult(
-      total: filtered.length,
-      items: filtered,
-    );
-  }
 }
 
 class _FakeAuthService extends AuthService {
@@ -1974,7 +1871,11 @@ class _FakeAuthService extends AuthService {
     if (loginError != null) {
       throw loginError!;
     }
-    return (token: 'token-123', mustChangePassword: mustChangePassword, expiresIn: 7200);
+    return (
+      token: 'token-123',
+      mustChangePassword: mustChangePassword,
+      expiresIn: 7200,
+    );
   }
 
   @override
