@@ -43,6 +43,7 @@ class FirstArticleListItem(BaseModel):
     operator_user_id: int
     operator_username: str
     result: str
+    record_status: str = "active"
     verification_date: date
     verification_code: str | None = None
     remark: str | None = None
@@ -69,12 +70,17 @@ class FirstArticleDetail(BaseModel):
     operator_user_id: int
     operator_username: str
     result: str
+    record_status: str = "active"
+    can_cancel: bool = False
+    can_delete: bool = False
     verification_date: date
     verification_code: str | None = None
     template_id: int | None = None
     template_name: str | None = None
     check_content: str | None = None
     test_value: str | None = None
+    cancelled_at: datetime | None = None
+    cancelled_by_username: str | None = None
     participants: list["FirstArticleParticipantItem"] = Field(default_factory=list)
     remark: str | None = None
     created_at: datetime
@@ -202,6 +208,21 @@ class FirstArticleDispositionRequest(BaseModel):
     disposition_opinion: str = Field(min_length=1)
     recheck_result: str | None = None
     final_judgment: str
+
+
+class FirstArticlePasswordActionRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=128)
+
+
+class FirstArticleActionResult(BaseModel):
+    record_id: int
+    record_status: str
+    message: str
+    order_id: int | None = None
+    order_code: str | None = None
+    process_name: str | None = None
+    cancelled_at: datetime | None = None
+    cancelled_by_username: str | None = None
 
 
 class FirstArticleDispositionHistoryItem(BaseModel):

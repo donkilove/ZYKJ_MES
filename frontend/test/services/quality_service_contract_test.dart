@@ -104,6 +104,46 @@ void main() {
       );
     });
 
+    test('cancelFirstArticle payload matches backend schema', () async {
+      final server = await TestHttpServer.start({
+        'POST /quality/first-articles/9/cancel': (request) {
+          final body = request.decodedBody as Map<String, dynamic>? ?? const {};
+          expect(body, {'password': 'Admin@123456'});
+          return TestResponse.json(200, body: {'data': {}});
+        },
+      });
+      addTearDown(server.close);
+
+      final service = QualityService(
+        AppSession(baseUrl: server.baseUrl, accessToken: 'quality-token'),
+      );
+
+      await service.cancelFirstArticle(
+        recordId: 9,
+        password: 'Admin@123456',
+      );
+    });
+
+    test('deleteFirstArticle payload matches backend schema', () async {
+      final server = await TestHttpServer.start({
+        'POST /quality/first-articles/9/delete': (request) {
+          final body = request.decodedBody as Map<String, dynamic>? ?? const {};
+          expect(body, {'password': 'Admin@123456'});
+          return TestResponse.json(200, body: {'data': {}});
+        },
+      });
+      addTearDown(server.close);
+
+      final service = QualityService(
+        AppSession(baseUrl: server.baseUrl, accessToken: 'quality-token'),
+      );
+
+      await service.deleteFirstArticle(
+        recordId: 9,
+        password: 'Admin@123456',
+      );
+    });
+
     test('detail and disposition detail use independent endpoints', () async {
       final server = await TestHttpServer.start({
         'GET /quality/first-articles/9': (_) {

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_detail_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_error_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 import 'package:mes_client/core/ui/patterns/mes_inline_banner.dart';
+import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
@@ -17,6 +19,8 @@ class FirstArticleDispositionPage extends StatefulWidget {
     required this.recordId,
     required this.onLogout,
     this.canDispose = false,
+    this.canCancel = false,
+    this.canDelete = false,
     this.isDispositionMode = false,
     this.service,
   });
@@ -25,6 +29,8 @@ class FirstArticleDispositionPage extends StatefulWidget {
   final int recordId;
   final VoidCallback onLogout;
   final bool canDispose;
+  final bool canCancel;
+  final bool canDelete;
   final bool isDispositionMode;
   final QualityService? service;
 
@@ -143,6 +149,151 @@ class _FirstArticleDispositionPageState
     }
   }
 
+  Future<void> _handleCancelFirstArticle() async {
+    await _submitPasswordAction(
+      action: 'cancel',
+      title: '取消首件',
+      riskDescription:
+          '该操作会将当前首件标记为已取消，并将对应操作员退回待生产状态。仅在首件通过后未产生真实报工时允许取消。',
+      submitLabel: '确认取消',
+      onSubmit: (password) =>
+          _service.cancelFirstArticle(recordId: widget.recordId, password: password),
+    );
+  }
+
+  Future<void> _handleDeleteFirstArticle() async {
+    await _submitPasswordAction(
+      action: 'delete',
+      title: '删除首件',
+      riskDescription:
+          '该操作会删除当前首件及其关联业务记录，删除后不可恢复。若该条有效首件后已存在真实报工，系统会拒绝删除。',
+      submitLabel: '确认删除',
+      onSubmit: (password) =>
+          _service.deleteFirstArticle(recordId: widget.recordId, password: password),
+    );
+  }
+
+  Future<void> _submitPasswordAction({
+    required String action,
+    required String title,
+    required String riskDescription,
+    required String submitLabel,
+    required Future<void> Function(String password) onSubmit,
+  }) async {
+    final password = await _showPasswordActionDialog(
+      title: title,
+      riskDescription: riskDescription,
+      submitLabel: submitLabel,
+      isDanger: action == 'delete',
+    );
+    if (!mounted || password == null) {
+      return;
+    }
+
+    setState(() {
+      _submitting = true;
+      _message = '';
+    });
+    try {
+      await onSubmit(password);
+      if (!mounted) {
+        return;
+      }
+      Navigator.of(context).pop(true);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (error is ApiException && error.statusCode == 401) {
+        widget.onLogout();
+        return;
+      }
+      setState(() {
+        _message =
+            '$title失败：${error is ApiException ? error.message : error.toString()}';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
+    }
+  }
+
+  Future<String?> _showPasswordActionDialog({
+    required String title,
+    required String riskDescription,
+    required String submitLabel,
+    required bool isDanger,
+  }) {
+    final passwordController = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    return showMesLockedFormDialog<String?>(
+      context: context,
+      wrapMesDialog: false,
+      builder: (dialogContext) {
+        return MesDialog(
+          title: Text(title),
+          width: 520,
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  riskDescription,
+                  style: TextStyle(
+                    color: isDanger
+                        ? Theme.of(dialogContext).colorScheme.error
+                        : Theme.of(dialogContext).colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  key: ValueKey('first-article-$title-password-field'),
+                  controller: passwordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: '当前登录密码',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return '请输入当前登录密码';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(null),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              style: isDanger
+                  ? FilledButton.styleFrom(
+                      backgroundColor: Theme.of(dialogContext).colorScheme.error,
+                      foregroundColor: Theme.of(dialogContext).colorScheme.onError,
+                    )
+                  : null,
+              onPressed: () {
+                if (!formKey.currentState!.validate()) {
+                  return;
+                }
+                Navigator.of(dialogContext).pop(passwordController.text);
+              },
+              child: Text(submitLabel),
+            ),
+          ],
+        );
+      },
+    ).whenComplete(passwordController.dispose);
+  }
+
   String _formatDateTime(DateTime? value) {
     if (value == null) {
       return '-';
@@ -183,11 +334,20 @@ class _FirstArticleDispositionPageState
     final canSubmitDisposition =
         widget.canDispose &&
         (_detail?.checkResult == 'failed' || _detail?.checkResult == 'fail');
+    final detail = _detail;
+    final canShowCancelButton =
+        !widget.isDispositionMode &&
+        widget.canCancel &&
+        (detail?.canCancel ?? false);
+    final canShowDeleteButton =
+        !widget.isDispositionMode &&
+        widget.canDelete &&
+        (detail?.canDelete ?? false);
     return Scaffold(
       body: SafeArea(
         child: _loading
             ? const MesLoadingState(label: '首件处置加载中...')
-            : _detail == null
+            : detail == null
             ? MesErrorState(
                 message: _message.isNotEmpty ? _message : '加载失败',
                 onRetry: _loadDetail,
@@ -207,49 +367,67 @@ class _FirstArticleDispositionPageState
                           child: MesDetailPageHeader(title: _pageTitle()),
                         ),
                         const SizedBox(height: 16),
+                        if (detail.recordStatus == 'cancelled') ...[
+                          MesInlineBanner.warning(
+                            message:
+                                '该条首件已取消。取消人：${_displayText(detail.cancelledByUsername)}，取消时间：${_formatDateTime(detail.cancelledAt)}',
+                          ),
+                          const SizedBox(height: 16),
+                        ],
                         MesSectionCard(
                           title: '首件基础信息',
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _InfoRow('校验码', _detail!.verificationCode),
-                              _InfoRow('订单号', _detail!.productionOrderCode),
+                              _InfoRow('校验码', detail.verificationCode),
+                              _InfoRow('记录状态', firstArticleRecordStatusLabel(detail.recordStatus)),
+                              _InfoRow('订单号', detail.productionOrderCode),
                               _InfoRow(
                                 '产品',
-                                '${_detail!.productName} (${_detail!.productCode})',
+                                '${detail.productName} (${detail.productCode})',
                               ),
-                              _InfoRow('工序', _detail!.processName),
-                              _InfoRow('操作员', _detail!.operatorUsername),
+                              _InfoRow('工序', detail.processName),
+                              _InfoRow('操作员', detail.operatorUsername),
                               _InfoRow(
                                 '模板名称',
-                                _displayText(_detail!.templateName),
+                                _displayText(detail.templateName),
                               ),
                               _InfoRow(
                                 '首件内容',
-                                _displayText(_detail!.checkContent),
+                                _displayText(detail.checkContent),
                               ),
                               _InfoRow(
                                 '首件测试值',
-                                _displayText(_detail!.testValue),
+                                _displayText(detail.testValue),
                               ),
                               _InfoRow(
                                 '参与操作员',
-                                _participantText(_detail!.participants),
+                                _participantText(detail.participants),
                               ),
                               _InfoRow(
                                 '检验结果',
-                                firstArticleResultLabel(_detail!.checkResult),
+                                firstArticleResultLabel(detail.checkResult),
                               ),
                               _InfoRow(
                                 '缺陷描述',
-                                _detail!.defectDescription.isEmpty
+                                detail.defectDescription.isEmpty
                                     ? '-'
-                                    : _detail!.defectDescription,
+                                    : detail.defectDescription,
                               ),
                               _InfoRow(
                                 '检验时间',
-                                _formatDateTime(_detail!.checkAt),
+                                _formatDateTime(detail.checkAt),
                               ),
+                              if (detail.recordStatus == 'cancelled') ...[
+                                _InfoRow(
+                                  '取消人',
+                                  _displayText(detail.cancelledByUsername),
+                                ),
+                                _InfoRow(
+                                  '取消时间',
+                                  _formatDateTime(detail.cancelledAt),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -431,6 +609,33 @@ class _FirstArticleDispositionPageState
                               child: const Text('返回'),
                             ),
                             const Spacer(),
+                            if (canShowCancelButton)
+                              OutlinedButton(
+                                key: const ValueKey('first-article-cancel-button'),
+                                onPressed: _submitting
+                                    ? null
+                                    : _handleCancelFirstArticle,
+                                child: const Text('取消首件'),
+                              ),
+                            if (canShowCancelButton && canShowDeleteButton)
+                              const SizedBox(width: 12),
+                            if (canShowDeleteButton)
+                              FilledButton(
+                                key: const ValueKey('first-article-delete-button'),
+                                style: FilledButton.styleFrom(
+                                  backgroundColor:
+                                      Theme.of(context).colorScheme.error,
+                                  foregroundColor:
+                                      Theme.of(context).colorScheme.onError,
+                                ),
+                                onPressed: _submitting
+                                    ? null
+                                    : _handleDeleteFirstArticle,
+                                child: const Text('删除首件'),
+                              ),
+                            if ((canShowCancelButton || canShowDeleteButton) &&
+                                canSubmitDisposition)
+                              const SizedBox(width: 12),
                             if (canSubmitDisposition)
                               FilledButton(
                                 onPressed: _submitting

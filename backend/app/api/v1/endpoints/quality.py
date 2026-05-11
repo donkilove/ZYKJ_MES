@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import require_permission, require_permission_fast
 from app.core.authz_catalog import (
+    PERM_QUALITY_FIRST_ARTICLES_CANCEL,
+    PERM_QUALITY_FIRST_ARTICLES_DELETE,
     PERM_QUALITY_REPAIR_ORDERS_COMPLETE,
     PERM_QUALITY_REPAIR_ORDERS_DETAIL,
     PERM_QUALITY_REPAIR_ORDERS_EXPORT,
@@ -21,6 +23,7 @@ from app.core.authz_catalog import (
     PERM_QUALITY_SUPPLIERS_DELETE,
     PERM_QUALITY_SUPPLIERS_UPDATE,
 )
+from app.core.security import verify_password
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
@@ -57,12 +60,14 @@ from app.schemas.quality import (
     SupplierUpdate,
     DefectAnalysisExportResult,
     DefectAnalysisResult,
+    FirstArticleActionResult,
     FirstArticleDetail,
     FirstArticleDispositionRequest,
     FirstArticleExportRequest,
     FirstArticleExportResult,
     FirstArticleListItem,
     FirstArticleListResult,
+    FirstArticlePasswordActionRequest,
     QualityOperatorStatItem,
     QualityOperatorStatsResult,
     QualityProcessStatItem,
@@ -76,6 +81,8 @@ from app.schemas.quality import (
     QualityTrendResult,
 )
 from app.services.quality_service import (
+    cancel_first_article,
+    delete_first_article,
     export_defect_analysis_csv,
     export_first_articles_csv,
     export_quality_stats_csv,
@@ -466,6 +473,153 @@ def submit_disposition_api(
             )
 
     return success_response(FirstArticleDetail(**detail))
+
+
+@router.post(
+    "/first-articles/{record_id}/cancel",
+    response_model=ApiResponse[FirstArticleActionResult],
+)
+def cancel_first_article_api(
+    record_id: int,
+    payload: FirstArticlePasswordActionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(PERM_QUALITY_FIRST_ARTICLES_CANCEL)),
+) -> ApiResponse[FirstArticleActionResult]:
+    if not verify_password(payload.password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="当前登录用户密码错误，无法取消首件",
+        )
+
+    closed_todo_user_ids: set[int] = set()
+    try:
+        result = cancel_first_article(
+            db,
+            record_id=record_id,
+            operator=current_user,
+        )
+        write_audit_log(
+            db,
+            action_code=PERM_QUALITY_FIRST_ARTICLES_CANCEL,
+            action_name="取消首件",
+            target_type="first_article_record",
+            target_id=str(record_id),
+            target_name=f"{result.get('order_code', '')} / {result.get('process_name', '')}",
+            operator=current_user,
+            after_data={
+                "record_status": result.get("record_status"),
+                "cancelled_at": result.get("cancelled_at").isoformat()
+                if result.get("cancelled_at")
+                else None,
+                "cancelled_by_username": result.get("cancelled_by_username"),
+            },
+        )
+        _, closed_todo_user_ids = close_source_todo_messages(
+            db,
+            source_module="quality",
+            source_type="first_article_record",
+            source_id=str(record_id),
+            reason="first_article_cancelled",
+            action_code="message.first_article_todo_closed",
+            action_name="首件待办关闭",
+        )
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    if closed_todo_user_ids:
+        invalidate_home_dashboard_cache(user_ids=closed_todo_user_ids)
+    return success_response(
+        FirstArticleActionResult(
+            record_id=int(result["record_id"]),
+            record_status=str(result["record_status"]),
+            message="首件已取消",
+            order_id=int(result["order_id"]) if result.get("order_id") else None,
+            order_code=result.get("order_code"),
+            process_name=result.get("process_name"),
+            cancelled_at=result.get("cancelled_at"),
+            cancelled_by_username=result.get("cancelled_by_username"),
+        ),
+        message="first_article_cancelled",
+    )
+
+
+@router.post(
+    "/first-articles/{record_id}/delete",
+    response_model=ApiResponse[FirstArticleActionResult],
+)
+def delete_first_article_api(
+    record_id: int,
+    payload: FirstArticlePasswordActionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission(PERM_QUALITY_FIRST_ARTICLES_DELETE)),
+) -> ApiResponse[FirstArticleActionResult]:
+    if not verify_password(payload.password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="当前登录用户密码错误，无法删除首件",
+        )
+
+    closed_todo_user_ids: set[int] = set()
+    try:
+        result = delete_first_article(
+            db,
+            record_id=record_id,
+            operator=current_user,
+        )
+        write_audit_log(
+            db,
+            action_code=PERM_QUALITY_FIRST_ARTICLES_DELETE,
+            action_name="删除首件",
+            target_type="first_article_record",
+            target_id=str(record_id),
+            target_name=f"{result.get('order_code', '')} / {result.get('process_name', '')}",
+            operator=current_user,
+            before_data={
+                "result": result.get("result"),
+                "record_status": result.get("record_status"),
+            },
+            after_data={
+                "deleted": True,
+                "rolled_back_execution_state": bool(
+                    result.get("rolled_back_execution_state")
+                ),
+            },
+        )
+        _, closed_todo_user_ids = close_source_todo_messages(
+            db,
+            source_module="quality",
+            source_type="first_article_record",
+            source_id=str(record_id),
+            reason="first_article_deleted",
+            action_code="message.first_article_todo_closed",
+            action_name="首件待办关闭",
+        )
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    if closed_todo_user_ids:
+        invalidate_home_dashboard_cache(user_ids=closed_todo_user_ids)
+    return success_response(
+        FirstArticleActionResult(
+            record_id=int(result["record_id"]),
+            record_status="deleted",
+            message="首件已删除",
+            order_id=int(result["order_id"]) if result.get("order_id") else None,
+            order_code=result.get("order_code"),
+            process_name=result.get("process_name"),
+        ),
+        message="first_article_deleted",
+    )
 
 
 @router.get("/stats/overview", response_model=ApiResponse[QualityStatsOverview])

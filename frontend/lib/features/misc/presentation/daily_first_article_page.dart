@@ -24,6 +24,8 @@ class DailyFirstArticlePage extends StatefulWidget {
     this.canViewDetail = false,
     this.canExport = false,
     this.canDispose = false,
+    this.canCancel = false,
+    this.canDelete = false,
     this.routePayloadJson,
     this.service,
   });
@@ -33,6 +35,8 @@ class DailyFirstArticlePage extends StatefulWidget {
   final bool canViewDetail;
   final bool canExport;
   final bool canDispose;
+  final bool canCancel;
+  final bool canDelete;
   final String? routePayloadJson;
   final QualityService? service;
 
@@ -262,6 +266,8 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
           session: widget.session,
           recordId: recordId,
           canDispose: widget.canDispose,
+          canCancel: widget.canCancel,
+          canDelete: widget.canDelete,
           isDispositionMode: isDispositionMode,
           onLogout: widget.onLogout,
           service: _service,
@@ -433,6 +439,7 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
               const DataColumn(label: Text('工序')),
               const DataColumn(label: Text('操作员')),
               const DataColumn(label: Text('结果')),
+              const DataColumn(label: Text('状态')),
               const DataColumn(label: Text('校验日期')),
               const DataColumn(label: Text('备注')),
               if (widget.canViewDetail || widget.canDispose)
@@ -440,7 +447,9 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
             ],
             rows: _items.map((item) {
               final canDisposeItem =
-                  widget.canDispose && item.result != 'passed';
+                  widget.canDispose &&
+                  item.recordStatus == 'active' &&
+                  item.result != 'passed';
               return DataRow(
                 cells: [
                   DataCell(Text(_formatDateTime(item.createdAt))),
@@ -449,6 +458,7 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
                   DataCell(Text('${item.processName} (${item.processCode})')),
                   DataCell(Text(item.operatorUsername)),
                   DataCell(Text(firstArticleResultLabel(item.result))),
+                  DataCell(Text(firstArticleRecordStatusLabel(item.recordStatus))),
                   DataCell(Text(_formatDate(item.verificationDate))),
                   DataCell(Text(item.remark ?? '-')),
                   if (widget.canViewDetail || canDisposeItem)

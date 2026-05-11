@@ -736,7 +736,15 @@ void main() {
             qualitySupplierManagementTabCode,
           ],
           capabilityCodes: const {
+            'feature.quality.first_articles.detail',
+            'feature.quality.first_articles.cancel',
+            'feature.quality.first_articles.delete',
+            'feature.quality.first_articles.disposition',
+          },
+          permissionCodes: const {
             'quality.first_articles.detail',
+            'quality.first_articles.cancel',
+            'quality.first_articles.delete',
             'quality.first_articles.disposition',
           },
           preferredTabCode: qualitySupplierManagementTabCode,
@@ -763,6 +771,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('PO-001'), findsOneWidget);
     expect(find.text('详情'), findsOneWidget);
+    await tester.tap(find.text('详情'));
+    await tester.pumpAndSettle();
+    expect(find.text('首件详情 #1'), findsOneWidget);
+    expect(find.text('取消首件'), findsOneWidget);
+    expect(find.text('删除首件'), findsOneWidget);
+    await tester.tap(find.text('返回'));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('供应商管理'));
     await tester.pumpAndSettle();
@@ -1637,6 +1652,8 @@ class _FakeIntegrationQualityService extends QualityService {
       checkResult: 'failed',
       defectDescription: '尺寸偏差',
       checkAt: DateTime(2026, 3, 21, 8),
+      canCancel: true,
+      canDelete: true,
       dispositionHistory: const [],
     );
   }

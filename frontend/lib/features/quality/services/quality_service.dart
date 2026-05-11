@@ -178,6 +178,48 @@ class QualityService implements RepairScrapService {
     }
   }
 
+  Future<void> cancelFirstArticle({
+    required int recordId,
+    required String password,
+  }) {
+    return _submitFirstArticlePasswordAction(
+      recordId: recordId,
+      action: 'cancel',
+      password: password,
+    );
+  }
+
+  Future<void> deleteFirstArticle({
+    required int recordId,
+    required String password,
+  }) {
+    return _submitFirstArticlePasswordAction(
+      recordId: recordId,
+      action: 'delete',
+      password: password,
+    );
+  }
+
+  Future<void> _submitFirstArticlePasswordAction({
+    required int recordId,
+    required String action,
+    required String password,
+  }) async {
+    final uri = Uri.parse('$_basePath/first-articles/$recordId/$action');
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'password': password}),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+  }
+
   Future<List<QualityProductStatItem>> getQualityProductStats({
     DateTime? startDate,
     DateTime? endDate,

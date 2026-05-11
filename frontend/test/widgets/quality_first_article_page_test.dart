@@ -11,15 +11,24 @@ import 'package:mes_client/features/quality/presentation/quality_page.dart';
 import 'package:mes_client/features/quality/services/quality_service.dart';
 
 class _FakeQualityService extends QualityService {
-  _FakeQualityService() : super(AppSession(baseUrl: '', accessToken: ''));
+  _FakeQualityService({
+    this.detailRecordStatus = 'active',
+    this.detailCanCancel = false,
+    this.detailCanDelete = false,
+  }) : super(AppSession(baseUrl: '', accessToken: ''));
 
   int listCalls = 0;
   int submitCalls = 0;
+  int cancelCalls = 0;
+  int deleteCalls = 0;
   String? lastKeyword;
   String? lastResult;
   String? lastProductName;
   String? lastProcessCode;
   String? lastOperatorUsername;
+  final String detailRecordStatus;
+  final bool detailCanCancel;
+  final bool detailCanDelete;
 
   @override
   Future<FirstArticleListResult> listFirstArticles({
@@ -87,6 +96,22 @@ class _FakeQualityService extends QualityService {
     submitCalls += 1;
   }
 
+  @override
+  Future<void> cancelFirstArticle({
+    required int recordId,
+    required String password,
+  }) async {
+    cancelCalls += 1;
+  }
+
+  @override
+  Future<void> deleteFirstArticle({
+    required int recordId,
+    required String password,
+  }) async {
+    deleteCalls += 1;
+  }
+
   FirstArticleDetail _buildDetail() {
     return FirstArticleDetail(
       id: 1,
@@ -103,6 +128,9 @@ class _FakeQualityService extends QualityService {
       checkResult: 'failed',
       defectDescription: '尺寸偏差',
       checkAt: DateTime(2026, 3, 21, 8, 0),
+      recordStatus: detailRecordStatus,
+      canCancel: detailCanCancel,
+      canDelete: detailCanDelete,
       templateId: 501,
       templateName: '默认首件模板',
       checkContent: '外观、尺寸、装配确认',
@@ -141,6 +169,10 @@ void main() {
   Future<void> pumpPage(
     WidgetTester tester,
     _FakeQualityService service,
+    {
+    bool canCancel = false,
+    bool canDelete = false,
+  }
   ) async {
     tester.view.physicalSize = const Size(1920, 1600);
     tester.view.devicePixelRatio = 1.0;
@@ -157,6 +189,8 @@ void main() {
             onLogout: () {},
             canViewDetail: true,
             canDispose: true,
+            canCancel: canCancel,
+            canDelete: canDelete,
             service: service,
           ),
         ),
@@ -187,6 +221,8 @@ void main() {
     expect(find.text('外观、尺寸、装配确认'), findsOneWidget);
     expect(find.text('9.86'), findsOneWidget);
     expect(find.text('helper_a (张三)、helper_b'), findsOneWidget);
+    expect(find.byKey(const ValueKey('first-article-cancel-button')), findsNothing);
+    expect(find.byKey(const ValueKey('first-article-delete-button')), findsNothing);
     expect(find.text('提交处置'), findsNothing);
   });
 
@@ -254,6 +290,37 @@ void main() {
     expect(find.byType(MesRefreshPageHeader), findsOneWidget);
     expect(find.text('每日首件'), findsNothing);
     expect(find.text('首件处置 #1'), findsNothing);
+  });
+
+  testWidgets('详情页按权限和详情状态显示取消删除按钮并提交密码二次验证', (tester) async {
+    final service = _FakeQualityService(
+      detailCanCancel: true,
+      detailCanDelete: true,
+    );
+    await pumpPage(
+      tester,
+      service,
+      canCancel: true,
+      canDelete: true,
+    );
+
+    await tester.tap(find.text('详情'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('first-article-cancel-button')), findsOneWidget);
+    expect(find.byKey(const ValueKey('first-article-delete-button')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('first-article-cancel-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('取消首件'), findsOneWidget);
+    await tester.enterText(find.byType(TextFormField).last, 'Admin@123456');
+    await tester.tap(find.widgetWithText(FilledButton, '确认取消'));
+    await tester.pumpAndSettle();
+
+    expect(service.cancelCalls, 1);
+    expect(service.listCalls, 2);
+    expect(find.text('首件详情 #1'), findsNothing);
   });
 
   testWidgets('质量页透传消息 payload 后自动打开首件详情页', (tester) async {

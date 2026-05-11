@@ -97,6 +97,8 @@ PERM_QUALITY_REPAIR_ORDERS_PHENOMENA_SUMMARY = "quality.repair_orders.phenomena_
 PERM_QUALITY_REPAIR_ORDERS_COMPLETE = "quality.repair_orders.complete"
 PERM_QUALITY_REPAIR_ORDERS_EXPORT = "quality.repair_orders.export"
 PERM_QUALITY_FIRST_ARTICLES_SCAN_REVIEW = "quality.first_articles.scan_review"
+PERM_QUALITY_FIRST_ARTICLES_CANCEL = "quality.first_articles.cancel"
+PERM_QUALITY_FIRST_ARTICLES_DELETE = "quality.first_articles.delete"
 
 
 @dataclass(frozen=True, slots=True)
@@ -715,6 +717,18 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
     (
         "quality.first_articles.disposition",
         "首件处置",
+        AUTHZ_MODULE_QUALITY,
+        "first_article_management",
+    ),
+    (
+        PERM_QUALITY_FIRST_ARTICLES_CANCEL,
+        "取消首件",
+        AUTHZ_MODULE_QUALITY,
+        "first_article_management",
+    ),
+    (
+        PERM_QUALITY_FIRST_ARTICLES_DELETE,
+        "删除首件",
         AUTHZ_MODULE_QUALITY,
         "first_article_management",
     ),

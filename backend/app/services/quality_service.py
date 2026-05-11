@@ -6,7 +6,8 @@ import csv
 import io
 import threading
 from collections import defaultdict
-from datetime import date, datetime, time, timedelta
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, time, timedelta
 from time import monotonic
 from typing import Any
 from uuid import uuid4
@@ -18,19 +19,38 @@ from app.core.config import (
     production_default_verification_code_is_secure,
     settings,
 )
+from app.core.production_constants import (
+    ORDER_STATUS_COMPLETED,
+    ORDER_STATUS_IN_PROGRESS,
+    ORDER_STATUS_PENDING,
+    PROCESS_STATUS_COMPLETED,
+    PROCESS_STATUS_IN_PROGRESS,
+    PROCESS_STATUS_PARTIAL,
+    PROCESS_STATUS_PENDING,
+    RECORD_TYPE_FIRST_ARTICLE,
+    RECORD_TYPE_PRODUCTION,
+    SUB_ORDER_STATUS_IN_PROGRESS,
+    SUB_ORDER_STATUS_PENDING,
+)
 from app.models.daily_verification_code import DailyVerificationCode
 from app.models.first_article_disposition import FirstArticleDisposition
 from app.models.first_article_disposition_history import FirstArticleDispositionHistory
 from app.models.first_article_participant import FirstArticleParticipant
 from app.models.first_article_record import FirstArticleRecord
+from app.models.first_article_review_session import FirstArticleReviewSession
+from app.models.order_sub_order_pipeline_instance import ProcessPipelineInstance
+from app.models.production_assist_authorization import ProductionAssistAuthorization
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
+from app.models.production_record import ProductionRecord
 from app.models.production_scrap_statistics import ProductionScrapStatistics
+from app.models.production_sub_order import ProductionSubOrder
 from app.models.product import Product
 from app.models.repair_cause import RepairCause
 from app.models.repair_order import RepairOrder
 from app.models.repair_defect_phenomenon import RepairDefectPhenomenon
 from app.models.user import User
+from app.services.production_event_log_service import add_order_event_log
 
 _QUALITY_ROWS_LOCAL_CACHE: dict[
     tuple[object, ...], tuple[float, list[dict[str, object]]]
@@ -39,6 +59,19 @@ _QUALITY_RELATED_TOTALS_LOCAL_CACHE: dict[
     tuple[object, ...], tuple[float, dict[str, Any]]
 ] = {}
 _QUALITY_STATS_CACHE_LOCK = threading.Lock()
+
+
+@dataclass(slots=True)
+class _FirstArticleActionContext:
+    record: FirstArticleRecord
+    order: ProductionOrder | None
+    process_row: ProductionOrderProcess | None
+    sub_order: ProductionSubOrder | None
+    first_article_production_record: ProductionRecord | None
+    review_sessions: list[FirstArticleReviewSession]
+    assist_authorization: ProductionAssistAuthorization | None
+    pipeline_instances: list[ProcessPipelineInstance]
+    has_following_production: bool
 
 
 def _build_datetime_range_filters(
@@ -191,6 +224,293 @@ def _quality_stats_cache_key(
         _normalize_cache_text(process_code),
         _normalize_cache_text(operator_username),
         _normalize_cache_text(result_filter),
+    )
+
+
+def _invalidate_quality_stats_cache() -> None:
+    with _QUALITY_STATS_CACHE_LOCK:
+        _QUALITY_ROWS_LOCAL_CACHE.clear()
+        _QUALITY_RELATED_TOTALS_LOCAL_CACHE.clear()
+
+
+def _first_article_record_status(row: FirstArticleRecord) -> str:
+    return "cancelled" if bool(row.is_cancelled) else "active"
+
+
+def _find_linked_first_article_production_record(
+    db: Session,
+    *,
+    record: FirstArticleRecord,
+) -> ProductionRecord | None:
+    base_stmt = select(ProductionRecord).where(
+        ProductionRecord.order_id == record.order_id,
+        ProductionRecord.order_process_id == record.order_process_id,
+        ProductionRecord.operator_user_id == record.operator_user_id,
+        ProductionRecord.record_type == RECORD_TYPE_FIRST_ARTICLE,
+        ProductionRecord.production_quantity == 0,
+    )
+    if record.sub_order_id is not None:
+        base_stmt = base_stmt.where(ProductionRecord.sub_order_id == record.sub_order_id)
+
+    timed_stmt = base_stmt
+    if record.created_at is not None:
+        timed_stmt = timed_stmt.where(ProductionRecord.created_at >= record.created_at)
+
+    row = (
+        db.execute(
+            timed_stmt.order_by(
+                ProductionRecord.created_at.asc(),
+                ProductionRecord.id.asc(),
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if row is not None:
+        return row
+    return (
+        db.execute(base_stmt.order_by(ProductionRecord.id.desc()))
+        .scalars()
+        .first()
+    )
+
+
+def _has_following_production_after_first_article(
+    db: Session,
+    *,
+    record: FirstArticleRecord,
+    sub_order_id: int | None,
+) -> bool:
+    if sub_order_id is None:
+        return False
+    stmt = select(func.count()).select_from(ProductionRecord).where(
+        ProductionRecord.sub_order_id == sub_order_id,
+        ProductionRecord.record_type == RECORD_TYPE_PRODUCTION,
+    )
+    if record.created_at is not None:
+        stmt = stmt.where(ProductionRecord.created_at > record.created_at)
+    return bool(db.execute(stmt).scalar() or 0)
+
+
+def _build_first_article_action_context(
+    db: Session,
+    *,
+    record: FirstArticleRecord,
+    for_update: bool,
+) -> _FirstArticleActionContext:
+    first_article_production_record = _find_linked_first_article_production_record(
+        db,
+        record=record,
+    )
+    sub_order_id = record.sub_order_id
+    if sub_order_id is None and first_article_production_record is not None:
+        sub_order_id = first_article_production_record.sub_order_id
+
+    sub_order_stmt = select(ProductionSubOrder).where(ProductionSubOrder.id == sub_order_id)
+    if for_update:
+        sub_order_stmt = sub_order_stmt.with_for_update()
+    sub_order = (
+        db.execute(sub_order_stmt).scalars().first() if sub_order_id is not None else None
+    )
+
+    review_session_stmt = select(FirstArticleReviewSession).where(
+        FirstArticleReviewSession.first_article_record_id == record.id
+    )
+    if for_update:
+        review_session_stmt = review_session_stmt.with_for_update()
+    review_sessions = db.execute(review_session_stmt).scalars().all()
+
+    assist_authorization_id = record.assist_authorization_id or next(
+        (
+            session.assist_authorization_id
+            for session in review_sessions
+            if session.assist_authorization_id is not None
+        ),
+        None,
+    )
+    assist_stmt = select(ProductionAssistAuthorization).where(
+        ProductionAssistAuthorization.id == assist_authorization_id
+    )
+    if for_update:
+        assist_stmt = assist_stmt.with_for_update()
+    assist_authorization = (
+        db.execute(assist_stmt).scalars().first()
+        if assist_authorization_id is not None
+        else None
+    )
+
+    pipeline_stmt = select(ProcessPipelineInstance).where(
+        ProcessPipelineInstance.order_process_id == record.order_process_id,
+        ProcessPipelineInstance.sub_order_id == sub_order_id,
+        ProcessPipelineInstance.is_active.is_(True),
+    )
+    if for_update:
+        pipeline_stmt = pipeline_stmt.with_for_update()
+    pipeline_instances = (
+        db.execute(pipeline_stmt).scalars().all() if sub_order_id is not None else []
+    )
+
+    return _FirstArticleActionContext(
+        record=record,
+        order=record.order,
+        process_row=record.order_process,
+        sub_order=sub_order,
+        first_article_production_record=first_article_production_record,
+        review_sessions=review_sessions,
+        assist_authorization=assist_authorization,
+        pipeline_instances=pipeline_instances,
+        has_following_production=_has_following_production_after_first_article(
+            db,
+            record=record,
+            sub_order_id=sub_order_id,
+        ),
+    )
+
+
+def _load_first_article_action_context(
+    db: Session,
+    *,
+    record_id: int,
+) -> _FirstArticleActionContext:
+    record = (
+        db.execute(
+            select(FirstArticleRecord)
+            .where(FirstArticleRecord.id == record_id)
+            .options(
+                selectinload(FirstArticleRecord.order).selectinload(
+                    ProductionOrder.product
+                ),
+                selectinload(FirstArticleRecord.order_process),
+                selectinload(FirstArticleRecord.operator),
+                selectinload(FirstArticleRecord.cancelled_by),
+            )
+            .with_for_update()
+        )
+        .scalars()
+        .first()
+    )
+    if record is None:
+        raise ValueError("首件记录不存在")
+    return _build_first_article_action_context(db, record=record, for_update=True)
+
+
+def _can_cancel_first_article_context(context: _FirstArticleActionContext) -> bool:
+    return (
+        context.record.result == "passed"
+        and not bool(context.record.is_cancelled)
+        and not context.has_following_production
+        and context.order is not None
+        and context.process_row is not None
+        and context.sub_order is not None
+        and context.first_article_production_record is not None
+    )
+
+
+def _can_delete_first_article_context(context: _FirstArticleActionContext) -> bool:
+    if bool(context.record.is_cancelled):
+        return True
+    if context.record.result != "passed":
+        return True
+    if context.has_following_production:
+        return False
+    return (
+        context.order is not None
+        and context.process_row is not None
+        and context.sub_order is not None
+        and context.first_article_production_record is not None
+    )
+
+
+def _refresh_process_and_order_status_after_first_article_revert(
+    db: Session,
+    *,
+    order: ProductionOrder,
+    process_row: ProductionOrderProcess,
+) -> None:
+    in_progress_sub_order_count = int(
+        db.execute(
+            select(func.count())
+            .select_from(ProductionSubOrder)
+            .where(
+                ProductionSubOrder.order_process_id == process_row.id,
+                ProductionSubOrder.status == SUB_ORDER_STATUS_IN_PROGRESS,
+            )
+        ).scalar()
+        or 0
+    )
+    completed_quantity = int(process_row.completed_quantity or 0)
+    visible_quantity = int(process_row.visible_quantity or 0)
+    if visible_quantity > 0 and completed_quantity >= visible_quantity:
+        process_row.status = PROCESS_STATUS_COMPLETED
+    elif in_progress_sub_order_count > 0:
+        process_row.status = PROCESS_STATUS_IN_PROGRESS
+    elif completed_quantity > 0:
+        process_row.status = PROCESS_STATUS_PARTIAL
+    else:
+        process_row.status = PROCESS_STATUS_PENDING
+
+    process_rows = (
+        db.execute(
+            select(ProductionOrderProcess)
+            .where(ProductionOrderProcess.order_id == order.id)
+            .order_by(
+                ProductionOrderProcess.process_order.asc(),
+                ProductionOrderProcess.id.asc(),
+            )
+            .with_for_update()
+        )
+        .scalars()
+        .all()
+    )
+    first_incomplete = next(
+        (
+            row
+            for row in process_rows
+            if int(row.completed_quantity or 0) < int(row.visible_quantity or 0)
+        ),
+        None,
+    )
+    if first_incomplete is None and process_rows:
+        order.status = ORDER_STATUS_COMPLETED
+        order.current_process_code = None
+        return
+
+    has_in_progress_process = any(
+        row.status == PROCESS_STATUS_IN_PROGRESS for row in process_rows
+    )
+    order.status = ORDER_STATUS_IN_PROGRESS if has_in_progress_process else ORDER_STATUS_PENDING
+    if first_incomplete is not None:
+        order.current_process_code = first_incomplete.process_code
+    elif process_rows:
+        order.current_process_code = process_rows[0].process_code
+
+
+def _rollback_first_article_execution_state(
+    db: Session,
+    *,
+    context: _FirstArticleActionContext,
+) -> None:
+    if context.has_following_production:
+        raise ValueError("该条首件后已存在真实报工，无法回退首件执行状态")
+    if (
+        context.order is None
+        or context.process_row is None
+        or context.sub_order is None
+        or context.first_article_production_record is None
+    ):
+        raise ValueError("该条首件缺少关联执行上下文，无法回退首件执行状态")
+
+    db.delete(context.first_article_production_record)
+    context.first_article_production_record = None
+    context.sub_order.status = SUB_ORDER_STATUS_PENDING
+    for pipeline_instance in context.pipeline_instances:
+        pipeline_instance.sub_order_id = None
+    if context.assist_authorization is not None:
+        context.assist_authorization.first_article_used_at = None
+    _refresh_process_and_order_status_after_first_article_revert(
+        db,
+        order=context.order,
+        process_row=context.process_row,
     )
 
 
@@ -754,6 +1074,7 @@ def list_first_articles(
                 "operator_user_id": row.operator_user_id,
                 "operator_username": operator.username if operator else "",
                 "result": row.result,
+                "record_status": _first_article_record_status(row),
                 "verification_date": row.verification_date,
                 "verification_code": row.verification_code,
                 "remark": row.remark,
@@ -831,6 +1152,7 @@ def _load_first_article_rows(
             ProductionOrderProcess.id == FirstArticleRecord.order_process_id,
         )
         .join(User, User.id == FirstArticleRecord.operator_user_id)
+        .where(FirstArticleRecord.is_cancelled.is_(False))
         .where(*filters)
     )
     if product_name and product_name.strip():
@@ -1197,6 +1519,7 @@ def get_first_article_by_id(
                 selectinload(FirstArticleRecord.participants).selectinload(
                     FirstArticleParticipant.user
                 ),
+                selectinload(FirstArticleRecord.cancelled_by),
             )
         )
         .scalars()
@@ -1210,6 +1533,11 @@ def get_first_article_by_id(
     operator = row.operator
     template = row.template
     product = order.product if order else None
+    action_context = _build_first_article_action_context(
+        db,
+        record=row,
+        for_update=False,
+    )
 
     # 查询处置记录
     disposition = (
@@ -1246,12 +1574,19 @@ def get_first_article_by_id(
         "operator_user_id": row.operator_user_id,
         "operator_username": operator.username if operator else "",
         "result": row.result,
+        "record_status": _first_article_record_status(row),
+        "can_cancel": _can_cancel_first_article_context(action_context),
+        "can_delete": _can_delete_first_article_context(action_context),
         "verification_date": row.verification_date,
         "verification_code": row.verification_code,
         "template_id": row.template_id,
         "template_name": template.template_name if template else None,
         "check_content": row.check_content,
         "test_value": row.test_value,
+        "cancelled_at": row.cancelled_at,
+        "cancelled_by_username": row.cancelled_by.username
+        if row.cancelled_by
+        else None,
         "participants": [
             {
                 "user_id": participant.user_id,
@@ -1283,6 +1618,151 @@ def get_first_article_by_id(
             for history in disposition_history
         ],
     }
+
+
+def cancel_first_article(
+    db: Session,
+    *,
+    record_id: int,
+    operator: User,
+) -> dict[str, Any]:
+    context = _load_first_article_action_context(db, record_id=record_id)
+    record = context.record
+    if bool(record.is_cancelled):
+        raise ValueError("该条首件已取消，请勿重复操作")
+    if record.result != "passed":
+        raise ValueError("仅首件通过记录支持取消")
+    if context.has_following_production:
+        raise ValueError("该条首件后已存在真实报工，不能取消首件")
+    if not _can_cancel_first_article_context(context):
+        raise ValueError("该条首件缺少关联执行上下文，暂不支持取消")
+
+    _rollback_first_article_execution_state(db, context=context)
+    record.is_cancelled = True
+    record.cancelled_at = datetime.now(UTC)
+    record.cancelled_by_user_id = operator.id
+    add_order_event_log(
+        db,
+        order_id=record.order_id,
+        event_type="first_article_cancelled",
+        event_title="首件已取消",
+        event_detail=(
+            f"{operator.username} 取消了工序 {context.process_row.process_name if context.process_row else record.order_process_id} "
+            "的首件，并将对应操作员退回待生产状态"
+        ),
+        operator_user_id=operator.id,
+        payload={
+            "first_article_record_id": record.id,
+            "order_process_id": record.order_process_id,
+            "sub_order_id": context.sub_order.id if context.sub_order else None,
+            "assist_authorization_id": context.assist_authorization.id
+            if context.assist_authorization
+            else None,
+            "review_session_ids": [session.id for session in context.review_sessions],
+        },
+    )
+    _invalidate_quality_stats_cache()
+    db.flush()
+    return {
+        "record_id": record.id,
+        "order_id": record.order_id,
+        "order_code": context.order.order_code if context.order else "",
+        "process_name": context.process_row.process_name if context.process_row else "",
+        "record_status": _first_article_record_status(record),
+        "cancelled_at": record.cancelled_at,
+        "cancelled_by_username": operator.username,
+    }
+
+
+def delete_first_article(
+    db: Session,
+    *,
+    record_id: int,
+    operator: User,
+) -> dict[str, Any]:
+    context = _load_first_article_action_context(db, record_id=record_id)
+    record = context.record
+    snapshot = {
+        "record_id": record.id,
+        "order_id": record.order_id,
+        "order_code": context.order.order_code if context.order else "",
+        "process_name": context.process_row.process_name if context.process_row else "",
+        "result": record.result,
+        "record_status": _first_article_record_status(record),
+    }
+
+    rolled_back_execution_state = False
+    if not bool(record.is_cancelled) and record.result == "passed":
+        if context.has_following_production:
+            raise ValueError("该条有效首件后已存在真实报工，不能删除首件")
+        if not _can_delete_first_article_context(context):
+            raise ValueError("该条首件缺少关联执行上下文，暂不支持删除")
+        _rollback_first_article_execution_state(db, context=context)
+        rolled_back_execution_state = True
+
+    if context.first_article_production_record is not None:
+        db.delete(context.first_article_production_record)
+        context.first_article_production_record = None
+    for review_session in context.review_sessions:
+        db.delete(review_session)
+
+    disposition_history_rows = (
+        db.execute(
+            select(FirstArticleDispositionHistory).where(
+                FirstArticleDispositionHistory.first_article_record_id == record.id
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for history_row in disposition_history_rows:
+        db.delete(history_row)
+
+    disposition_rows = (
+        db.execute(
+            select(FirstArticleDisposition).where(
+                FirstArticleDisposition.first_article_record_id == record.id
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for disposition_row in disposition_rows:
+        db.delete(disposition_row)
+
+    participant_rows = (
+        db.execute(
+            select(FirstArticleParticipant).where(
+                FirstArticleParticipant.record_id == record.id
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for participant_row in participant_rows:
+        db.delete(participant_row)
+
+    db.delete(record)
+    add_order_event_log(
+        db,
+        order_id=snapshot["order_id"],
+        event_type="first_article_deleted",
+        event_title="首件已删除",
+        event_detail=(
+            f"{operator.username} 删除了工序 {snapshot['process_name'] or record.order_process_id} 的首件记录"
+        ),
+        operator_user_id=operator.id,
+        payload={
+            "first_article_record_id": snapshot["record_id"],
+            "rolled_back_execution_state": rolled_back_execution_state,
+            "review_session_ids": [session.id for session in context.review_sessions],
+        },
+    )
+    _invalidate_quality_stats_cache()
+    db.flush()
+    snapshot["rolled_back_execution_state"] = rolled_back_execution_state
+    snapshot["deleted"] = True
+    return snapshot
 
 
 def export_first_articles_csv(
@@ -1319,6 +1799,7 @@ def export_first_articles_csv(
             "工序名称",
             "操作员",
             "结果",
+            "记录状态",
             "校验日期",
             "校验码",
             "备注",
@@ -1326,6 +1807,9 @@ def export_first_articles_csv(
     )
     for item in items:
         result_label = "通过" if item["result"] == "passed" else "不通过"
+        record_status_label = (
+            "已取消" if item.get("record_status") == "cancelled" else "有效"
+        )
         writer.writerow(
             [
                 str(item["created_at"])[:19] if item["created_at"] else "",
@@ -1335,6 +1819,7 @@ def export_first_articles_csv(
                 item["process_name"],
                 item["operator_username"],
                 result_label,
+                record_status_label,
                 str(item["verification_date"]),
                 item["verification_code"] or "",
                 item["remark"] or "",

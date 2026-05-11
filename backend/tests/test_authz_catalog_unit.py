@@ -39,11 +39,23 @@ class AuthzCatalogUnitTest(unittest.TestCase):
             "feature.quality.first_articles.scan_review",
             feature_by_code,
         )
+        self.assertIn("quality.first_articles.cancel", action_codes)
+        self.assertIn("quality.first_articles.delete", action_codes)
+        self.assertIn("feature.quality.first_articles.cancel", feature_by_code)
+        self.assertIn("feature.quality.first_articles.delete", feature_by_code)
         self.assertIn(
             "quality.first_articles.scan_review",
             feature_by_code[
                 "feature.quality.first_articles.scan_review"
             ].action_permission_codes,
+        )
+        self.assertEqual(
+            feature_by_code["feature.quality.first_articles.cancel"].dependency_permission_codes,
+            ("feature.quality.first_articles.detail",),
+        )
+        self.assertEqual(
+            feature_by_code["feature.quality.first_articles.delete"].dependency_permission_codes,
+            ("feature.quality.first_articles.detail",),
         )
 
 

@@ -646,6 +646,8 @@ CAPABILITY_NAME_FALLBACK_ZH_BY_CODE = {
     "feature.craft.process_templates.manage": "维护工艺模板与系统母版",
     "feature.craft.kanban.view": "查看工艺看板",
     "feature.quality.first_articles.view": "查看每日首件",
+    "feature.quality.first_articles.cancel": "取消首件",
+    "feature.quality.first_articles.delete": "删除首件",
     "feature.quality.stats.view": "查看质量统计",
     "feature.production.order_management.manage": "维护生产订单",
     "feature.production.pipeline_mode.manage": "维护并行生产模式",
@@ -915,6 +917,16 @@ CAPABILITY_GROUP_META_BY_CODE = {
         "quality.first_article",
         "每日首件",
         "查看每日首件记录",
+    ),
+    "feature.quality.first_articles.cancel": (
+        "quality.first_article",
+        "每日首件",
+        "取消未产生真实报工的通过首件并回退执行状态",
+    ),
+    "feature.quality.first_articles.delete": (
+        "quality.first_article",
+        "每日首件",
+        "删除首件及其关联业务主链记录",
     ),
     "feature.quality.stats.view": ("quality.stats", "质量统计", "查看质量统计数据"),
     "feature.production.order_management.manage": (

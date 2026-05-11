@@ -22,6 +22,17 @@ String firstArticleResultLabel(String result) {
   }
 }
 
+String firstArticleRecordStatusLabel(String status) {
+  switch (status) {
+    case 'cancelled':
+      return '已取消';
+    case 'active':
+      return '有效';
+    default:
+      return status;
+  }
+}
+
 String verificationCodeSourceLabel(String source) {
   switch (source) {
     case 'stored':
@@ -114,6 +125,7 @@ class FirstArticleListItem {
     required this.operatorUserId,
     required this.operatorUsername,
     required this.result,
+    this.recordStatus = 'active',
     required this.verificationDate,
     required this.remark,
     required this.createdAt,
@@ -130,6 +142,7 @@ class FirstArticleListItem {
   final int operatorUserId;
   final String operatorUsername;
   final String result;
+  final String recordStatus;
   final DateTime verificationDate;
   final String? remark;
   final DateTime createdAt;
@@ -147,6 +160,7 @@ class FirstArticleListItem {
       operatorUserId: (json['operator_user_id'] as int?) ?? 0,
       operatorUsername: (json['operator_username'] as String?) ?? '',
       result: (json['result'] as String?) ?? '',
+      recordStatus: (json['record_status'] as String?) ?? 'active',
       verificationDate:
           _parseDateTimeOrNull(json['verification_date']) ??
           DateTime(1970, 1, 1),
@@ -530,10 +544,15 @@ class FirstArticleDetail {
     required this.checkResult,
     required this.defectDescription,
     required this.checkAt,
+    this.recordStatus = 'active',
+    this.canCancel = false,
+    this.canDelete = false,
     this.templateId,
     this.templateName = '',
     this.checkContent = '',
     this.testValue = '',
+    this.cancelledAt,
+    this.cancelledByUsername = '',
     this.participants = const [],
     this.disposition,
     this.dispositionHistory = const [],
@@ -553,10 +572,15 @@ class FirstArticleDetail {
   final String checkResult;
   final String defectDescription;
   final DateTime? checkAt;
+  final String recordStatus;
+  final bool canCancel;
+  final bool canDelete;
   final int? templateId;
   final String templateName;
   final String checkContent;
   final String testValue;
+  final DateTime? cancelledAt;
+  final String cancelledByUsername;
   final List<FirstArticleParticipantItem> participants;
   final FirstArticleDispositionInfo? disposition;
   final List<FirstArticleDispositionHistoryItem> dispositionHistory;
@@ -621,10 +645,16 @@ class FirstArticleDetail {
       checkAt:
           _parseDateTimeOrNull(json['check_at']) ??
           _parseDateTimeOrNull(json['created_at']),
+      recordStatus: (json['record_status'] as String?) ?? 'active',
+      canCancel: (json['can_cancel'] as bool?) ?? false,
+      canDelete: (json['can_delete'] as bool?) ?? false,
       templateId: json['template_id'] as int?,
       templateName: (json['template_name'] as String?) ?? '',
       checkContent: (json['check_content'] as String?) ?? '',
       testValue: (json['test_value'] as String?) ?? '',
+      cancelledAt: _parseDateTimeOrNull(json['cancelled_at']),
+      cancelledByUsername:
+          (json['cancelled_by_username'] as String?) ?? '',
       participants: (json['participants'] as List<dynamic>? ?? const [])
           .map(
             (entry) => FirstArticleParticipantItem.fromJson(

@@ -730,6 +730,8 @@ def submit_first_article(
         order_id=order.id,
         order_process_id=process_row.id,
         operator_user_id=operator.id,
+        sub_order_id=sub_order.id,
+        assist_authorization_id=assist_row.id if assist_row else None,
         template_id=template_row.id if template_row else None,
         verification_date=date.today(),
         verification_code=normalized_verification_code,

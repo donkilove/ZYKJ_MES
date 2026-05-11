@@ -152,6 +152,8 @@ def _message_source_is_actionable(db: Session, msg: Message) -> bool:
         and msg.source_module == "quality"
         and msg.source_type == "first_article_record"
     ):
+        if bool(getattr(row, "is_cancelled", False)):
+            return False
         if getattr(row, "result", None) != "failed":
             return False
         disposition = (
@@ -281,6 +283,7 @@ def _sync_failed_first_article_messages(db: Session) -> None:
             select(FirstArticleRecord)
             .where(
                 FirstArticleRecord.result == "failed",
+                FirstArticleRecord.is_cancelled.is_(False),
                 ~select(FirstArticleDisposition.id)
                 .where(
                     FirstArticleDisposition.first_article_record_id

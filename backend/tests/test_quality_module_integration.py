@@ -16,17 +16,21 @@ if str(BACKEND_DIR) not in sys.path:
 
 from app.db.session import SessionLocal  # noqa: E402
 from app.api.v1.endpoints.quality import (  # noqa: E402
+    cancel_first_article_api,
+    delete_first_article_api,
     get_first_article_detail_api,
     get_first_article_disposition_detail_api,
 )
 from app.core.security import get_password_hash  # noqa: E402
 from app.main import app  # noqa: E402
+from app.models.daily_verification_code import DailyVerificationCode  # noqa: E402
 from app.models.first_article_disposition import FirstArticleDisposition  # noqa: E402
 from app.models.first_article_disposition_history import (  # noqa: E402
     FirstArticleDispositionHistory,
 )
 from app.models.first_article_participant import FirstArticleParticipant  # noqa: E402
 from app.models.first_article_record import FirstArticleRecord  # noqa: E402
+from app.models.first_article_review_session import FirstArticleReviewSession  # noqa: E402
 from app.models.first_article_template import FirstArticleTemplate  # noqa: E402
 from app.models.message import Message  # noqa: E402
 from app.models.message_recipient import MessageRecipient  # noqa: E402
@@ -37,6 +41,7 @@ from app.models.production_scrap_statistics import ProductionScrapStatistics  # 
 from app.models.product import Product  # noqa: E402
 from app.models.production_order import ProductionOrder  # noqa: E402
 from app.models.production_order_process import ProductionOrderProcess  # noqa: E402
+from app.models.production_sub_order import ProductionSubOrder  # noqa: E402
 from app.models.repair_cause import RepairCause  # noqa: E402
 from app.models.repair_defect_phenomenon import RepairDefectPhenomenon  # noqa: E402
 from app.models.repair_order import RepairOrder  # noqa: E402
@@ -44,9 +49,14 @@ from app.models.role import Role  # noqa: E402
 from app.models.supplier import Supplier  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.services.authz_service import replace_role_permissions_for_module  # noqa: E402
+from app.services.production_execution_service import submit_first_article  # noqa: E402
 from app.services.production_repair_service import complete_repair_order  # noqa: E402
 from app.services.quality_service import (  # noqa: E402
+    cancel_first_article,
+    delete_first_article,
     get_first_article_by_id,
+    get_quality_overview,
+    list_first_articles,
     submit_first_article_disposition,
 )
 
@@ -74,7 +84,12 @@ class QualityModuleIntegrationTest(unittest.TestCase):
         self.role_ids: list[int] = []
         self.supplier_ids: list[int] = []
         self.template_ids: list[int] = []
-        self.token = self._login()
+        self.token = ""
+        self._login_error: Exception | None = None
+        try:
+            self.token = self._login()
+        except Exception as exc:  # pragma: no cover - 兼容测试库会话表未升级场景
+            self._login_error = exc
         self.admin_user = (
             self.db.execute(select(User).where(User.username == "admin"))
             .scalars()
@@ -185,6 +200,8 @@ class QualityModuleIntegrationTest(unittest.TestCase):
         return response.json()["data"]["access_token"]
 
     def _headers(self) -> dict[str, str]:
+        if not self.token and self._login_error is not None:
+            raise self._login_error
         return {"Authorization": f"Bearer {self.token}"}
 
     def _create_role(self, suffix: str) -> Role:
@@ -284,14 +301,22 @@ class QualityModuleIntegrationTest(unittest.TestCase):
         self.product_ids.append(int(row.id))
         return row
 
-    def _create_order(self, *, product: Product, token: str) -> ProductionOrder:
+    def _create_order(
+        self,
+        *,
+        product: Product,
+        token: str,
+        status: str = "in_progress",
+        current_process_code: str | None = None,
+    ) -> ProductionOrder:
         row = ProductionOrder(
             order_code=f"QO-{token}",
             product_id=product.id,
             product_version=1,
             quantity=10,
-            status="in_progress",
-            current_process_code=f"quality_process_{token}",
+            status=status,
+            current_process_code=current_process_code
+            or f"quality_process_{token}",
             start_date=date(2026, 3, 1),
             due_date=date(2026, 3, 5),
             remark="品质模块集成测试",
@@ -308,6 +333,8 @@ class QualityModuleIntegrationTest(unittest.TestCase):
         order: ProductionOrder,
         process: Process,
         stage: ProcessStage,
+        status: str = "in_progress",
+        completed_quantity: int = 0,
     ) -> ProductionOrderProcess:
         row = ProductionOrderProcess(
             order_id=order.id,
@@ -318,14 +345,33 @@ class QualityModuleIntegrationTest(unittest.TestCase):
             process_code=process.code,
             process_name=process.name,
             process_order=1,
-            status="in_progress",
+            status=status,
             visible_quantity=10,
-            completed_quantity=0,
+            completed_quantity=completed_quantity,
         )
         self.db.add(row)
         self.db.commit()
         self.db.refresh(row)
         self.order_process_ids.append(int(row.id))
+        return row
+
+    def _create_sub_order(
+        self,
+        *,
+        order_process: ProductionOrderProcess,
+        operator_user: User,
+        status: str = "pending",
+        completed_quantity: int = 0,
+    ) -> ProductionSubOrder:
+        row = ProductionSubOrder(
+            order_process_id=order_process.id,
+            operator_user_id=operator_user.id,
+            completed_quantity=completed_quantity,
+            status=status,
+        )
+        self.db.add(row)
+        self.db.commit()
+        self.db.refresh(row)
         return row
 
     def _create_first_article_record(self, *, result: str) -> FirstArticleRecord:
@@ -363,6 +409,59 @@ class QualityModuleIntegrationTest(unittest.TestCase):
             stage=stage,
         )
         return order, order_process
+
+    def _ensure_today_verification_code(self, *, code: str | None = None) -> str:
+        row = (
+            self.db.execute(
+                select(DailyVerificationCode).where(
+                    DailyVerificationCode.verify_date == date.today()
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if row is not None:
+            return row.code
+        row = DailyVerificationCode(
+            verify_date=date.today(),
+            code=code or f"QA-{self._suffix[-6:]}",
+            created_by_user_id=self.admin_user.id,
+        )
+        self.db.add(row)
+        self.db.commit()
+        self.db.refresh(row)
+        return row.code
+
+    def _create_first_article_execution_context(
+        self,
+        *,
+        token: str,
+        operator_user: User | None = None,
+    ) -> tuple[ProductionOrder, ProductionOrderProcess, ProductionSubOrder, User, str]:
+        stage = self._create_stage(token=token)
+        process = self._create_process(stage=stage, token=token)
+        product = self._create_product(token=token)
+        order = self._create_order(
+            product=product,
+            token=token,
+            status="pending",
+            current_process_code=process.code,
+        )
+        order_process = self._create_order_process(
+            order=order,
+            process=process,
+            stage=stage,
+            status="pending",
+            completed_quantity=0,
+        )
+        operator = operator_user or self.admin_user
+        sub_order = self._create_sub_order(
+            order_process=order_process,
+            operator_user=operator,
+            status="pending",
+        )
+        verification_code = self._ensure_today_verification_code()
+        return order, order_process, sub_order, operator, verification_code
 
     def _create_operator_user(self, *, token: str) -> User:
         row = User(
@@ -792,6 +891,376 @@ class QualityModuleIntegrationTest(unittest.TestCase):
                 final_judgment="reject",
                 operator=self.admin_user,
             )
+
+    def test_cancel_first_article_reverts_to_pending_and_allows_restart(self) -> None:
+        token = f"{self._suffix}-cancel-success"
+        order, order_process, sub_order, operator_user, verification_code = (
+            self._create_first_article_execution_context(token=token)
+        )
+
+        submit_first_article(
+            self.db,
+            order_id=order.id,
+            order_process_id=order_process.id,
+            pipeline_instance_id=None,
+            template_id=None,
+            check_content="外观检查",
+            test_value="10.00",
+            result="passed",
+            participant_user_ids=[],
+            verification_code=verification_code,
+            remark="首次首件",
+            operator=operator_user,
+        )
+        record = (
+            self.db.execute(
+                select(FirstArticleRecord)
+                .where(
+                    FirstArticleRecord.order_id == order.id,
+                    FirstArticleRecord.order_process_id == order_process.id,
+                )
+                .order_by(FirstArticleRecord.id.desc())
+            )
+            .scalars()
+            .first()
+        )
+        self.assertIsNotNone(record)
+        assert record is not None
+        self.record_ids.append(int(record.id))
+
+        cancel_result = cancel_first_article(
+            self.db,
+            record_id=record.id,
+            operator=self.admin_user,
+        )
+        self.db.commit()
+        self.db.refresh(order)
+        self.db.refresh(order_process)
+        self.db.refresh(sub_order)
+
+        self.assertEqual(cancel_result["record_status"], "cancelled")
+        self.assertEqual(sub_order.status, "pending")
+        self.assertEqual(order_process.status, "pending")
+        self.assertEqual(order.status, "pending")
+        self.assertEqual(order.current_process_code, order_process.process_code)
+        self.assertIsNone(
+            self.db.execute(
+                select(ProductionRecord).where(
+                    ProductionRecord.order_id == order.id,
+                    ProductionRecord.order_process_id == order_process.id,
+                    ProductionRecord.sub_order_id == sub_order.id,
+                    ProductionRecord.record_type == "first_article",
+                )
+            )
+            .scalars()
+            .first()
+        )
+
+        detail = get_first_article_by_id(self.db, record_id=record.id)
+        assert detail is not None
+        self.assertEqual(detail["record_status"], "cancelled")
+        self.assertFalse(detail["can_cancel"])
+        self.assertTrue(detail["can_delete"])
+        self.assertEqual(detail["cancelled_by_username"], self.admin_user.username)
+        self.assertIsNotNone(detail["cancelled_at"])
+
+        list_payload = list_first_articles(
+            self.db,
+            query_date=date.today(),
+            keyword=None,
+            result_filter=None,
+            page=1,
+            page_size=20,
+        )
+        listed_item = next(
+            item for item in list_payload["items"] if item["id"] == record.id
+        )
+        self.assertEqual(listed_item["record_status"], "cancelled")
+        overview = get_quality_overview(
+            self.db,
+            start_date=date.today(),
+            end_date=date.today(),
+        )
+        self.assertEqual(overview["first_article_total"], 0)
+
+        submit_first_article(
+            self.db,
+            order_id=order.id,
+            order_process_id=order_process.id,
+            pipeline_instance_id=None,
+            template_id=None,
+            check_content="重新首件",
+            test_value="10.01",
+            result="passed",
+            participant_user_ids=[],
+            verification_code=verification_code,
+            remark="重新首件",
+            operator=operator_user,
+        )
+        restarted_record = (
+            self.db.execute(
+                select(FirstArticleRecord)
+                .where(
+                    FirstArticleRecord.order_id == order.id,
+                    FirstArticleRecord.order_process_id == order_process.id,
+                    FirstArticleRecord.is_cancelled.is_(False),
+                )
+                .order_by(FirstArticleRecord.id.desc())
+            )
+            .scalars()
+            .first()
+        )
+        self.assertIsNotNone(restarted_record)
+        assert restarted_record is not None
+        self.record_ids.append(int(restarted_record.id))
+        self.assertGreater(restarted_record.id, record.id)
+
+    def test_cancel_first_article_is_rejected_after_real_production(self) -> None:
+        token = f"{self._suffix}-cancel-reject"
+        order, order_process, sub_order, operator_user, verification_code = (
+            self._create_first_article_execution_context(token=token)
+        )
+        submit_first_article(
+            self.db,
+            order_id=order.id,
+            order_process_id=order_process.id,
+            pipeline_instance_id=None,
+            template_id=None,
+            check_content="外观检查",
+            test_value="10.00",
+            result="passed",
+            participant_user_ids=[],
+            verification_code=verification_code,
+            remark=None,
+            operator=operator_user,
+        )
+        record = (
+            self.db.execute(
+                select(FirstArticleRecord)
+                .where(
+                    FirstArticleRecord.order_id == order.id,
+                    FirstArticleRecord.order_process_id == order_process.id,
+                )
+                .order_by(FirstArticleRecord.id.desc())
+            )
+            .scalars()
+            .first()
+        )
+        self.assertIsNotNone(record)
+        assert record is not None
+        self.record_ids.append(int(record.id))
+
+        production_record = ProductionRecord(
+            order_id=order.id,
+            order_process_id=order_process.id,
+            sub_order_id=sub_order.id,
+            operator_user_id=operator_user.id,
+            production_quantity=1,
+            record_type="production",
+        )
+        self.db.add(production_record)
+        order_process.completed_quantity = 1
+        order_process.status = "partial"
+        sub_order.status = "pending"
+        order.status = "in_progress"
+        self.db.commit()
+
+        detail = get_first_article_by_id(self.db, record_id=record.id)
+        assert detail is not None
+        self.assertFalse(detail["can_cancel"])
+        self.assertFalse(detail["can_delete"])
+        with self.assertRaisesRegex(ValueError, "真实报工"):
+            cancel_first_article(
+                self.db,
+                record_id=record.id,
+                operator=self.admin_user,
+            )
+
+    def test_delete_failed_first_article_cleans_business_records(self) -> None:
+        record = self._create_first_article_record(result="failed")
+        participant = FirstArticleParticipant(
+            record_id=record.id,
+            user_id=self.admin_user.id,
+        )
+        disposition = FirstArticleDisposition(
+            first_article_record_id=record.id,
+            disposition_opinion="返工处理",
+            disposition_username="quality_admin",
+            disposition_at=datetime.now(UTC),
+            recheck_result="failed",
+            final_judgment="rework",
+        )
+        history = FirstArticleDispositionHistory(
+            first_article_record_id=record.id,
+            version=1,
+            disposition_opinion="返工处理",
+            disposition_username="quality_admin",
+            disposition_at=datetime.now(UTC),
+            recheck_result="failed",
+            final_judgment="rework",
+        )
+        review_session = FirstArticleReviewSession(
+            token_hash=f"review-{record.id}-{self._suffix}",
+            status="approved",
+            expires_at=datetime.now(UTC),
+            order_id=record.order_id,
+            order_process_id=record.order_process_id,
+            pipeline_instance_id=None,
+            operator_user_id=self.admin_user.id,
+            assist_authorization_id=None,
+            template_id=None,
+            check_content="扫码首件",
+            test_value="10.00",
+            participant_user_ids=[],
+            reviewer_user_id=self.admin_user.id,
+            review_result="passed",
+            review_remark=None,
+            reviewed_at=datetime.now(UTC),
+            first_article_record_id=record.id,
+        )
+        self.db.add_all([participant, disposition, history, review_session])
+        self.db.commit()
+
+        delete_result = delete_first_article(
+            self.db,
+            record_id=record.id,
+            operator=self.admin_user,
+        )
+        self.db.commit()
+
+        self.assertTrue(delete_result["deleted"])
+        self.assertIsNone(self.db.get(FirstArticleRecord, record.id))
+        self.assertEqual(
+            self.db.query(FirstArticleParticipant)
+            .filter(FirstArticleParticipant.record_id == record.id)
+            .count(),
+            0,
+        )
+        self.assertEqual(
+            self.db.query(FirstArticleDisposition)
+            .filter(FirstArticleDisposition.first_article_record_id == record.id)
+            .count(),
+            0,
+        )
+        self.assertEqual(
+            self.db.query(FirstArticleDispositionHistory)
+            .filter(
+                FirstArticleDispositionHistory.first_article_record_id == record.id
+            )
+            .count(),
+            0,
+        )
+        self.assertEqual(
+            self.db.query(FirstArticleReviewSession)
+            .filter(FirstArticleReviewSession.first_article_record_id == record.id)
+            .count(),
+            0,
+        )
+
+    def test_delete_passed_first_article_is_rejected_after_real_production(self) -> None:
+        token = f"{self._suffix}-delete-reject"
+        order, order_process, sub_order, operator_user, verification_code = (
+            self._create_first_article_execution_context(token=token)
+        )
+        submit_first_article(
+            self.db,
+            order_id=order.id,
+            order_process_id=order_process.id,
+            pipeline_instance_id=None,
+            template_id=None,
+            check_content="外观检查",
+            test_value="10.00",
+            result="passed",
+            participant_user_ids=[],
+            verification_code=verification_code,
+            remark=None,
+            operator=operator_user,
+        )
+        record = (
+            self.db.execute(
+                select(FirstArticleRecord)
+                .where(
+                    FirstArticleRecord.order_id == order.id,
+                    FirstArticleRecord.order_process_id == order_process.id,
+                )
+                .order_by(FirstArticleRecord.id.desc())
+            )
+            .scalars()
+            .first()
+        )
+        self.assertIsNotNone(record)
+        assert record is not None
+        self.record_ids.append(int(record.id))
+
+        self.db.add(
+            ProductionRecord(
+                order_id=order.id,
+                order_process_id=order_process.id,
+                sub_order_id=sub_order.id,
+                operator_user_id=operator_user.id,
+                production_quantity=1,
+                record_type="production",
+            )
+        )
+        self.db.commit()
+
+        with self.assertRaisesRegex(ValueError, "真实报工"):
+            delete_first_article(
+                self.db,
+                record_id=record.id,
+                operator=self.admin_user,
+            )
+
+    def test_cancel_delete_password_errors_and_route_permissions_are_correct(self) -> None:
+        record = self._create_first_article_record(result="failed")
+        permission_user = self._create_user_with_permissions(
+            suffix=f"{self._suffix}-fa-actions",
+            permission_codes=[
+                "quality.first_articles.cancel",
+                "quality.first_articles.delete",
+            ],
+        )
+
+        with self.assertRaises(Exception) as cancel_error:
+            cancel_first_article_api(
+                record_id=record.id,
+                payload=type("Payload", (), {"password": "wrong-password"})(),
+                db=self.db,
+                current_user=permission_user,
+            )
+        self.assertIn("当前登录用户密码错误，无法取消首件", str(cancel_error.exception))
+
+        with self.assertRaises(Exception) as delete_error:
+            delete_first_article_api(
+                record_id=record.id,
+                payload=type("Payload", (), {"password": "wrong-password"})(),
+                db=self.db,
+                current_user=permission_user,
+            )
+        self.assertIn("当前登录用户密码错误，无法删除首件", str(delete_error.exception))
+
+        cancel_route = next(
+            route
+            for route in app.routes
+            if getattr(route, "path", "")
+            == "/api/v1/quality/first-articles/{record_id}/cancel"
+            and "POST" in getattr(route, "methods", set())
+        )
+        delete_route = next(
+            route
+            for route in app.routes
+            if getattr(route, "path", "")
+            == "/api/v1/quality/first-articles/{record_id}/delete"
+            and "POST" in getattr(route, "methods", set())
+        )
+        cancel_permission = (
+            cancel_route.dependant.dependencies[1].call.__closure__[0].cell_contents
+        )
+        delete_permission = (
+            delete_route.dependant.dependencies[1].call.__closure__[0].cell_contents
+        )
+        self.assertEqual(cancel_permission, "quality.first_articles.cancel")
+        self.assertEqual(delete_permission, "quality.first_articles.delete")
 
     def test_detail_and_disposition_detail_permissions_are_isolated(self) -> None:
         record = self._create_first_article_record(result="failed")

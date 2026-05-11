@@ -6,6 +6,9 @@ void main() {
     expect(firstArticleResultLabel('passed'), isNot('passed'));
     expect(firstArticleResultLabel('failed'), isNot('failed'));
     expect(firstArticleResultLabel('custom'), 'custom');
+    expect(firstArticleRecordStatusLabel('active'), '有效');
+    expect(firstArticleRecordStatusLabel('cancelled'), '已取消');
+    expect(firstArticleRecordStatusLabel('custom'), 'custom');
 
     expect(verificationCodeSourceLabel('stored'), isNot('stored'));
     expect(verificationCodeSourceLabel('default'), isNot('default'));
@@ -26,12 +29,14 @@ void main() {
       'operator_user_id': 33,
       'operator_username': 'op',
       'result': 'passed',
+      'record_status': 'cancelled',
       'verification_date': 'invalid-date',
       'remark': 'ok',
       'created_at': '',
     });
 
     expect(item.id, 5);
+    expect(item.recordStatus, 'cancelled');
     expect(item.verificationDate, DateTime(1970, 1, 1));
     expect(item.createdAt, DateTime(1970, 1, 1));
   });
@@ -206,12 +211,17 @@ void main() {
       'operator_user_id': 7,
       'operator_username': 'quality_user',
       'result': 'failed',
+      'record_status': 'cancelled',
+      'can_cancel': false,
+      'can_delete': true,
       'verification_date': '2026-03-06',
       'verification_code': 'VCX',
       'template_id': 18,
       'template_name': '品质首件模板',
       'check_content': '外观、尺寸、装配确认',
       'test_value': '9.86',
+      'cancelled_at': '2026-03-06T09:45:00Z',
+      'cancelled_by_username': 'quality_admin',
       'participants': [
         {'user_id': 7, 'username': 'quality_user', 'full_name': '质检员'},
         {'user_id': 8, 'username': 'worker_b'},
@@ -228,10 +238,14 @@ void main() {
     expect(detail.id, 88);
     expect(detail.productionOrderCode, 'Q-ORD-88');
     expect(detail.checkResult, 'failed');
+    expect(detail.recordStatus, 'cancelled');
+    expect(detail.canCancel, isFalse);
+    expect(detail.canDelete, isTrue);
     expect(detail.templateId, 18);
     expect(detail.templateName, '品质首件模板');
     expect(detail.checkContent, '外观、尺寸、装配确认');
     expect(detail.testValue, '9.86');
+    expect(detail.cancelledByUsername, 'quality_admin');
     expect(detail.participants, hasLength(2));
     expect(detail.participants.first.displayName, 'quality_user (质检员)');
     expect(detail.defectDescription, '尺寸偏差');

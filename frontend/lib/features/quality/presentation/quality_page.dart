@@ -173,6 +173,12 @@ class _QualityPageState extends State<QualityPage>
           canDispose: widget.permissionCodes.contains(
             'quality.first_articles.disposition',
           ),
+          canCancel: widget.permissionCodes.contains(
+            'quality.first_articles.cancel',
+          ),
+          canDelete: widget.permissionCodes.contains(
+            'quality.first_articles.delete',
+          ),
           routePayloadJson:
               widget.preferredTabCode == firstArticleManagementTabCode
               ? widget.routePayloadJson

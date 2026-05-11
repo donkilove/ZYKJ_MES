@@ -236,6 +236,48 @@ class MessageServiceUnitTest(unittest.TestCase):
         db.flush.assert_called_once()
         write_audit_log.assert_called_once()
 
+    def test_run_message_maintenance_closes_first_article_todo_after_cancellation(self):
+        now = datetime.now(UTC)
+        cancelled_first_article_todo = SimpleNamespace(
+            id=41,
+            title="首件不通过待处理：ORDER-2 / 检验",
+            status="active",
+            source_module="quality",
+            source_type="first_article_record",
+            source_id="790",
+            message_type="todo",
+            expires_at=None,
+            updated_at=now,
+            created_at=now,
+        )
+        db = MagicMock()
+        db.execute.side_effect = [
+            _FakeScalarResult(all_rows=[cancelled_first_article_todo]),
+            _FakeScalarResult(
+                one=SimpleNamespace(
+                    is_deleted=False,
+                    id=790,
+                    result="failed",
+                    is_cancelled=True,
+                )
+            ),
+        ]
+
+        with (
+            patch.object(message_service, "write_audit_log") as write_audit_log,
+            patch.object(
+                message_service, "_sync_pending_registration_request_messages"
+            ),
+            patch.object(message_service, "_sync_failed_first_article_messages"),
+            patch.object(message_service, "_sync_overdue_production_order_messages"),
+        ):
+            stats = message_service.run_message_maintenance(db, now=now)
+
+        self.assertEqual(cancelled_first_article_todo.status, "src_unavailable")
+        self.assertEqual(stats["source_unavailable_updated"], 1)
+        db.flush.assert_called_once()
+        write_audit_log.assert_called_once()
+
     def test_run_message_maintenance_closes_maintenance_todo_when_work_order_done(self):
         now = datetime.now(UTC)
         completed_work_order_todo = SimpleNamespace(
