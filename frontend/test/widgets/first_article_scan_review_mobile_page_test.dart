@@ -12,6 +12,8 @@ class _FakeAuthService extends AuthService {
 
   final String token;
   static const int _expiresIn = 7 * 24 * 60 * 60;
+  int listAccountsCalls = 0;
+  List<String> accounts = const ['qa', 'operator'];
   String? lastUsername;
   String? lastPassword;
 
@@ -25,6 +27,12 @@ class _FakeAuthService extends AuthService {
     lastUsername = username;
     lastPassword = password;
     return (token: token, mustChangePassword: false, expiresIn: _expiresIn);
+  }
+
+  @override
+  Future<List<String>> listAccounts({required String baseUrl}) async {
+    listAccountsCalls += 1;
+    return accounts;
   }
 }
 
@@ -126,8 +134,12 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
-    await tester.enterText(find.widgetWithText(TextField, '账号'), 'qa');
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('qa').last);
+    await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, '密码'), 'pw');
     await tester.tap(find.widgetWithText(FilledButton, '登录'));
     await tester.pumpAndSettle();
@@ -197,8 +209,12 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
 
-    await tester.enterText(find.widgetWithText(TextField, '账号'), 'qa');
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('qa').last);
+    await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, '密码'), 'pw');
     await tester.tap(find.widgetWithText(FilledButton, '登录'));
     await tester.pumpAndSettle();

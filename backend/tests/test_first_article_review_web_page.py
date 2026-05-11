@@ -28,6 +28,9 @@ class FirstArticleReviewWebPageTest(unittest.TestCase):
         self.assertIn("text/html", response.headers.get("content-type", ""))
         self.assertIn("首件扫码复核", response.text)
         self.assertIn("/api/v1/auth/mobile-scan-review-login", response.text)
+        self.assertIn("/api/v1/auth/accounts", response.text)
+        self.assertIn('<select id="username"', response.text)
+        self.assertIn("refresh-accounts-button", response.text)
 
     def test_build_first_article_review_url_uses_backend_origin(self) -> None:
         request = Request(
@@ -109,6 +112,7 @@ class FirstArticleReviewWebPageTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200, response.text)
         self.assertIn("/api/v1/auth/mobile-scan-review-login", response.text)
+        self.assertIn("/api/v1/auth/accounts", response.text)
         self.assertIn("localStorage", response.text)
         self.assertIn("firstArticleScanReview.accessToken", response.text)
         self.assertIn("switch-account-button", response.text)

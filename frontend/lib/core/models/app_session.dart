@@ -4,12 +4,14 @@ class AppSession {
   AppSession({
     required this.baseUrl,
     required this.accessToken,
+    this.username,
     this.mustChangePassword = false,
     this.expiresIn = 0,
   });
 
   final String baseUrl;
   final String accessToken;
+  final String? username;
   final bool mustChangePassword;
   final int expiresIn;
 
@@ -18,8 +20,9 @@ class AppSession {
       final parts = accessToken.split('.');
       if (parts.length != 3) return null;
       final normalized = base64Url.normalize(parts[1]);
-      final payload = jsonDecode(utf8.decode(base64Url.decode(normalized)))
-          as Map<String, dynamic>;
+      final payload =
+          jsonDecode(utf8.decode(base64Url.decode(normalized)))
+              as Map<String, dynamic>;
       final iat = payload['iat'];
       if (iat is int) {
         return DateTime.fromMillisecondsSinceEpoch(iat * 1000, isUtc: true);
@@ -41,8 +44,9 @@ class AppSession {
       final parts = accessToken.split('.');
       if (parts.length != 3) return null;
       final normalized = base64Url.normalize(parts[1]);
-      final payload = jsonDecode(utf8.decode(base64Url.decode(normalized)))
-          as Map<String, dynamic>;
+      final payload =
+          jsonDecode(utf8.decode(base64Url.decode(normalized)))
+              as Map<String, dynamic>;
       return payload['login_type'] as String?;
     } catch (_) {
       return null;

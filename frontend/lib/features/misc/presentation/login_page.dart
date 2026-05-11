@@ -258,6 +258,7 @@ class _LoginPageState extends State<LoginPage> {
       final session = AppSession(
         baseUrl: baseUrl,
         accessToken: result.token,
+        username: account,
         mustChangePassword: result.mustChangePassword,
       );
       widget.onLoginSuccess(session);

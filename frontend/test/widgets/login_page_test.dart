@@ -19,7 +19,8 @@ class _FakeAuthService extends AuthService {
   Object? loginError;
   Object? listAccountsError;
   List<String> accounts = ['tester', 'operator_a'];
-  Completer<({String token, bool mustChangePassword, int expiresIn})>? loginCompleter;
+  Completer<({String token, bool mustChangePassword, int expiresIn})>?
+  loginCompleter;
 
   @override
   Future<List<String>> listAccounts({required String baseUrl}) async {
@@ -111,6 +112,7 @@ void main() {
     expect(authService.lastPassword, 'Pass123');
     expect(capturedSession, isNotNull);
     expect(capturedSession!.accessToken, 'token-123');
+    expect(capturedSession!.username, 'tester');
     expect(capturedSession!.mustChangePassword, isTrue);
   });
 
@@ -192,7 +194,8 @@ void main() {
 
   testWidgets('登录进行中按钮会禁用并阻止重复提交', (tester) async {
     final authService = _FakeAuthService()
-      ..loginCompleter = Completer<({String token, bool mustChangePassword, int expiresIn})>();
+      ..loginCompleter =
+          Completer<({String token, bool mustChangePassword, int expiresIn})>();
 
     await _pumpLoginPage(tester, authService: authService);
 

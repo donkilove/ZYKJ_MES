@@ -81,6 +81,22 @@
         color: var(--accent-dark);
       }
 
+      .account-status {
+        display: none;
+        margin: -4px 0 12px;
+        font-size: 13px;
+        line-height: 1.4;
+        color: var(--muted);
+      }
+
+      .account-status.show {
+        display: block;
+      }
+
+      .account-status.error {
+        color: var(--danger);
+      }
+
       .field {
         margin-bottom: 14px;
       }
@@ -99,6 +115,7 @@
       }
 
       input,
+      select,
       textarea {
         width: 100%;
         border: 1px solid var(--line);
@@ -106,6 +123,10 @@
         padding: 12px 14px;
         background: #fff;
         color: var(--text);
+      }
+
+      select {
+        min-height: 46px;
       }
 
       textarea {
@@ -208,12 +229,16 @@
         <form id="login-form">
           <div class="field">
             <label for="username">账号</label>
-            <input id="username" name="username" autocomplete="username" required>
+            <select id="username" name="username" autocomplete="username" required>
+              <option value="">正在加载账号列表...</option>
+            </select>
           </div>
+          <div id="account-status" class="account-status"></div>
           <div class="field">
             <label for="password">密码</label>
             <input id="password" name="password" type="password" autocomplete="current-password" required>
           </div>
+          <button id="refresh-accounts-button" class="secondary" type="button">刷新账号列表</button>
           <button id="login-button" type="submit">登录</button>
         </form>
 
@@ -262,15 +287,31 @@
       const messageNode = document.getElementById("message");
       const loginForm = document.getElementById("login-form");
       const loginButton = document.getElementById("login-button");
+      const refreshAccountsButton = document.getElementById("refresh-accounts-button");
       const reviewPanel = document.getElementById("review-panel");
       const reloadButton = document.getElementById("reload-button");
       const switchAccountButton = document.getElementById("switch-account-button");
       const submitButton = document.getElementById("submit-button");
       const usernameInput = document.getElementById("username");
+      const accountStatusNode = document.getElementById("account-status");
       const passwordInput = document.getElementById("password");
       const remarkInput = document.getElementById("remark");
       let accessToken = "";
+      let accounts = [];
+      let pendingUsername = "";
+      let accountsLoading = false;
       let submitted = false;
+
+      function setAccountStatus(text, type) {
+        accountStatusNode.textContent = text || "";
+        accountStatusNode.className = "account-status";
+        if (text) {
+          accountStatusNode.classList.add("show");
+          if (type === "error") {
+            accountStatusNode.classList.add("error");
+          }
+        }
+      }
 
       function setMessage(text, type) {
         messageNode.textContent = text || "";
@@ -284,6 +325,8 @@
         loginButton.disabled = busy;
         reloadButton.disabled = busy || !accessToken;
         submitButton.disabled = busy || !accessToken || submitted;
+        usernameInput.disabled = busy || accountsLoading;
+        refreshAccountsButton.disabled = busy || accountsLoading;
       }
 
       function showReviewPanel(show) {
@@ -300,6 +343,7 @@
         localStorage.setItem(STORAGE_KEYS.accessToken, accessToken);
         localStorage.setItem(STORAGE_KEYS.expiresAt, String(expiresAt));
         localStorage.setItem(STORAGE_KEYS.username, username || "");
+        pendingUsername = (username || "").trim();
       }
 
       function clearLoginState() {
@@ -308,7 +352,61 @@
         localStorage.removeItem(STORAGE_KEYS.username);
         accessToken = "";
         submitted = false;
+        pendingUsername = "";
+        usernameInput.value = "";
+        passwordInput.value = "";
+        setAccountStatus("", "success");
+        renderAccounts();
         showReviewPanel(false);
+      }
+
+      function renderAccounts() {
+        const options = [];
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = accountsLoading ? "正在加载账号列表..." : "请选择账号";
+        placeholder.disabled = true;
+        options.push(placeholder);
+
+        accounts.forEach((account) => {
+          const option = document.createElement("option");
+          option.value = account;
+          option.textContent = account;
+          options.push(option);
+        });
+
+        usernameInput.replaceChildren(...options);
+        usernameInput.value = pendingUsername && accounts.includes(pendingUsername)
+          ? pendingUsername
+          : "";
+      }
+
+      async function loadAccounts() {
+        if (accountsLoading) {
+          return;
+        }
+        accountsLoading = true;
+        setBusy(false);
+        setAccountStatus("正在加载账号列表...");
+        renderAccounts();
+        try {
+          const result = await requestJson("/api/v1/auth/accounts");
+          accounts = Array.isArray(result && result.accounts)
+            ? result.accounts.map((item) => String(item).trim()).filter(Boolean)
+            : [];
+          setAccountStatus("");
+          renderAccounts();
+        } catch (error) {
+          accounts = [];
+          setAccountStatus(
+            error && error.message ? `加载账号列表失败：${error.message}` : "加载账号列表失败",
+            "error"
+          );
+          renderAccounts();
+        } finally {
+          accountsLoading = false;
+          setBusy(false);
+        }
       }
 
       function restoreLoginState() {
@@ -322,7 +420,8 @@
         accessToken = savedToken;
         const savedUsername = localStorage.getItem(STORAGE_KEYS.username) || "";
         if (savedUsername) {
-          usernameInput.value = savedUsername;
+          pendingUsername = savedUsername;
+          renderAccounts();
         }
         return true;
       }
@@ -386,10 +485,14 @@
           setMessage("扫码链接缺少复核令牌", "error");
           return;
         }
+        if (!usernameInput.value.trim()) {
+          setMessage("请选择账号", "error");
+          return;
+        }
         setBusy(true);
         setMessage("", "success");
         const body = new URLSearchParams();
-        body.set("username", document.getElementById("username").value.trim());
+        body.set("username", usernameInput.value.trim());
         body.set("password", document.getElementById("password").value);
         try {
           const result = await requestJson("/api/v1/auth/mobile-scan-review-login", {
@@ -425,8 +528,11 @@
 
       switchAccountButton.addEventListener("click", () => {
         clearLoginState();
-        passwordInput.value = "";
         setMessage("", "success");
+      });
+
+      refreshAccountsButton.addEventListener("click", () => {
+        loadAccounts();
       });
 
       submitButton.addEventListener("click", async () => {
@@ -468,6 +574,7 @@
           setMessage("扫码链接缺少复核令牌", "error");
           return;
         }
+        loadAccounts();
         if (!restoreLoginState()) {
           return;
         }

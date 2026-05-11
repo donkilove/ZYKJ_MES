@@ -54,17 +54,21 @@ class FirstArticleScanReviewMobilePage extends StatefulWidget {
 
 class _FirstArticleScanReviewMobilePageState
     extends State<FirstArticleScanReviewMobilePage> {
-  final TextEditingController _usernameController = TextEditingController();
+  final GlobalKey<FormState> _loginFormKey = GlobalKey<FormState>();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _remarkController = TextEditingController();
 
   late final AuthService _authService;
   late final ScanReviewMobileLoginStorage _loginStorage;
+  List<String> _accounts = const [];
+  String? _selectedUsername;
+  String _accountLoadError = '';
   ProductionService? _productionService;
   FirstArticleReviewSessionDetail? _detail;
   String _reviewResult = 'passed';
   String _message = '';
   bool _loading = false;
+  bool _loadingAccounts = false;
   bool _loggedIn = false;
   bool _submitted = false;
 
@@ -78,12 +82,12 @@ class _FirstArticleScanReviewMobilePageState
       _message = '扫码链接缺少复核令牌';
       return;
     }
+    unawaited(_loadAccounts());
     unawaited(_restoreLoginState());
   }
 
   @override
   void dispose() {
-    _usernameController.dispose();
     _passwordController.dispose();
     _remarkController.dispose();
     super.dispose();
@@ -117,6 +121,41 @@ class _FirstArticleScanReviewMobilePageState
       _remarkController.clear();
       _passwordController.clear();
     });
+  }
+
+  Future<void> _loadAccounts() async {
+    if (mounted) {
+      setState(() {
+        _loadingAccounts = true;
+        _accountLoadError = '';
+      });
+    }
+    try {
+      final accounts = await _authService.listAccounts(baseUrl: widget.baseUrl);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _accounts = accounts;
+        if (_selectedUsername != null &&
+            !_accounts.contains(_selectedUsername)) {
+          _selectedUsername = null;
+        }
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _accountLoadError = _errorMessage(error);
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loadingAccounts = false;
+        });
+      }
+    }
   }
 
   Future<void> _loadDetailWithSession(
@@ -153,18 +192,23 @@ class _FirstArticleScanReviewMobilePageState
     if (saved == null || widget.token.trim().isEmpty) {
       return;
     }
-    if ((saved.username ?? '').trim().isNotEmpty) {
-      _usernameController.text = saved.username!.trim();
-    }
     if (mounted) {
       setState(() {
+        final savedUsername = (saved.username ?? '').trim();
+        if (savedUsername.isNotEmpty) {
+          _selectedUsername = savedUsername;
+        }
         _loading = true;
         _message = '';
       });
     }
     try {
       await _loadDetailWithSession(
-        AppSession(baseUrl: widget.baseUrl, accessToken: saved.accessToken),
+        AppSession(
+          baseUrl: widget.baseUrl,
+          accessToken: saved.accessToken,
+          username: saved.username,
+        ),
         clearOnAuthFailure: true,
       );
     } catch (error) {
@@ -183,14 +227,11 @@ class _FirstArticleScanReviewMobilePageState
   }
 
   Future<void> _loginAndLoadDetail() async {
-    final username = _usernameController.text.trim();
-    final password = _passwordController.text;
-    if (username.isEmpty || password.isEmpty) {
-      setState(() {
-        _message = '请输入账号和密码';
-      });
+    if (!_loginFormKey.currentState!.validate()) {
       return;
     }
+    final username = (_selectedUsername ?? '').trim();
+    final password = _passwordController.text;
     setState(() {
       _loading = true;
       _message = '';
@@ -213,6 +254,7 @@ class _FirstArticleScanReviewMobilePageState
       final session = AppSession(
         baseUrl: widget.baseUrl,
         accessToken: loginResult.token,
+        username: username,
       );
       await _loadDetailWithSession(session, clearOnAuthFailure: false);
       await _loginStorage.write(
@@ -302,36 +344,107 @@ class _FirstArticleScanReviewMobilePageState
     );
   }
 
+  Widget _buildAccountLoadError(BuildContext context) {
+    if (_accountLoadError.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        '加载账号列表失败：$_accountLoadError',
+        style: TextStyle(color: Theme.of(context).colorScheme.error),
+      ),
+    );
+  }
+
   Widget _buildLoginForm(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text('首件扫码复核', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _usernameController,
-          textInputAction: TextInputAction.next,
-          decoration: const InputDecoration(
-            labelText: '账号',
-            border: OutlineInputBorder(),
+    final selectedUsername = _accounts.contains(_selectedUsername)
+        ? _selectedUsername
+        : null;
+    return Form(
+      key: _loginFormKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('首件扫码复核', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 16),
+          _buildAccountLoadError(context),
+          DropdownButtonFormField<String>(
+            key: ValueKey<String>(
+              '${_accounts.join('|')}|${selectedUsername ?? ''}',
+            ),
+            initialValue: selectedUsername,
+            isExpanded: true,
+            decoration: InputDecoration(
+              labelText: '账号',
+              border: const OutlineInputBorder(),
+              helperText: _loadingAccounts
+                  ? '正在加载账号列表...'
+                  : _accounts.isEmpty
+                  ? '请刷新后选择账号'
+                  : '请选择账号',
+            ),
+            items: _accounts
+                .map(
+                  (account) => DropdownMenuItem<String>(
+                    value: account,
+                    child: Text(account),
+                  ),
+                )
+                .toList(),
+            onChanged: _loadingAccounts
+                ? null
+                : (value) {
+                    setState(() {
+                      _selectedUsername = value;
+                    });
+                  },
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return '请选择账号';
+              }
+              return null;
+            },
           ),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _passwordController,
-          obscureText: true,
-          onSubmitted: (_) => _loading ? null : _loginAndLoadDetail(),
-          decoration: const InputDecoration(
-            labelText: '密码',
-            border: OutlineInputBorder(),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: _loadingAccounts ? null : _loadAccounts,
+              icon: _loadingAccounts
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh),
+              label: Text(_loadingAccounts ? '加载中...' : '刷新账号列表'),
+            ),
           ),
-        ),
-        const SizedBox(height: 16),
-        FilledButton(
-          onPressed: _loading ? null : _loginAndLoadDetail,
-          child: Text(_loading ? '登录中...' : '登录'),
-        ),
-      ],
+          const SizedBox(height: 4),
+          TextFormField(
+            controller: _passwordController,
+            obscureText: true,
+            textInputAction: TextInputAction.done,
+            onFieldSubmitted: (_) => _loading ? null : _loginAndLoadDetail(),
+            decoration: const InputDecoration(
+              labelText: '密码',
+              border: OutlineInputBorder(),
+            ),
+            validator: (value) {
+              if (value == null || value.isEmpty) {
+                return '请输入密码';
+              }
+              return null;
+            },
+          ),
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: _loading ? null : _loginAndLoadDetail,
+            child: Text(_loading ? '登录中...' : '登录'),
+          ),
+        ],
+      ),
     );
   }
 

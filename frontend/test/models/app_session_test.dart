@@ -6,9 +6,11 @@ void main() {
     final session = AppSession(
       baseUrl: 'http://127.0.0.1:8000/api/v1',
       accessToken: 'token-123',
+      username: 'tester',
     );
 
     expect(session.baseUrl, 'http://127.0.0.1:8000/api/v1');
     expect(session.accessToken, 'token-123');
+    expect(session.username, 'tester');
   });
 }
