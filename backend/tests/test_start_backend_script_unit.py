@@ -122,19 +122,24 @@ class StartBackendScriptUnitTest(unittest.TestCase):
     @patch("start_backend.run_up_action", return_value=0)
     @patch("start_backend.resolve_compose_files", return_value=["compose.yml"])
     @patch("start_backend.require_docker")
+    @patch("start_backend.detect_host_ipv4", return_value=None)
     @patch("start_backend.load_env_file")
     def test_main_injects_merged_env_into_up_action(
         self,
         mock_load_env_file,
+        _mock_detect_host_ipv4,
         _mock_require_docker,
         _mock_resolve_compose_files,
         mock_run_up_action,
     ) -> None:
-        mock_load_env_file.return_value = {
-            "JWT_SECRET_KEY": "from-env-file",
-            "BOOTSTRAP_ADMIN_PASSWORD": "EnvFileSafe_20260419!",
-            "PRODUCTION_DEFAULT_VERIFICATION_CODE": "ENVSAFE20260419",
-        }
+        mock_load_env_file.side_effect = [
+            {
+                "JWT_SECRET_KEY": "from-env-file",
+                "BOOTSTRAP_ADMIN_PASSWORD": "EnvFileSafe_20260419!",
+                "PRODUCTION_DEFAULT_VERIFICATION_CODE": "ENVSAFE20260419",
+            },
+            {},
+        ]
         with tempfile.TemporaryDirectory() as tmp_dir:
             compose_file = Path(tmp_dir) / "compose.yml"
             compose_file.write_text("services: {}\n", encoding="utf-8")
@@ -149,7 +154,82 @@ class StartBackendScriptUnitTest(unittest.TestCase):
         self.assertEqual(env["BOOTSTRAP_ADMIN_PASSWORD"], "EnvFileSafe_20260419!")
         self.assertEqual(env["PRODUCTION_DEFAULT_VERIFICATION_CODE"], "ENVSAFE20260419")
         self.assertNotIn("DB_HOST", env)
-        mock_load_env_file.assert_called_once()
+        self.assertEqual(mock_load_env_file.call_count, 2)
+
+    @patch("start_backend.run_up_action", return_value=0)
+    @patch("start_backend.resolve_compose_files", return_value=["compose.yml"])
+    @patch("start_backend.require_docker")
+    @patch("start_backend.detect_host_ipv4")
+    @patch("start_backend.load_env_file")
+    def test_main_propagates_public_base_url_from_backend_env_file(
+        self,
+        mock_load_env_file,
+        mock_detect_host_ipv4,
+        _mock_require_docker,
+        _mock_resolve_compose_files,
+        mock_run_up_action,
+    ) -> None:
+        mock_load_env_file.side_effect = [
+            {
+                "JWT_SECRET_KEY": "from-env-file",
+                "BOOTSTRAP_ADMIN_PASSWORD": "EnvFileSafe_20260419!",
+                "PRODUCTION_DEFAULT_VERIFICATION_CODE": "ENVSAFE20260419",
+                "PUBLIC_BASE_URL": "http://192.168.1.88:8000",
+            },
+            {},
+        ]
+        mock_detect_host_ipv4.return_value = "192.168.1.66"
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            compose_file = Path(tmp_dir) / "compose.yml"
+            compose_file.write_text("services: {}\n", encoding="utf-8")
+            with patch.object(start_backend, "COMPOSE_FILE", compose_file):
+                with patch.dict(os.environ, {"JWT_SECRET_KEY": "from-shell"}, clear=True):
+                    exit_code = start_backend.main(["up"])
+
+        self.assertEqual(exit_code, 0)
+        kwargs = mock_run_up_action.call_args.kwargs
+        self.assertEqual(kwargs["env"]["PUBLIC_BASE_URL"], "http://192.168.1.88:8000")
+        self.assertEqual(kwargs["public_base_url"], "http://192.168.1.88:8000")
+        self.assertFalse(kwargs["public_base_url_auto_detected"])
+        mock_detect_host_ipv4.assert_not_called()
+
+    @patch("start_backend.run_up_action", return_value=0)
+    @patch("start_backend.resolve_compose_files", return_value=["compose.yml"])
+    @patch("start_backend.require_docker")
+    @patch("start_backend.detect_host_ipv4", return_value="192.168.1.54")
+    @patch("start_backend.load_env_file")
+    def test_main_auto_detects_public_base_url_when_missing(
+        self,
+        mock_load_env_file,
+        _mock_detect_host_ipv4,
+        _mock_require_docker,
+        _mock_resolve_compose_files,
+        mock_run_up_action,
+    ) -> None:
+        mock_load_env_file.side_effect = [
+            {
+                "JWT_SECRET_KEY": "from-env-file",
+                "BOOTSTRAP_ADMIN_PASSWORD": "EnvFileSafe_20260419!",
+                "PRODUCTION_DEFAULT_VERIFICATION_CODE": "ENVSAFE20260419",
+            },
+            {
+                "BACKEND_WEB_HOST_PORT": "18080",
+            },
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            compose_file = Path(tmp_dir) / "compose.yml"
+            compose_file.write_text("services: {}\n", encoding="utf-8")
+            with patch.object(start_backend, "COMPOSE_FILE", compose_file):
+                with patch.dict(os.environ, {"JWT_SECRET_KEY": "from-shell"}, clear=True):
+                    exit_code = start_backend.main(["up"])
+
+        self.assertEqual(exit_code, 0)
+        kwargs = mock_run_up_action.call_args.kwargs
+        self.assertEqual(kwargs["env"]["PUBLIC_BASE_URL"], "http://192.168.1.54:18080")
+        self.assertEqual(kwargs["public_base_url"], "http://192.168.1.54:18080")
+        self.assertTrue(kwargs["public_base_url_auto_detected"])
 
     @patch("start_backend.subprocess.run")
     def test_run_compose_uses_utf8_decoding(self, mock_subprocess_run) -> None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import os
 import shutil
 import socket
@@ -14,6 +15,7 @@ from typing import AbstractSet, Mapping, Sequence
 ROOT_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = ROOT_DIR / "backend"
 DEFAULT_ENV_FILE = BACKEND_DIR / ".env"
+ROOT_ENV_FILE = ROOT_DIR / ".env"
 COMPOSE_FILE = ROOT_DIR / "compose.yml"
 RUNTIME_DIR = ROOT_DIR / ".tmp_runtime"
 DB_EXPOSE_OVERRIDE_FILE = RUNTIME_DIR / "start_backend.compose.override.yml"
@@ -92,13 +94,59 @@ def normalize_setting_value(value: str | None) -> str:
     return (value or "").strip()
 
 
+def _is_usable_ipv4(value: str) -> bool:
+    try:
+        address = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return (
+        isinstance(address, ipaddress.IPv4Address)
+        and not address.is_loopback
+        and not address.is_link_local
+        and not address.is_multicast
+        and not address.is_unspecified
+    )
+
+
+def detect_host_ipv4() -> str | None:
+    candidates: list[str] = []
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            candidates.append(sock.getsockname()[0])
+    except OSError:
+        pass
+
+    try:
+        host_name = socket.gethostname()
+        for _, _, _, _, sockaddr in socket.getaddrinfo(
+            host_name,
+            None,
+            socket.AF_INET,
+            socket.SOCK_DGRAM,
+        ):
+            candidates.append(sockaddr[0])
+    except OSError:
+        pass
+
+    seen: set[str] = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if _is_usable_ipv4(candidate):
+            return candidate
+    return None
+
+
 def resolve_sensitive_env_value(
     *,
     key: str,
     base_env: Mapping[str, str],
     env_file_values: Mapping[str, str],
     insecure_values: AbstractSet[str],
- ) -> str:
+) -> str:
     shell_value = normalize_setting_value(base_env.get(key))
     if shell_value and shell_value not in insecure_values:
         return shell_value
@@ -295,6 +343,8 @@ def print_start_summary(
     db_exposed: bool,
     db_port: int,
     backend_http_port: int | None,
+    public_base_url: str | None,
+    public_base_url_auto_detected: bool,
 ) -> None:
     print("[INFO] 后端 Docker 服务已启动。")
     print(f"[INFO] 服务集合：{', '.join(services)}")
@@ -306,6 +356,20 @@ def print_start_summary(
         print(f"[INFO] 数据库暴露：已开启（127.0.0.1:{db_port} -> 5432）")
     else:
         print("[INFO] 数据库暴露：未开启（仅容器网络可见）")
+    if public_base_url:
+        if public_base_url_auto_detected:
+            print(f"[WARN] PUBLIC_BASE_URL 未显式配置，已临时回退为宿主机地址：{public_base_url}")
+            print(
+                "[WARN] 建议将 PUBLIC_BASE_URL 写入根目录 .env、backend/.env 或当前 shell，"
+                "避免手机扫码二维码显示为 Docker 内网地址。"
+            )
+        else:
+            print(f"[INFO] 手机扫码对外地址：{public_base_url}")
+    else:
+        print(
+            "[WARN] 未设置 PUBLIC_BASE_URL 且未能自动探测宿主机地址，"
+            "手机扫码二维码可能显示为 127.0.0.1 或 Docker 内网地址。"
+        )
     print("[INFO] 常用命令：")
     print("[INFO]   python start_backend.py logs")
     print("[INFO]   python start_backend.py ps")
@@ -323,6 +387,35 @@ def resolve_backend_http_port(env: Mapping[str, str]) -> int:
             f"[WARN] BACKEND_WEB_HOST_PORT={raw_port!r} 不是合法端口，回退默认端口 {DEFAULT_BACKEND_HTTP_PORT}。"
         )
         return DEFAULT_BACKEND_HTTP_PORT
+
+
+def apply_public_base_url(
+    *,
+    env: dict[str, str],
+    root_env_values: Mapping[str, str],
+    backend_env_values: Mapping[str, str],
+) -> tuple[str | None, bool]:
+    for source in (env, root_env_values, backend_env_values):
+        configured_value = normalize_setting_value(source.get("PUBLIC_BASE_URL"))
+        if configured_value:
+            normalized = configured_value.rstrip("/")
+            env["PUBLIC_BASE_URL"] = normalized
+            return normalized, False
+
+    detected_ip = detect_host_ipv4()
+    if not detected_ip:
+        return None, False
+
+    backend_http_port = resolve_backend_http_port(
+        {
+            **backend_env_values,
+            **root_env_values,
+            **env,
+        }
+    )
+    detected_public_base_url = f"http://{detected_ip}:{backend_http_port}"
+    env["PUBLIC_BASE_URL"] = detected_public_base_url
+    return detected_public_base_url, True
 
 
 def print_compose_result(result: subprocess.CompletedProcess[str]) -> None:
@@ -376,6 +469,8 @@ def run_up_action(
     env: dict[str, str],
     compose_files: Sequence[str],
     force_rebuild: bool,
+    public_base_url: str | None = None,
+    public_base_url_auto_detected: bool = False,
 ) -> int:
     services = list(args.services) if args.services else list(DEFAULT_UP_SERVICES)
     need_build = force_rebuild or (not args.no_build)
@@ -413,6 +508,8 @@ def run_up_action(
             db_exposed=args.expose_db,
             db_port=args.db_port,
             backend_http_port=None,
+            public_base_url=public_base_url,
+            public_base_url_auto_detected=public_base_url_auto_detected,
         )
         return 0
 
@@ -434,6 +531,8 @@ def run_up_action(
             db_exposed=args.expose_db,
             db_port=args.db_port,
             backend_http_port=backend_http_port,
+            public_base_url=public_base_url,
+            public_base_url_auto_detected=public_base_url_auto_detected,
         )
         return 0
 
@@ -457,7 +556,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[ERROR] 未找到 compose 文件：{COMPOSE_FILE}")
         return 1
 
-    env = build_compose_env(os.environ.copy(), load_env_file(DEFAULT_ENV_FILE))
+    backend_env_values = load_env_file(DEFAULT_ENV_FILE)
+    root_env_values = load_env_file(ROOT_ENV_FILE)
+    env = build_compose_env(os.environ.copy(), backend_env_values)
+    public_base_url, public_base_url_auto_detected = apply_public_base_url(
+        env=env,
+        root_env_values=root_env_values,
+        backend_env_values=backend_env_values,
+    )
     compose_files = resolve_compose_files(args)
     action = args.action
 
@@ -467,6 +573,8 @@ def main(argv: list[str] | None = None) -> int:
             env=env,
             compose_files=compose_files,
             force_rebuild=True,
+            public_base_url=public_base_url,
+            public_base_url_auto_detected=public_base_url_auto_detected,
         )
     if action == "up":
         return run_up_action(
@@ -474,6 +582,8 @@ def main(argv: list[str] | None = None) -> int:
             env=env,
             compose_files=compose_files,
             force_rebuild=False,
+            public_base_url=public_base_url,
+            public_base_url_auto_detected=public_base_url_auto_detected,
         )
     return run_simple_action(
         action=action,
