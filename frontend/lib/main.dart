@@ -7,6 +7,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/config/runtime_endpoints.dart';
 import 'package:mes_client/core/services/effective_clock.dart';
+import 'package:mes_client/core/services/windows_desktop_shell_service.dart';
 import 'package:mes_client/core/ui/foundation/mes_theme.dart';
 import 'package:mes_client/features/auth/presentation/token_renewal_dialog.dart';
 import 'package:mes_client/features/auth/services/auth_service.dart';
@@ -90,7 +91,7 @@ class MesClientApp extends StatelessWidget {
       listenable: softwareSettingsController,
       builder: (context, child) {
         return MaterialApp(
-          title: 'ZYKJ MES 系统',
+          title: WindowsDesktopShellService.baseTitle,
           debugShowCheckedModeBanner: false,
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
@@ -143,6 +144,7 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
   void initState() {
     super.initState();
     widget.timeSyncController.addListener(_handleTimeSyncChanged);
+    unawaited(WindowsDesktopShellService.resetDesktopState());
     unawaited(
       widget.timeSyncController.checkAtStartup(baseUrl: defaultApiBaseUrl),
     );
@@ -183,6 +185,7 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
         _session = AppSession(
           baseUrl: session.baseUrl,
           accessToken: result.token,
+          username: session.username,
           mustChangePassword: session.mustChangePassword,
           expiresIn: result.expiresIn,
         );
@@ -201,6 +204,12 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
       _session = session;
       _loginNotice = null;
     });
+    unawaited(
+      WindowsDesktopShellService.syncDesktopState(
+        loggedIn: true,
+        username: session.username,
+      ),
+    );
     _startTokenMonitor();
     unawaited(
       widget.timeSyncController.checkAtStartup(
@@ -218,6 +227,7 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
       _session = null;
       _loginNotice = '密码已修改，请使用新密码重新登录。';
     });
+    unawaited(WindowsDesktopShellService.resetDesktopState());
   }
 
   Future<void> _handleLogout({String? reason}) async {
@@ -242,6 +252,7 @@ class _AppBootstrapPageState extends State<AppBootstrapPage> {
         _loginNotice = reason;
       }
     });
+    unawaited(WindowsDesktopShellService.resetDesktopState());
   }
 
   @override

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/services/page_catalog_service.dart';
+import 'package:mes_client/core/services/windows_desktop_shell_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/features/auth/services/auth_service.dart';
 import 'package:mes_client/features/auth/services/authz_service.dart';
@@ -81,6 +82,7 @@ class _MainShellPageState extends State<MainShellPage>
   final MainShellPageRegistry _pageRegistry = const MainShellPageRegistry();
   late final MainShellController _controller;
   late final PluginHostController _pluginHostController;
+  String? _syncedDesktopUsername;
 
   @override
   void initState() {
@@ -138,12 +140,14 @@ class _MainShellPageState extends State<MainShellPage>
       unreadPollInterval: _unreadPollInterval,
       debounceDuration: _homeDashboardRefreshDebounceDuration,
     );
+    _controller.addListener(_syncDesktopState);
     unawaited(_controller.initialize());
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _controller.removeListener(_syncDesktopState);
     _pluginHostController.dispose();
     _controller.dispose();
     super.dispose();
@@ -182,6 +186,21 @@ class _MainShellPageState extends State<MainShellPage>
     if (!success) {
       _showNoAccessSnackBar();
     }
+  }
+
+  void _syncDesktopState() {
+    final currentUser = _controller.state.currentUser;
+    final username = currentUser == null ? null : currentUser.username.trim();
+    if (username == _syncedDesktopUsername) {
+      return;
+    }
+    _syncedDesktopUsername = username;
+    unawaited(
+      WindowsDesktopShellService.syncDesktopState(
+        loggedIn: currentUser != null,
+        username: username,
+      ),
+    );
   }
 
   Widget _buildContent(String pageCode) {

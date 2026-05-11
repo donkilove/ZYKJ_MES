@@ -22,6 +22,24 @@
 python start_frontend.py
 ```
 
+如需同时启动 4 个前端实例，请回到仓库根目录执行：
+
+```powershell
+python start_frontend_multi.py
+```
+
+默认会进入 `hot-reload` 多开模式：
+
+- 在当前终端按 `r`：4 个实例一起热重载
+- 在当前终端按 `R`：4 个实例一起热重启
+- 在当前终端按 `q`：停止全部实例
+
+如果只想走预构建后的多开，可执行：
+
+```powershell
+python start_frontend_multi.py --mode exe
+```
+
 默认行为：
 
 - 默认设备：`windows`

@@ -56,6 +56,24 @@ python start_backend.py
 python start_frontend.py
 ```
 
+如需同时启动 4 个前端实例，可执行：
+
+```powershell
+python start_frontend_multi.py
+```
+
+默认是 `hot-reload` 开发模式：
+
+- 在当前终端按 `r`：4 个实例一起热重载
+- 在当前终端按 `R`：4 个实例一起热重启
+- 在当前终端按 `q`：停止全部实例
+
+如需改回“先构建 exe 再多开”的稳定模式，可执行：
+
+```powershell
+python start_frontend_multi.py --mode exe
+```
+
 说明：
 
 - `start_frontend.py` 默认设备是 `windows`。
