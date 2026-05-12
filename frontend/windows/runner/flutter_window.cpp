@@ -172,7 +172,7 @@ void FlutterWindow::EnsureTrayIcon() {
   tray_icon_data_.cbSize = sizeof(tray_icon_data_);
   tray_icon_data_.hWnd = GetHandle();
   tray_icon_data_.uID = kTrayIconId;
-  tray_icon_data_.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
+  tray_icon_data_.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_SHOWTIP;
   tray_icon_data_.uCallbackMessage = kTrayCallbackMessage;
   tray_icon_data_.hIcon = LoadAppIcon();
 
@@ -208,7 +208,10 @@ void FlutterWindow::RestoreFromTray() {
     return;
   }
 
-  ShowWindow(GetHandle(), SW_RESTORE);
+  ShowWindow(GetHandle(), SW_SHOW);
+  if (IsIconic(GetHandle())) {
+    ShowWindow(GetHandle(), SW_RESTORE);
+  }
   SetForegroundWindow(GetHandle());
   window_hidden_to_tray_ = false;
 }
@@ -300,8 +303,11 @@ LRESULT FlutterWindow::MessageHandler(HWND hwnd,
       break;
 
     case kTrayCallbackMessage:
-      switch (lparam) {
+      // NOTIFYICON_VERSION_4 packs the notification code into LOWORD(lParam).
+      switch (LOWORD(lparam)) {
         case WM_LBUTTONDBLCLK:
+        case NIN_SELECT:
+        case NIN_KEYSELECT:
           RestoreFromTray();
           break;
         case WM_RBUTTONUP:

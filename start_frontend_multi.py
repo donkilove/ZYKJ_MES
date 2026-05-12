@@ -52,9 +52,10 @@ SYNC_EXCLUDED_FILE_NAMES = {
     ".flutter-plugins-dependencies",
     ".packages",
 }
+HOT_RELOAD_SUPPORT_FILES = ("logo.ico",)
 DEFAULT_INSTANCE_COUNT = 4
 DEFAULT_STARTUP_DELAY_SECONDS = 2.0
-DEFAULT_MACHINE_START_TIMEOUT_SECONDS = 180
+DEFAULT_MACHINE_START_TIMEOUT_SECONDS = 600
 
 
 @dataclass
@@ -327,6 +328,21 @@ def sync_workspace(source_dir: Path, workspace_dir: Path) -> WorkspaceSyncResult
     return result
 
 
+def sync_hot_reload_workspace(source_dir: Path, workspace_dir: Path) -> WorkspaceSyncResult:
+    result = sync_workspace(source_dir, workspace_dir)
+
+    workspace_instance_dir = workspace_dir.parent
+    for file_name in HOT_RELOAD_SUPPORT_FILES:
+        source_file = ROOT_DIR / file_name
+        if not source_file.exists():
+            continue
+        target_file = workspace_instance_dir / file_name
+        target_file.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_file, target_file)
+
+    return result
+
+
 def prepare_hot_reload_workspaces(count: int) -> list[Path]:
     workspaces: list[Path] = []
     for index in range(1, count + 1):
@@ -401,7 +417,7 @@ def launch_hot_reload_instances(
     log_dir.mkdir(parents=True, exist_ok=True)
 
     for index, workspace_dir in enumerate(workspaces, start=1):
-        sync_result = sync_workspace(FRONTEND_DIR, workspace_dir)
+        sync_result = sync_hot_reload_workspace(FRONTEND_DIR, workspace_dir)
         print(
             f"[INFO] 实例 {index} 工作区已同步，"
             f"复制 {sync_result.copied_count} 个文件，删除 {sync_result.deleted_count} 个文件。"
@@ -460,6 +476,10 @@ def launch_hot_reload_instances(
         print(
             f"[INFO] 已启动 hot-reload 实例 {index}/{len(workspaces)}，PID={process.pid}，"
             f"日志={log_path}"
+        )
+        print(
+            f"[INFO] 实例 {index} 正在执行 Flutter Windows 构建。"
+            "首次启动可能需要几分钟，窗口会在构建完成后弹出。"
         )
 
         if not instance.started_event.wait(timeout=machine_start_timeout_seconds):
@@ -544,7 +564,7 @@ def sync_all_hot_reload_workspaces(
     total_copied = 0
     total_deleted = 0
     for instance in instances:
-        result = sync_workspace(FRONTEND_DIR, instance.workspace_dir)
+        result = sync_hot_reload_workspace(FRONTEND_DIR, instance.workspace_dir)
         sync_results.append(result)
         total_copied += result.copied_count
         total_deleted += result.deleted_count
