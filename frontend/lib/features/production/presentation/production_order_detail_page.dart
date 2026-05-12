@@ -100,6 +100,14 @@ class _ProductionOrderDetailPageState extends State<ProductionOrderDetailPage> {
     return '${local.year}-$mm-$dd $hh:$min:$sec';
   }
 
+  String _pageTitle() {
+    final detail = _detail;
+    if (detail != null) {
+      return '订单详情 - ${detail.order.orderCode}';
+    }
+    return '订单详情 - #${widget.orderId}';
+  }
+
   Future<void> _loadDetail({bool silent = false}) async {
     if (!silent) {
       setState(() {
@@ -434,81 +442,93 @@ class _ProductionOrderDetailPageState extends State<ProductionOrderDetailPage> {
       child: Scaffold(
         body: Padding(
           padding: const EdgeInsets.all(16),
-          child: _loading
-              ? const MesLoadingState(label: '订单详情加载中...')
-              : detail == null
-              ? MesErrorState(
-                  message: _message.isEmpty ? '暂无订单详情数据' : _message,
-                  onRetry: _loadDetail,
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    KeyedSubtree(
-                      key: const ValueKey(
-                        'production-order-detail-page-header',
-                      ),
-                      child: MesDetailPageHeader(
-                        title: '订单详情 - ${detail.order.orderCode}',
-                        onBack: () =>
-                            Navigator.of(context).pop(_needsRefreshOnPop),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildActionBar(detail.order),
-                    const SizedBox(height: 12),
-                    MesSectionCard(
-                      title: '基础信息',
-                      child: Wrap(
-                        spacing: 16,
-                        runSpacing: 8,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              KeyedSubtree(
+                key: const ValueKey('production-order-detail-page-header'),
+                child: MesDetailPageHeader(
+                  title: _pageTitle(),
+                  onBack: () => Navigator.of(context).pop(_needsRefreshOnPop),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: _loading
+                    ? const MesLoadingState(label: '订单详情加载中...')
+                    : detail == null
+                    ? MesErrorState(
+                        message: _message.isEmpty ? '暂无订单详情数据' : _message,
+                        onRetry: _loadDetail,
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('订单号：${detail.order.orderCode}'),
-                          Text('产品：${detail.order.productName}'),
-                          Text('产品版本：${detail.order.productVersion ?? '-'}'),
-                          Text('数量：${detail.order.quantity}'),
-                          Text(
-                            '状态：${productionOrderStatusLabel(detail.order.status)}',
+                          _buildActionBar(detail.order),
+                          const SizedBox(height: 12),
+                          MesSectionCard(
+                            title: '基础信息',
+                            child: Wrap(
+                              spacing: 16,
+                              runSpacing: 8,
+                              children: [
+                                Text('订单号：${detail.order.orderCode}'),
+                                Text('产品：${detail.order.productName}'),
+                                Text(
+                                  '产品版本：${detail.order.productVersion ?? '-'}',
+                                ),
+                                Text('数量：${detail.order.quantity}'),
+                                Text(
+                                  '状态：${productionOrderStatusLabel(detail.order.status)}',
+                                ),
+                                Text(
+                                  '当前工序：${detail.order.currentProcessName ?? '-'}',
+                                ),
+                                Text(
+                                  '模板：${detail.order.processTemplateName ?? '-'}',
+                                ),
+                                Text(
+                                  '模板版本：${detail.order.processTemplateVersion ?? '-'}',
+                                ),
+                                Text(
+                                  '并行模式：${detail.order.pipelineEnabled ? '开启' : '关闭'}',
+                                ),
+                                Text(
+                                  '创建人：${detail.order.createdByUsername ?? '-'}',
+                                ),
+                                Text(
+                                  '创建时间：${_formatDateTime(detail.order.createdAt)}',
+                                ),
+                                Text(
+                                  '更新时间：${_formatDateTime(detail.order.updatedAt)}',
+                                ),
+                                Text(
+                                  '开始日期：${_formatDate(detail.order.startDate)}',
+                                ),
+                                Text('交期：${_formatDate(detail.order.dueDate)}'),
+                                Text(
+                                  '备注：${(detail.order.remark ?? '').trim().isEmpty ? '-' : detail.order.remark}',
+                                ),
+                              ],
+                            ),
                           ),
-                          Text(
-                            '当前工序：${detail.order.currentProcessName ?? '-'}',
-                          ),
-                          Text('模板：${detail.order.processTemplateName ?? '-'}'),
-                          Text(
-                            '模板版本：${detail.order.processTemplateVersion ?? '-'}',
-                          ),
-                          Text(
-                            '并行模式：${detail.order.pipelineEnabled ? '开启' : '关闭'}',
-                          ),
-                          Text('创建人：${detail.order.createdByUsername ?? '-'}'),
-                          Text(
-                            '创建时间：${_formatDateTime(detail.order.createdAt)}',
-                          ),
-                          Text(
-                            '更新时间：${_formatDateTime(detail.order.updatedAt)}',
-                          ),
-                          Text('开始日期：${_formatDate(detail.order.startDate)}'),
-                          Text('交期：${_formatDate(detail.order.dueDate)}'),
-                          Text(
-                            '备注：${(detail.order.remark ?? '').trim().isEmpty ? '-' : detail.order.remark}',
-                          ),
+                          if (_message.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                _message,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: 12),
+                          Expanded(child: _buildBodyContent(detail)),
                         ],
                       ),
-                    ),
-                    if (_message.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          _message,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 12),
-                    Expanded(child: _buildBodyContent(detail)),
-                  ],
-                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

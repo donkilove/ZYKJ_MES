@@ -63,6 +63,7 @@ from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_record import ProductionRecord
 from app.models.production_scrap_statistics import ProductionScrapStatistics
 from app.models.production_sub_order import ProductionSubOrder
+from app.models.process_stage import ProcessStage
 from app.models.repair_order import RepairOrder
 from app.models.role import Role
 from app.models.user import User
@@ -375,6 +376,8 @@ def _to_assist_user_option_item(user: User) -> AssistUserOptionItem:
         username=user.username,
         full_name=user.full_name,
         role_codes=sorted(role.code for role in user.roles),
+        stage_id=user.stage_id,
+        stage_name=user.stage.name if user.stage else None,
     )
 
 
@@ -1826,6 +1829,7 @@ def get_assist_user_options_api(
         .options(
             load_only(User.id, User.username, User.full_name, User.stage_id),
             selectinload(User.roles).load_only(Role.id, Role.code),
+            selectinload(User.stage).load_only(ProcessStage.id, ProcessStage.name),
         )
         .join(User.roles)
         .where(*filters)

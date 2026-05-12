@@ -468,6 +468,8 @@ class AssistUserOptionItem(BaseModel):
     username: str
     full_name: str | None = None
     role_codes: list[str]
+    stage_id: int | None = None
+    stage_name: str | None = None
 
 
 class AssistUserOptionListResult(BaseModel):

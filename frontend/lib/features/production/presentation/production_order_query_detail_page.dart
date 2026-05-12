@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mes_client/core/ui/patterns/mes_detail_page_header.dart';
+import 'package:mes_client/core/ui/patterns/mes_error_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 
@@ -440,6 +441,14 @@ class _ProductionOrderQueryDetailPageState
     );
   }
 
+  String _pageTitle() {
+    final detail = _detail;
+    if (detail != null) {
+      return '工单详情 - ${detail.order.orderCode}';
+    }
+    return '工单详情 - ${widget.initialOrderContext.orderCode}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final detail = _detail;
@@ -456,89 +465,92 @@ class _ProductionOrderQueryDetailPageState
       child: Scaffold(
         body: Padding(
           padding: const EdgeInsets.all(16),
-          child: _loading
-              ? const MesLoadingState(label: '工单详情加载中...')
-              : detail == null
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _message.isEmpty ? '暂无工单详情数据' : _message,
-                        style: TextStyle(
-                          color: _message.isEmpty
-                              ? Theme.of(context).colorScheme.onSurface
-                              : Theme.of(context).colorScheme.error,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      FilledButton.icon(
-                        onPressed: _loadDetail,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('重试'),
-                      ),
-                    ],
-                  ),
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    KeyedSubtree(
-                      key: const ValueKey(
-                        'production-order-query-detail-page-header',
-                      ),
-                      child: MesDetailPageHeader(
-                        title: '工单详情 - ${detail.order.orderCode}',
-                        onBack: () =>
-                            Navigator.of(context).pop(_needsRefreshOnPop),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildActionBar(),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 16,
-                      runSpacing: 8,
-                      children: [
-                        Text('订单号：${detail.order.orderCode}'),
-                        Text('产品：${detail.order.productName}'),
-                        Text('产品版本：${detail.order.productVersion ?? '-'}'),
-                        Text('数量：${detail.order.quantity}'),
-                        Text(
-                          '订单状态：${productionOrderStatusLabel(detail.order.status)}',
-                        ),
-                        Text('当前工序：${detail.order.currentProcessName ?? '-'}'),
-                        Text('模板名称/版本：${_templateLabel(detail.order)}'),
-                        Text(
-                          '并行模式：${detail.order.pipelineEnabled ? '开启' : '关闭'}',
-                        ),
-                        if (contextItem != null)
-                          Text('并行实例：${contextItem.pipelineInstanceNo ?? '-'}'),
-                        Text('创建人：${detail.order.createdByUsername ?? '-'}'),
-                        Text('创建时间：${_formatDateTime(detail.order.createdAt)}'),
-                        Text('开始日期：${_formatDate(detail.order.startDate)}'),
-                        Text('交期：${_formatDate(detail.order.dueDate)}'),
-                        if (contextItem != null)
-                          Text(
-                            '更新时间：${_formatDateTime(contextItem.updatedAt)}',
-                          ),
-                        Text('视角：${_viewModeLabel(contextItem?.workView)}'),
-                      ],
-                    ),
-                    if (_message.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          _message,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 12),
-                    Expanded(child: _buildBodyContent(detail)),
-                  ],
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              KeyedSubtree(
+                key: const ValueKey(
+                  'production-order-query-detail-page-header',
                 ),
+                child: MesDetailPageHeader(
+                  title: _pageTitle(),
+                  onBack: () => Navigator.of(context).pop(_needsRefreshOnPop),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: _loading
+                    ? const MesLoadingState(label: '工单详情加载中...')
+                    : detail == null
+                    ? MesErrorState(
+                        message: _message.isEmpty ? '暂无工单详情数据' : _message,
+                        onRetry: _loadDetail,
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildActionBar(),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 16,
+                            runSpacing: 8,
+                            children: [
+                              Text('订单号：${detail.order.orderCode}'),
+                              Text('产品：${detail.order.productName}'),
+                              Text(
+                                '产品版本：${detail.order.productVersion ?? '-'}',
+                              ),
+                              Text('数量：${detail.order.quantity}'),
+                              Text(
+                                '订单状态：${productionOrderStatusLabel(detail.order.status)}',
+                              ),
+                              Text(
+                                '当前工序：${detail.order.currentProcessName ?? '-'}',
+                              ),
+                              Text('模板名称/版本：${_templateLabel(detail.order)}'),
+                              Text(
+                                '并行模式：${detail.order.pipelineEnabled ? '开启' : '关闭'}',
+                              ),
+                              if (contextItem != null)
+                                Text(
+                                  '并行实例：${contextItem.pipelineInstanceNo ?? '-'}',
+                                ),
+                              Text(
+                                '创建人：${detail.order.createdByUsername ?? '-'}',
+                              ),
+                              Text(
+                                '创建时间：${_formatDateTime(detail.order.createdAt)}',
+                              ),
+                              Text(
+                                '开始日期：${_formatDate(detail.order.startDate)}',
+                              ),
+                              Text('交期：${_formatDate(detail.order.dueDate)}'),
+                              if (contextItem != null)
+                                Text(
+                                  '更新时间：${_formatDateTime(contextItem.updatedAt)}',
+                                ),
+                              Text(
+                                '视角：${_viewModeLabel(contextItem?.workView)}',
+                              ),
+                            ],
+                          ),
+                          if (_message.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                _message,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                              ),
+                            ),
+                          const SizedBox(height: 12),
+                          Expanded(child: _buildBodyContent(detail)),
+                        ],
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );

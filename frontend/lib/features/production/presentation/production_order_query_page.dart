@@ -416,34 +416,6 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     }
   }
 
-  Future<bool> _ensureTargetOperatorsLoadedForAssistDialog() async {
-    if (_proxyOperators.isNotEmpty) {
-      return true;
-    }
-    try {
-      final result = await _service.listAssistUserOptions(
-        page: 1,
-        pageSize: 200,
-        roleCode: 'operator',
-      );
-      _proxyOperators = result.items;
-      return true;
-    } catch (error) {
-      if (!mounted) return false;
-      if (_isUnauthorized(error)) {
-        widget.onLogout();
-        return false;
-      }
-      setState(() {
-        _message = _appendMessage(
-          _message,
-          '加载代班目标操作员失败：${_errorMessage(error)}',
-        );
-      });
-      return false;
-    }
-  }
-
   Future<bool> _ensureAssistUsersLoaded() async {
     if (_assistUsers.isNotEmpty) return true;
     try {
@@ -788,19 +760,14 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     if (!assistUsersLoaded) {
       return false;
     }
-    final targetOperatorsLoaded =
-        await _ensureTargetOperatorsLoadedForAssistDialog();
-    if (!targetOperatorsLoaded) {
-      return false;
-    }
     if (!mounted) {
       return false;
     }
-    final targetOperators = _proxyOperators.isNotEmpty
+    final targetOperators = _assistUsers.isNotEmpty
         ? [
-            ..._proxyOperators,
+            ..._assistUsers,
             if (item.operatorUserId != null &&
-                !_proxyOperators.any((it) => it.id == item.operatorUserId))
+                !_assistUsers.any((it) => it.id == item.operatorUserId))
               AssistUserOptionItem(
                 id: item.operatorUserId!,
                 username:
@@ -810,6 +777,8 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                     : item.operatorUsername!,
                 fullName: null,
                 roleCodes: const ['operator'],
+                stageId: item.currentStageId,
+                stageName: item.currentStageName,
               ),
           ]
         : [
@@ -823,6 +792,8 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                     : item.operatorUsername!,
                 fullName: null,
                 roleCodes: const ['operator'],
+                stageId: item.currentStageId,
+                stageName: item.currentStageName,
               ),
           ];
     try {

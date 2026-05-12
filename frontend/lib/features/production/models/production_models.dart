@@ -1099,12 +1099,16 @@ class AssistUserOptionItem {
     required this.username,
     required this.fullName,
     required this.roleCodes,
+    required this.stageId,
+    required this.stageName,
   });
 
   final int id;
   final String username;
   final String? fullName;
   final List<String> roleCodes;
+  final int? stageId;
+  final String? stageName;
 
   String get displayName {
     final normalized = (fullName ?? '').trim();
@@ -1122,6 +1126,8 @@ class AssistUserOptionItem {
       roleCodes: (json['role_codes'] as List<dynamic>? ?? const [])
           .map((entry) => entry.toString())
           .toList(),
+      stageId: json['stage_id'] as int?,
+      stageName: json['stage_name'] as String?,
     );
   }
 }
