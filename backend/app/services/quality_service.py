@@ -102,6 +102,19 @@ def _build_created_at_filters(
     )
 
 
+def _build_verification_date_filters(
+    *,
+    start_date: date | None,
+    end_date: date | None,
+) -> list[object]:
+    filters: list[object] = []
+    if start_date is not None:
+        filters.append(FirstArticleRecord.verification_date >= start_date)
+    if end_date is not None:
+        filters.append(FirstArticleRecord.verification_date <= end_date)
+    return filters
+
+
 def _normalize_stat_date(value: object) -> date | None:
     if isinstance(value, datetime):
         return value.date()
@@ -507,6 +520,7 @@ def _rollback_first_article_execution_state(
         pipeline_instance.sub_order_id = None
     if context.assist_authorization is not None:
         context.assist_authorization.first_article_used_at = None
+    db.flush()
     _refresh_process_and_order_status_after_first_article_revert(
         db,
         order=context.order,
@@ -973,7 +987,9 @@ def _build_defect_filters(
 def list_first_articles(
     db: Session,
     *,
-    query_date: date,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    query_date: date | None = None,
     keyword: str | None,
     result_filter: str | None,
     product_name: str | None = None,
@@ -982,7 +998,12 @@ def list_first_articles(
     page: int,
     page_size: int,
 ) -> dict[str, object]:
-    filters: list[object] = [FirstArticleRecord.verification_date == query_date]
+    resolved_start_date = start_date or query_date or end_date or date.today()
+    resolved_end_date = end_date or query_date or resolved_start_date
+    filters = _build_verification_date_filters(
+        start_date=resolved_start_date,
+        end_date=resolved_end_date,
+    )
     normalized_keyword = (keyword or "").strip()
     if normalized_keyword:
         like_pattern = f"%{normalized_keyword}%"
@@ -1044,15 +1065,16 @@ def list_first_articles(
     code_row = (
         db.execute(
             select(DailyVerificationCode).where(
-                DailyVerificationCode.verify_date == query_date
+                DailyVerificationCode.verify_date == resolved_start_date
             )
-        )
-        .scalars()
-        .first()
+        ).scalars().first()
+        if resolved_start_date == resolved_end_date
+        else None
     )
-    verification_code, verification_code_source = _resolve_query_verification_code(
+    verification_code, verification_code_source = _resolve_first_article_range_verification_code(
         code_row=code_row,
-        query_date=query_date,
+        start_date=resolved_start_date,
+        end_date=resolved_end_date,
     )
 
     items: list[dict[str, object]] = []
@@ -1083,7 +1105,11 @@ def list_first_articles(
         )
 
     return {
-        "query_date": query_date,
+        "start_date": resolved_start_date,
+        "end_date": resolved_end_date,
+        "query_date": resolved_start_date
+        if resolved_start_date == resolved_end_date
+        else None,
         "verification_code": verification_code,
         "verification_code_source": verification_code_source,
         "total": total,
@@ -1091,11 +1117,15 @@ def list_first_articles(
     }
 
 
-def _resolve_query_verification_code(
+def _resolve_first_article_range_verification_code(
     *,
     code_row: DailyVerificationCode | None,
-    query_date: date,
+    start_date: date,
+    end_date: date,
 ) -> tuple[str | None, str]:
+    if start_date != end_date:
+        return None, "none"
+    query_date = start_date
     if code_row:
         return code_row.code, "stored"
     if query_date == date.today() and production_default_verification_code_is_secure():
@@ -1641,6 +1671,7 @@ def cancel_first_article(
     record.is_cancelled = True
     record.cancelled_at = datetime.now(UTC)
     record.cancelled_by_user_id = operator.id
+    record.cancelled_by = operator
     add_order_event_log(
         db,
         order_id=record.order_id,
@@ -1768,15 +1799,21 @@ def delete_first_article(
 def export_first_articles_csv(
     db: Session,
     *,
-    query_date: date,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    query_date: date | None = None,
     keyword: str | None,
     result_filter: str | None,
     product_name: str | None = None,
     process_code: str | None = None,
     operator_username: str | None = None,
 ) -> dict[str, Any]:
+    resolved_start_date = start_date or query_date or end_date or date.today()
+    resolved_end_date = end_date or query_date or resolved_start_date
     payload = list_first_articles(
         db,
+        start_date=resolved_start_date,
+        end_date=resolved_end_date,
         query_date=query_date,
         keyword=keyword,
         result_filter=result_filter,
@@ -1828,7 +1865,9 @@ def export_first_articles_csv(
 
     csv_bytes = output.getvalue().encode("utf-8-sig")
     content_base64 = base64.b64encode(csv_bytes).decode("ascii")
-    filename = f"首件记录_{query_date}_{uuid4().hex[:8]}.csv"
+    filename = (
+        f"首件记录_{resolved_start_date}_{resolved_end_date}_{uuid4().hex[:8]}.csv"
+    )
     return {
         "filename": filename,
         "content_base64": content_base64,

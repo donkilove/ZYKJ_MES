@@ -51,7 +51,9 @@ class FirstArticleListItem(BaseModel):
 
 
 class FirstArticleListResult(BaseModel):
-    query_date: date
+    start_date: date
+    end_date: date
+    query_date: date | None = None
     verification_code: str | None = None
     verification_code_source: str
     total: int
@@ -95,6 +97,8 @@ class FirstArticleDetail(BaseModel):
 
 
 class FirstArticleExportRequest(BaseModel):
+    start_date: date | None = None
+    end_date: date | None = None
     query_date: date | None = None
     keyword: str | None = None
     result: str | None = None

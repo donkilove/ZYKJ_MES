@@ -153,11 +153,12 @@ class _FirstArticleDispositionPageState
     await _submitPasswordAction(
       action: 'cancel',
       title: '取消首件',
-      riskDescription:
-          '该操作会将当前首件标记为已取消，并将对应操作员退回待生产状态。仅在首件通过后未产生真实报工时允许取消。',
+      riskDescription: '该操作会将当前首件标记为已取消，并将对应操作员退回待生产状态。仅在首件通过后未产生真实报工时允许取消。',
       submitLabel: '确认取消',
-      onSubmit: (password) =>
-          _service.cancelFirstArticle(recordId: widget.recordId, password: password),
+      onSubmit: (password) => _service.cancelFirstArticle(
+        recordId: widget.recordId,
+        password: password,
+      ),
     );
   }
 
@@ -165,11 +166,12 @@ class _FirstArticleDispositionPageState
     await _submitPasswordAction(
       action: 'delete',
       title: '删除首件',
-      riskDescription:
-          '该操作会删除当前首件及其关联业务记录，删除后不可恢复。若该条有效首件后已存在真实报工，系统会拒绝删除。',
+      riskDescription: '该操作会删除当前首件及其关联业务记录，删除后不可恢复。若该条有效首件后已存在真实报工，系统会拒绝删除。',
       submitLabel: '确认删除',
-      onSubmit: (password) =>
-          _service.deleteFirstArticle(recordId: widget.recordId, password: password),
+      onSubmit: (password) => _service.deleteFirstArticle(
+        recordId: widget.recordId,
+        password: password,
+      ),
     );
   }
 
@@ -224,74 +226,101 @@ class _FirstArticleDispositionPageState
     required String riskDescription,
     required String submitLabel,
     required bool isDanger,
-  }) {
+  }) async {
+    if (mounted) {
+      return showMesLockedFormDialog<String?>(
+        context: context,
+        useRootNavigator: false,
+        wrapMesDialog: false,
+        builder: (_) {
+          return _FirstArticlePasswordActionDialog(
+            title: title,
+            riskDescription: riskDescription,
+            submitLabel: submitLabel,
+            isDanger: isDanger,
+          );
+        },
+      );
+    }
+
     final passwordController = TextEditingController();
     final formKey = GlobalKey<FormState>();
-    return showMesLockedFormDialog<String?>(
-      context: context,
-      wrapMesDialog: false,
-      builder: (dialogContext) {
-        return MesDialog(
-          title: Text(title),
-          width: 520,
-          content: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  riskDescription,
-                  style: TextStyle(
-                    color: isDanger
-                        ? Theme.of(dialogContext).colorScheme.error
-                        : Theme.of(dialogContext).colorScheme.primary,
-                    fontWeight: FontWeight.w600,
+    try {
+      return await showMesLockedFormDialog<String?>(
+        context: context,
+        useRootNavigator: false,
+        wrapMesDialog: false,
+        builder: (dialogContext) {
+          return MesDialog(
+            title: Text(title),
+            width: 520,
+            content: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    riskDescription,
+                    style: TextStyle(
+                      color: isDanger
+                          ? Theme.of(dialogContext).colorScheme.error
+                          : Theme.of(dialogContext).colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  key: ValueKey('first-article-$title-password-field'),
-                  controller: passwordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: '当前登录密码',
-                    border: OutlineInputBorder(),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    key: ValueKey('first-article-$title-password-field'),
+                    controller: passwordController,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: '当前登录密码',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return '请输入当前登录密码';
+                      }
+                      return null;
+                    },
                   ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return '请输入当前登录密码';
-                    }
-                    return null;
-                  },
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(null),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              style: isDanger
-                  ? FilledButton.styleFrom(
-                      backgroundColor: Theme.of(dialogContext).colorScheme.error,
-                      foregroundColor: Theme.of(dialogContext).colorScheme.onError,
-                    )
-                  : null,
-              onPressed: () {
-                if (!formKey.currentState!.validate()) {
-                  return;
-                }
-                Navigator.of(dialogContext).pop(passwordController.text);
-              },
-              child: Text(submitLabel),
-            ),
-          ],
-        );
-      },
-    ).whenComplete(passwordController.dispose);
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(null),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                style: isDanger
+                    ? FilledButton.styleFrom(
+                        backgroundColor: Theme.of(
+                          dialogContext,
+                        ).colorScheme.error,
+                        foregroundColor: Theme.of(
+                          dialogContext,
+                        ).colorScheme.onError,
+                      )
+                    : null,
+                onPressed: () {
+                  if (!formKey.currentState!.validate()) {
+                    return;
+                  }
+                  Navigator.of(dialogContext).pop(passwordController.text);
+                },
+                child: Text(submitLabel),
+              ),
+            ],
+          );
+        },
+      );
+    } finally {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        passwordController.dispose();
+      });
+    }
   }
 
   String _formatDateTime(DateTime? value) {
@@ -380,7 +409,12 @@ class _FirstArticleDispositionPageState
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               _InfoRow('校验码', detail.verificationCode),
-                              _InfoRow('记录状态', firstArticleRecordStatusLabel(detail.recordStatus)),
+                              _InfoRow(
+                                '记录状态',
+                                firstArticleRecordStatusLabel(
+                                  detail.recordStatus,
+                                ),
+                              ),
                               _InfoRow('订单号', detail.productionOrderCode),
                               _InfoRow(
                                 '产品',
@@ -396,10 +430,7 @@ class _FirstArticleDispositionPageState
                                 '首件内容',
                                 _displayText(detail.checkContent),
                               ),
-                              _InfoRow(
-                                '首件测试值',
-                                _displayText(detail.testValue),
-                              ),
+                              _InfoRow('首件测试值', _displayText(detail.testValue)),
                               _InfoRow(
                                 '参与操作员',
                                 _participantText(detail.participants),
@@ -414,10 +445,7 @@ class _FirstArticleDispositionPageState
                                     ? '-'
                                     : detail.defectDescription,
                               ),
-                              _InfoRow(
-                                '检验时间',
-                                _formatDateTime(detail.checkAt),
-                              ),
+                              _InfoRow('检验时间', _formatDateTime(detail.checkAt)),
                               if (detail.recordStatus == 'cancelled') ...[
                                 _InfoRow(
                                   '取消人',
@@ -611,7 +639,9 @@ class _FirstArticleDispositionPageState
                             const Spacer(),
                             if (canShowCancelButton)
                               OutlinedButton(
-                                key: const ValueKey('first-article-cancel-button'),
+                                key: const ValueKey(
+                                  'first-article-cancel-button',
+                                ),
                                 onPressed: _submitting
                                     ? null
                                     : _handleCancelFirstArticle,
@@ -621,12 +651,16 @@ class _FirstArticleDispositionPageState
                               const SizedBox(width: 12),
                             if (canShowDeleteButton)
                               FilledButton(
-                                key: const ValueKey('first-article-delete-button'),
+                                key: const ValueKey(
+                                  'first-article-delete-button',
+                                ),
                                 style: FilledButton.styleFrom(
-                                  backgroundColor:
-                                      Theme.of(context).colorScheme.error,
-                                  foregroundColor:
-                                      Theme.of(context).colorScheme.onError,
+                                  backgroundColor: Theme.of(
+                                    context,
+                                  ).colorScheme.error,
+                                  foregroundColor: Theme.of(
+                                    context,
+                                  ).colorScheme.onError,
                                 ),
                                 onPressed: _submitting
                                     ? null
@@ -695,6 +729,99 @@ class _FirstArticleDispositionPageState
       default:
         return value;
     }
+  }
+}
+
+class _FirstArticlePasswordActionDialog extends StatefulWidget {
+  const _FirstArticlePasswordActionDialog({
+    required this.title,
+    required this.riskDescription,
+    required this.submitLabel,
+    required this.isDanger,
+  });
+
+  final String title;
+  final String riskDescription;
+  final String submitLabel;
+  final bool isDanger;
+
+  @override
+  State<_FirstArticlePasswordActionDialog> createState() =>
+      _FirstArticlePasswordActionDialogState();
+}
+
+class _FirstArticlePasswordActionDialogState
+    extends State<_FirstArticlePasswordActionDialog> {
+  final TextEditingController _passwordController = TextEditingController();
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MesDialog(
+      title: Text(widget.title),
+      width: 520,
+      content: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.riskDescription,
+              style: TextStyle(
+                color: widget.isDanger
+                    ? Theme.of(context).colorScheme.error
+                    : Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              key: ValueKey('first-article-${widget.title}-password-field'),
+              controller: _passwordController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: '当前登录密码',
+                border: OutlineInputBorder(),
+              ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return '请输入当前登录密码';
+                }
+                return null;
+              },
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(null),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          style: widget.isDanger
+              ? FilledButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  foregroundColor: Theme.of(context).colorScheme.onError,
+                )
+              : null,
+          onPressed: () {
+            if (!_formKey.currentState!.validate()) {
+              return;
+            }
+            Navigator.of(context).pop(_passwordController.text);
+          },
+          child: Text(widget.submitLabel),
+        ),
+      ],
+    );
   }
 }
 

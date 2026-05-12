@@ -294,6 +294,8 @@ def _validate_date_range(start_date: date | None, end_date: date | None) -> None
 
 @router.get("/first-articles", response_model=ApiResponse[FirstArticleListResult])
 def get_first_articles_api(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
     query_date: date | None = Query(default=None, alias="date"),
     keyword: str | None = Query(default=None),
     result: str | None = Query(default=None),
@@ -305,10 +307,14 @@ def get_first_articles_api(
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("quality.first_articles.list")),
 ) -> ApiResponse[FirstArticleListResult]:
-    target_date = query_date or date.today()
+    resolved_start_date = start_date or query_date or end_date or date.today()
+    resolved_end_date = end_date or query_date or resolved_start_date
+    _validate_date_range(resolved_start_date, resolved_end_date)
     payload = list_first_articles(
         db,
-        query_date=target_date,
+        start_date=resolved_start_date,
+        end_date=resolved_end_date,
+        query_date=query_date,
         keyword=keyword,
         result_filter=result,
         product_name=product_name,
@@ -319,6 +325,8 @@ def get_first_articles_api(
     )
     return success_response(
         FirstArticleListResult(
+            start_date=payload["start_date"],
+            end_date=payload["end_date"],
             query_date=payload["query_date"],
             verification_code=payload["verification_code"],
             verification_code_source=payload["verification_code_source"],
@@ -369,9 +377,16 @@ def export_first_articles_api(
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("quality.first_articles.export")),
 ) -> ApiResponse[FirstArticleExportResult]:
+    resolved_start_date = (
+        payload.start_date or payload.query_date or payload.end_date or date.today()
+    )
+    resolved_end_date = payload.end_date or payload.query_date or resolved_start_date
+    _validate_date_range(resolved_start_date, resolved_end_date)
     result = export_first_articles_csv(
         db,
-        query_date=payload.query_date or date.today(),
+        start_date=resolved_start_date,
+        end_date=resolved_end_date,
+        query_date=payload.query_date,
         keyword=payload.keyword,
         result_filter=payload.result,
         product_name=payload.product_name,

@@ -173,22 +173,33 @@ class FirstArticleListItem {
 
 class FirstArticleListResult {
   FirstArticleListResult({
-    required this.queryDate,
+    DateTime? startDate,
+    DateTime? endDate,
+    DateTime? queryDate,
     required this.verificationCode,
     required this.verificationCodeSource,
     required this.total,
     required this.items,
-  });
+  }) : startDate = startDate ?? queryDate ?? DateTime.now(),
+       endDate = endDate ?? queryDate ?? startDate ?? DateTime.now();
 
-  final DateTime queryDate;
+  final DateTime startDate;
+  final DateTime endDate;
   final String? verificationCode;
   final String verificationCodeSource;
   final int total;
   final List<FirstArticleListItem> items;
 
+  DateTime get queryDate => startDate;
+
   factory FirstArticleListResult.fromJson(Map<String, dynamic> json) {
+    final parsedStartDate = _parseDateTimeOrNull(json['start_date']);
+    final parsedEndDate = _parseDateTimeOrNull(json['end_date']);
+    final parsedQueryDate = _parseDateTimeOrNull(json['query_date']);
     return FirstArticleListResult(
-      queryDate: _parseDateTimeOrNull(json['query_date']) ?? DateTime.now(),
+      startDate: parsedStartDate ?? parsedQueryDate ?? DateTime.now(),
+      endDate:
+          parsedEndDate ?? parsedQueryDate ?? parsedStartDate ?? DateTime.now(),
       verificationCode: json['verification_code'] as String?,
       verificationCodeSource:
           (json['verification_code_source'] as String?) ?? 'none',
@@ -653,8 +664,7 @@ class FirstArticleDetail {
       checkContent: (json['check_content'] as String?) ?? '',
       testValue: (json['test_value'] as String?) ?? '',
       cancelledAt: _parseDateTimeOrNull(json['cancelled_at']),
-      cancelledByUsername:
-          (json['cancelled_by_username'] as String?) ?? '',
+      cancelledByUsername: (json['cancelled_by_username'] as String?) ?? '',
       participants: (json['participants'] as List<dynamic>? ?? const [])
           .map(
             (entry) => FirstArticleParticipantItem.fromJson(

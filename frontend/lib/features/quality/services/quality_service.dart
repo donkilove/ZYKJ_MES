@@ -34,6 +34,8 @@ class QualityService implements RepairScrapService {
   }
 
   Future<FirstArticleListResult> listFirstArticles({
+    DateTime? startDate,
+    DateTime? endDate,
     DateTime? date,
     String? keyword,
     String? result,
@@ -48,8 +50,13 @@ class QualityService implements RepairScrapService {
       'page': '$page',
       'page_size': '$normalizedPageSize',
     };
-    if (date != null) {
-      query['date'] = _formatDate(date);
+    final resolvedStartDate = startDate ?? date;
+    final resolvedEndDate = endDate ?? date ?? startDate;
+    if (resolvedStartDate != null) {
+      query['start_date'] = _formatDate(resolvedStartDate);
+    }
+    if (resolvedEndDate != null) {
+      query['end_date'] = _formatDate(resolvedEndDate);
     }
     if (keyword != null && keyword.trim().isNotEmpty) {
       query['keyword'] = keyword.trim();
@@ -107,6 +114,8 @@ class QualityService implements RepairScrapService {
   }
 
   Future<QualityExportFile> exportFirstArticles({
+    DateTime? startDate,
+    DateTime? endDate,
     DateTime? date,
     String? keyword,
     String? result,
@@ -115,7 +124,14 @@ class QualityService implements RepairScrapService {
     String? operatorUsername,
   }) async {
     final payload = <String, dynamic>{};
-    if (date != null) payload['query_date'] = _formatDate(date);
+    final resolvedStartDate = startDate ?? date;
+    final resolvedEndDate = endDate ?? date ?? startDate;
+    if (resolvedStartDate != null) {
+      payload['start_date'] = _formatDate(resolvedStartDate);
+    }
+    if (resolvedEndDate != null) {
+      payload['end_date'] = _formatDate(resolvedEndDate);
+    }
     if (keyword != null && keyword.trim().isNotEmpty) {
       payload['keyword'] = keyword.trim();
     }

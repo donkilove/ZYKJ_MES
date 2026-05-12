@@ -54,7 +54,9 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
   bool _loading = false;
   bool _exporting = false;
   String _message = '';
-  DateTime _queryDate = DateTime.now();
+  DateTime _startDate = DateTime.now();
+  DateTime _endDate = DateTime.now();
+  bool _hasUserAdjustedDateRange = false;
   String? _resultFilter;
   int _page = 1;
   int _total = 0;
@@ -120,7 +122,30 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
     return ((_total - 1) ~/ _pageSize) + 1;
   }
 
+  bool get _hasInvalidDateRange => _startDate.isAfter(_endDate);
+
+  bool _isSameDate(DateTime left, DateTime right) {
+    final localLeft = left.toLocal();
+    final localRight = right.toLocal();
+    return localLeft.year == localRight.year &&
+        localLeft.month == localRight.month &&
+        localLeft.day == localRight.day;
+  }
+
+  String _formatDateRange(DateTime start, DateTime end) {
+    if (_isSameDate(start, end)) {
+      return _formatDate(start);
+    }
+    return '${_formatDate(start)} 至 ${_formatDate(end)}';
+  }
+
   Future<void> _loadFirstArticles({int? page}) async {
+    if (_hasInvalidDateRange) {
+      setState(() {
+        _message = '开始日期不能晚于结束日期';
+      });
+      return;
+    }
     final targetPage = page ?? _page;
     setState(() {
       _loading = true;
@@ -129,7 +154,8 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
     });
     try {
       final result = await _service.listFirstArticles(
-        date: _queryDate,
+        startDate: _startDate,
+        endDate: _endDate,
         keyword: _keywordController.text.trim(),
         result: _resultFilter,
         page: _page,
@@ -148,7 +174,10 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
       }
 
       setState(() {
-        _queryDate = result.queryDate;
+        if (!_hasUserAdjustedDateRange) {
+          _startDate = result.startDate;
+          _endDate = result.endDate;
+        }
         _total = result.total;
         _items = result.items;
         _page = resolvedPage;
@@ -177,13 +206,17 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
     }
   }
 
-  Future<void> _pickQueryDate() async {
+  Future<void> _pickDate({
+    required DateTime current,
+    required ValueChanged<DateTime> onChanged,
+    required String helpText,
+  }) async {
     final picked = await showDatePicker(
       context: context,
       firstDate: DateTime(2020, 1, 1),
       lastDate: DateTime(2100, 12, 31),
-      initialDate: _queryDate,
-      helpText: '选择查询日期',
+      initialDate: current,
+      helpText: helpText,
       cancelText: '取消',
       confirmText: '确定',
     );
@@ -193,21 +226,24 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
     if (!mounted) {
       return;
     }
-    setState(() {
-      _queryDate = picked;
-      _page = 1;
-    });
-    await _loadFirstArticles(page: 1);
+    onChanged(picked);
   }
 
   Future<void> _exportCsv() async {
+    if (_hasInvalidDateRange) {
+      setState(() {
+        _message = '开始日期不能晚于结束日期';
+      });
+      return;
+    }
     setState(() {
       _exporting = true;
       _message = '';
     });
     try {
       final exportFile = await _service.exportFirstArticles(
-        date: _queryDate,
+        startDate: _startDate,
+        endDate: _endDate,
         keyword: _keywordController.text.trim(),
         result: _resultFilter,
       );
@@ -332,7 +368,10 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
           ),
           SizedBox(
             width: 190,
-            child: MesMetricCard(label: '查询日期', value: _formatDate(_queryDate)),
+            child: MesMetricCard(
+              label: '查询范围',
+              value: _formatDateRange(_startDate, _endDate),
+            ),
           ),
         ],
       ),
@@ -346,9 +385,38 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         OutlinedButton.icon(
-          onPressed: _loading ? null : _pickQueryDate,
+          onPressed: _loading
+              ? null
+              : () => _pickDate(
+                  current: _startDate,
+                  helpText: '选择开始日期',
+                  onChanged: (value) {
+                    setState(() {
+                      _hasUserAdjustedDateRange = true;
+                      _startDate = value;
+                      _page = 1;
+                    });
+                  },
+                ),
           icon: const Icon(Icons.calendar_month),
-          label: Text('查询日期：${_formatDate(_queryDate)}'),
+          label: Text('开始日期：${_formatDate(_startDate)}'),
+        ),
+        OutlinedButton.icon(
+          onPressed: _loading
+              ? null
+              : () => _pickDate(
+                  current: _endDate,
+                  helpText: '选择结束日期',
+                  onChanged: (value) {
+                    setState(() {
+                      _hasUserAdjustedDateRange = true;
+                      _endDate = value;
+                      _page = 1;
+                    });
+                  },
+                ),
+          icon: const Icon(Icons.event_available),
+          label: Text('结束日期：${_formatDate(_endDate)}'),
         ),
         DropdownButton<String?>(
           value: _resultFilter,
@@ -458,7 +526,9 @@ class _DailyFirstArticlePageState extends State<DailyFirstArticlePage> {
                   DataCell(Text('${item.processName} (${item.processCode})')),
                   DataCell(Text(item.operatorUsername)),
                   DataCell(Text(firstArticleResultLabel(item.result))),
-                  DataCell(Text(firstArticleRecordStatusLabel(item.recordStatus))),
+                  DataCell(
+                    Text(firstArticleRecordStatusLabel(item.recordStatus)),
+                  ),
                   DataCell(Text(_formatDate(item.verificationDate))),
                   DataCell(Text(item.remark ?? '-')),
                   if (widget.canViewDetail || canDisposeItem)
