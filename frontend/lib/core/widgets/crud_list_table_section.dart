@@ -16,6 +16,7 @@ class CrudListTableSection extends StatelessWidget {
     this.emptyWidget,
     this.contentPadding = EdgeInsets.zero,
     this.enableUnifiedHeaderStyle = false,
+    this.enableResizableColumns = true,
     this.shape = const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
     this.clipBehavior = Clip.hardEdge,
   });
@@ -29,6 +30,7 @@ class CrudListTableSection extends StatelessWidget {
   final Widget? emptyWidget;
   final EdgeInsetsGeometry contentPadding;
   final bool enableUnifiedHeaderStyle;
+  final bool enableResizableColumns;
   final ShapeBorder shape;
   final Clip clipBehavior;
 
@@ -44,6 +46,7 @@ class CrudListTableSection extends StatelessWidget {
       body = AdaptiveTableContainer(
         padding: contentPadding,
         enableUnifiedHeaderStyle: enableUnifiedHeaderStyle,
+        enableResizableColumns: enableResizableColumns,
         child: child,
       );
     }

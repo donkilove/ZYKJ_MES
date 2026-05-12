@@ -21,6 +21,7 @@ class UnifiedListTableHeaderStyle {
   static double get defaultDataRowMinHeight => _defaultDataRowMinHeight;
   static double get defaultDataRowMaxHeight => _defaultDataRowMaxHeight;
   static double get defaultHeadingRowHeight => _headingRowHeight;
+  static double get headerHorizontalPadding => _headerHorizontalPadding;
   static double get minimumColumnWidth => _minimumColumnWidth;
   static TableColumnWidth get uniformColumnWidth => _uniformColumnWidth;
 
@@ -51,18 +52,23 @@ class UnifiedListTableHeaderStyle {
     TextAlign textAlign = TextAlign.start,
   }) {
     final theme = Theme.of(context);
-    return Align(
-      alignment: _alignmentForTextAlign(textAlign),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: _headerVerticalPadding),
-        child: Text(
-          text,
-          textAlign: textAlign,
-          overflow: TextOverflow.ellipsis,
-          maxLines: 1,
-          softWrap: false,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.w600,
+    return Flexible(
+      child: Align(
+        alignment: _alignmentForTextAlign(textAlign),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: _headerHorizontalPadding,
+            vertical: _headerVerticalPadding,
+          ),
+          child: Text(
+            text,
+            textAlign: textAlign,
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+            softWrap: false,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ),
@@ -235,28 +241,45 @@ class UnifiedListTableHeaderStyle {
   }
 
   static Widget _normalizeHeaderChild(Widget child) {
+    if (child is Flexible || child is Expanded) {
+      return child;
+    }
     if (child is Text) {
-      return Tooltip(
-        message: _plainTextOfText(child),
-        child: Text(
-          _plainTextOfText(child),
-          textAlign: child.textAlign,
-          overflow: TextOverflow.ellipsis,
-          maxLines: 1,
-          softWrap: false,
-          style: child.style,
-          strutStyle: child.strutStyle,
-          textDirection: child.textDirection,
-          locale: child.locale,
-          textScaler: child.textScaler,
-          semanticsLabel: child.semanticsLabel,
-          textWidthBasis: child.textWidthBasis,
-          textHeightBehavior: child.textHeightBehavior,
-          selectionColor: child.selectionColor,
+      return Flexible(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: _headerHorizontalPadding,
+          ),
+          child: Tooltip(
+            message: _plainTextOfText(child),
+            child: Text(
+              _plainTextOfText(child),
+              textAlign: child.textAlign,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              softWrap: false,
+              style: child.style,
+              strutStyle: child.strutStyle,
+              textDirection: child.textDirection,
+              locale: child.locale,
+              textScaler: child.textScaler,
+              semanticsLabel: child.semanticsLabel,
+              textWidthBasis: child.textWidthBasis,
+              textHeightBehavior: child.textHeightBehavior,
+              selectionColor: child.selectionColor,
+            ),
+          ),
         ),
       );
     }
-    return child;
+    return Flexible(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: _headerHorizontalPadding,
+        ),
+        child: child,
+      ),
+    );
   }
 
   static Widget _normalizeCellChild(Widget child) {
