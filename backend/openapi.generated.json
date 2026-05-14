@@ -68,6 +68,47 @@
         }
       }
     },
+    "/api/v1/auth/mobile-scan-review-login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Mobile Scan Review Login",
+        "operationId": "mobile_scan_review_login_api_v1_auth_mobile_scan_review_login_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_mobile_scan_review_login_api_v1_auth_mobile_scan_review_login_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_LoginResult_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/logout": {
       "post": {
         "tags": [
@@ -82,6 +123,52 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResponse_dict_str__bool__"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/renew-token": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Renew Token",
+        "operationId": "renew_token_api_v1_auth_renew_token_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenewTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RenewTokenResult_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -2317,6 +2404,101 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResponse_UserLifecycleResult_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/import": {
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Import Users",
+        "operationId": "import_users_api_v1_users_import_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_users_api_v1_users_import_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_UserImportResult_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/users/import-template": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Download Import Template",
+        "operationId": "download_import_template_api_v1_users_import_template_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(csv|excel)$",
+              "default": "csv",
+              "title": "Format"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_UserExportResult_"
                 }
               }
             }
@@ -9483,6 +9665,280 @@
         }
       }
     },
+    "/api/v1/production/orders/{order_id}/first-article/review-sessions": {
+      "post": {
+        "tags": [
+          "Production"
+        ],
+        "summary": "Create First Article Review Session Api",
+        "operationId": "create_first_article_review_session_api_api_v1_production_orders__order_id__first_article_review_sessions_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FirstArticleReviewSessionCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_FirstArticleReviewSessionResult_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/production/orders/{order_id}/first-article/review-sessions/{session_id}/status": {
+      "get": {
+        "tags": [
+          "Production"
+        ],
+        "summary": "Get First Article Review Session Status Api",
+        "operationId": "get_first_article_review_session_status_api_api_v1_production_orders__order_id__first_article_review_sessions__session_id__status_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_FirstArticleReviewSessionResult_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/production/orders/{order_id}/first-article/review-sessions/{session_id}/refresh": {
+      "post": {
+        "tags": [
+          "Production"
+        ],
+        "summary": "Refresh First Article Review Session Api",
+        "operationId": "refresh_first_article_review_session_api_api_v1_production_orders__order_id__first_article_review_sessions__session_id__refresh_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FirstArticleReviewSessionRefreshRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_FirstArticleReviewSessionResult_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/production/first-article/review-sessions/detail": {
+      "get": {
+        "tags": [
+          "Production"
+        ],
+        "summary": "Get First Article Review Session Detail Api",
+        "operationId": "get_first_article_review_session_detail_api_api_v1_production_first_article_review_sessions_detail_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 256,
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_FirstArticleReviewSessionDetail_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/production/first-article/review-sessions/submit": {
+      "post": {
+        "tags": [
+          "Production"
+        ],
+        "summary": "Submit First Article Review Session Api",
+        "operationId": "submit_first_article_review_session_api_api_v1_production_first_article_review_sessions_submit_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FirstArticleReviewSessionSubmitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_FirstArticleReviewSessionResult_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/production/orders/{order_id}/first-article/templates": {
       "get": {
         "tags": [
@@ -9559,6 +10015,16 @@
             "schema": {
               "type": "integer",
               "title": "Order Id"
+            }
+          },
+          {
+            "name": "order_process_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "title": "Order Process Id"
             }
           }
         ],
@@ -11007,6 +11473,62 @@
         }
       }
     },
+    "/api/v1/production/orders/{order_id}/assist-authorizations/{authorization_id}": {
+      "delete": {
+        "tags": [
+          "Production"
+        ],
+        "summary": "Cancel Assist Authorization Api",
+        "operationId": "cancel_assist_authorization_api_api_v1_production_orders__order_id__assist_authorizations__authorization_id__delete",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Order Id"
+            }
+          },
+          {
+            "name": "authorization_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Authorization Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AssistAuthorizationItem_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/production/assist-user-options": {
       "get": {
         "tags": [
@@ -11225,22 +11747,6 @@
             }
           },
           {
-            "name": "sub_order_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Sub Order Id"
-            }
-          },
-          {
             "name": "process_keyword",
             "in": "query",
             "required": false,
@@ -11257,7 +11763,7 @@
             }
           },
           {
-            "name": "pipeline_sub_order_no",
+            "name": "pipeline_instance_no",
             "in": "query",
             "required": false,
             "schema": {
@@ -11269,7 +11775,7 @@
                   "type": "null"
                 }
               ],
-              "title": "Pipeline Sub Order No"
+              "title": "Pipeline Instance No"
             }
           },
           {
@@ -11443,6 +11949,40 @@
           }
         ],
         "parameters": [
+          {
+            "name": "start_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          },
           {
             "name": "date",
             "in": "query",
@@ -11785,6 +12325,120 @@
         }
       }
     },
+    "/api/v1/quality/first-articles/{record_id}/cancel": {
+      "post": {
+        "tags": [
+          "Quality"
+        ],
+        "summary": "Cancel First Article Api",
+        "operationId": "cancel_first_article_api_api_v1_quality_first_articles__record_id__cancel_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "record_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Record Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FirstArticlePasswordActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_FirstArticleActionResult_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/quality/first-articles/{record_id}/delete": {
+      "post": {
+        "tags": [
+          "Quality"
+        ],
+        "summary": "Delete First Article Api",
+        "operationId": "delete_first_article_api_api_v1_quality_first_articles__record_id__delete_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "record_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Record Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FirstArticlePasswordActionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_FirstArticleActionResult_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/quality/stats/overview": {
       "get": {
         "tags": [
@@ -11830,6 +12484,22 @@
                 }
               ],
               "title": "End Date"
+            }
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Keyword"
             }
           },
           {
@@ -11969,6 +12639,22 @@
             }
           },
           {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Keyword"
+            }
+          },
+          {
             "name": "product_name",
             "in": "query",
             "required": false,
@@ -12105,6 +12791,22 @@
             }
           },
           {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Keyword"
+            }
+          },
+          {
             "name": "product_name",
             "in": "query",
             "required": false,
@@ -12238,6 +12940,22 @@
                 }
               ],
               "title": "End Date"
+            }
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Keyword"
             }
           },
           {
@@ -12420,6 +13138,22 @@
                 }
               ],
               "title": "End Date"
+            }
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Keyword"
             }
           },
           {
@@ -13444,6 +14178,22 @@
             }
           },
           {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Keyword"
+            }
+          },
+          {
             "name": "product_id",
             "in": "query",
             "required": false,
@@ -13605,6 +14355,22 @@
                 }
               ],
               "title": "End Date"
+            }
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Keyword"
             }
           },
           {
@@ -16767,6 +17533,78 @@
         ]
       }
     },
+    "/api/v1/messages/public-announcements": {
+      "get": {
+        "tags": [
+          "Messages"
+        ],
+        "summary": "Api List Public Announcements",
+        "operationId": "api_list_public_announcements_api_v1_messages_public_announcements_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 10,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "priority",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Priority"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_MessageListResult_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/messages/unread-count": {
       "get": {
         "tags": [
@@ -17179,6 +18017,130 @@
         ]
       }
     },
+    "/api/v1/messages/announcements/active": {
+      "get": {
+        "tags": [
+          "Messages"
+        ],
+        "summary": "Api List Active Announcements",
+        "operationId": "api_list_active_announcements_api_v1_messages_announcements_active_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          },
+          {
+            "name": "priority",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Priority"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AnnouncementManagementListResult_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/messages/announcements/{message_id}/offline": {
+      "post": {
+        "tags": [
+          "Messages"
+        ],
+        "summary": "Api Offline Announcement",
+        "operationId": "api_offline_announcement_api_v1_messages_announcements__message_id__offline_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "message_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Message Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_AnnouncementOfflineResult_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/messages/maintenance/run": {
       "post": {
         "tags": [
@@ -17339,6 +18301,219 @@
         ],
         "title": "AccountListResult"
       },
+      "AnnouncementManagementItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "message_type": {
+            "type": "string",
+            "title": "Message Type"
+          },
+          "priority": {
+            "type": "string",
+            "title": "Priority"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "source_module": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Module"
+          },
+          "source_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Type"
+          },
+          "source_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Code"
+          },
+          "target_page_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Page Code"
+          },
+          "target_tab_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Tab Code"
+          },
+          "target_route_payload_json": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Route Payload Json"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "inactive_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inactive Reason"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "message_type",
+          "priority",
+          "title",
+          "summary",
+          "source_module",
+          "source_type",
+          "source_code",
+          "target_page_code",
+          "target_tab_code",
+          "target_route_payload_json",
+          "status",
+          "published_at"
+        ],
+        "title": "AnnouncementManagementItem"
+      },
+      "AnnouncementManagementListResult": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AnnouncementManagementItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "AnnouncementManagementListResult"
+      },
+      "AnnouncementOfflineResult": {
+        "properties": {
+          "message_id": {
+            "type": "integer",
+            "title": "Message Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message_id",
+          "status"
+        ],
+        "title": "AnnouncementOfflineResult"
+      },
       "AnnouncementPublishRequest": {
         "properties": {
           "title": {
@@ -17432,6 +18607,50 @@
           "data"
         ],
         "title": "ApiResponse[AccountListResult]"
+      },
+      "ApiResponse_AnnouncementManagementListResult_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "ok"
+          },
+          "data": {
+            "$ref": "#/components/schemas/AnnouncementManagementListResult"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[AnnouncementManagementListResult]"
+      },
+      "ApiResponse_AnnouncementOfflineResult_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "ok"
+          },
+          "data": {
+            "$ref": "#/components/schemas/AnnouncementOfflineResult"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[AnnouncementOfflineResult]"
       },
       "ApiResponse_AnnouncementPublishResult_": {
         "properties": {
@@ -18071,6 +19290,28 @@
         ],
         "title": "ApiResponse[EquipmentRuntimeParameterListResult]"
       },
+      "ApiResponse_FirstArticleActionResult_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "ok"
+          },
+          "data": {
+            "$ref": "#/components/schemas/FirstArticleActionResult"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[FirstArticleActionResult]"
+      },
       "ApiResponse_FirstArticleDetail_": {
         "properties": {
           "code": {
@@ -18180,6 +19421,50 @@
           "data"
         ],
         "title": "ApiResponse[FirstArticleParticipantOptionListResult]"
+      },
+      "ApiResponse_FirstArticleReviewSessionDetail_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "ok"
+          },
+          "data": {
+            "$ref": "#/components/schemas/FirstArticleReviewSessionDetail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[FirstArticleReviewSessionDetail]"
+      },
+      "ApiResponse_FirstArticleReviewSessionResult_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "ok"
+          },
+          "data": {
+            "$ref": "#/components/schemas/FirstArticleReviewSessionResult"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[FirstArticleReviewSessionResult]"
       },
       "ApiResponse_FirstArticleTemplateListResult_": {
         "properties": {
@@ -19942,6 +21227,28 @@
         ],
         "title": "ApiResponse[RegistrationRequestListResult]"
       },
+      "ApiResponse_RenewTokenResult_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "ok"
+          },
+          "data": {
+            "$ref": "#/components/schemas/RenewTokenResult"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[RenewTokenResult]"
+      },
       "ApiResponse_RepairOrderDetailItem_": {
         "properties": {
           "code": {
@@ -20609,6 +21916,28 @@
         ],
         "title": "ApiResponse[UserExportTaskListResult]"
       },
+      "ApiResponse_UserImportResult_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 0
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "ok"
+          },
+          "data": {
+            "$ref": "#/components/schemas/UserImportResult"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "ApiResponse[UserImportResult]"
+      },
       "ApiResponse_UserItem_": {
         "properties": {
           "code": {
@@ -21099,6 +22428,28 @@
             },
             "type": "array",
             "title": "Role Codes"
+          },
+          "stage_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Id"
+          },
+          "stage_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Name"
           }
         },
         "type": "object",
@@ -21403,6 +22754,20 @@
         "type": "object",
         "title": "BatchForceOfflineRequest"
       },
+      "Body_import_users_api_v1_users_import_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_users_api_v1_users_import_post"
+      },
       "Body_login_api_v1_auth_login_post": {
         "properties": {
           "grant_type": {
@@ -21461,6 +22826,65 @@
           "password"
         ],
         "title": "Body_login_api_v1_auth_login_post"
+      },
+      "Body_mobile_scan_review_login_api_v1_auth_mobile_scan_review_login_post": {
+        "properties": {
+          "grant_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^password$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grant Type"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "title": "Password"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope",
+            "default": ""
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "client_secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "format": "password",
+            "title": "Client Secret"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "Body_mobile_scan_review_login_api_v1_auth_mobile_scan_review_login_post"
       },
       "BootstrapAdminResult": {
         "properties": {
@@ -22172,6 +23596,23 @@
             "maxLength": 500,
             "title": "Remark",
             "default": ""
+          },
+          "first_article_check_content": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "First Article Check Content",
+            "default": ""
+          },
+          "first_article_test_value": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "First Article Test Value",
+            "default": ""
+          },
+          "allow_multi_device_production": {
+            "type": "boolean",
+            "title": "Allow Multi Device Production",
+            "default": false
           }
         },
         "type": "object",
@@ -22237,6 +23678,21 @@
             "type": "string",
             "title": "Remark",
             "default": ""
+          },
+          "first_article_check_content": {
+            "type": "string",
+            "title": "First Article Check Content",
+            "default": ""
+          },
+          "first_article_test_value": {
+            "type": "string",
+            "title": "First Article Test Value",
+            "default": ""
+          },
+          "allow_multi_device_production": {
+            "type": "boolean",
+            "title": "Allow Multi Device Production",
+            "default": false
           },
           "created_at": {
             "type": "string",
@@ -22405,6 +23861,41 @@
               }
             ],
             "title": "Remark"
+          },
+          "first_article_check_content": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Article Check Content"
+          },
+          "first_article_test_value": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 4000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Article Test Value"
+          },
+          "allow_multi_device_production": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow Multi Device Production"
           }
         },
         "type": "object",
@@ -23689,6 +25180,85 @@
         ],
         "title": "EquipmentRuntimeParameterUpsertRequest"
       },
+      "FirstArticleActionResult": {
+        "properties": {
+          "record_id": {
+            "type": "integer",
+            "title": "Record Id"
+          },
+          "record_status": {
+            "type": "string",
+            "title": "Record Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Id"
+          },
+          "order_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order Code"
+          },
+          "process_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Process Name"
+          },
+          "cancelled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancelled At"
+          },
+          "cancelled_by_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancelled By Username"
+          }
+        },
+        "type": "object",
+        "required": [
+          "record_id",
+          "record_status",
+          "message"
+        ],
+        "title": "FirstArticleActionResult"
+      },
       "FirstArticleDetail": {
         "properties": {
           "id": {
@@ -23734,6 +25304,21 @@
           "result": {
             "type": "string",
             "title": "Result"
+          },
+          "record_status": {
+            "type": "string",
+            "title": "Record Status",
+            "default": "active"
+          },
+          "can_cancel": {
+            "type": "boolean",
+            "title": "Can Cancel",
+            "default": false
+          },
+          "can_delete": {
+            "type": "boolean",
+            "title": "Can Delete",
+            "default": false
           },
           "verification_date": {
             "type": "string",
@@ -23794,6 +25379,29 @@
               }
             ],
             "title": "Test Value"
+          },
+          "cancelled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancelled At"
+          },
+          "cancelled_by_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancelled By Username"
           },
           "participants": {
             "items": {
@@ -24006,6 +25614,30 @@
       },
       "FirstArticleExportRequest": {
         "properties": {
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
           "query_date": {
             "anyOf": [
               {
@@ -24146,6 +25778,11 @@
             "type": "string",
             "title": "Result"
           },
+          "record_status": {
+            "type": "string",
+            "title": "Record Status",
+            "default": "active"
+          },
           "verification_date": {
             "type": "string",
             "format": "date",
@@ -24199,9 +25836,26 @@
       },
       "FirstArticleListResult": {
         "properties": {
-          "query_date": {
+          "start_date": {
             "type": "string",
             "format": "date",
+            "title": "Start Date"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "title": "End Date"
+          },
+          "query_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Query Date"
           },
           "verification_code": {
@@ -24233,7 +25887,8 @@
         },
         "type": "object",
         "required": [
-          "query_date",
+          "start_date",
+          "end_date",
           "verification_code_source",
           "total",
           "items"
@@ -24383,6 +26038,22 @@
               }
             ],
             "title": "Full Name"
+          },
+          "selectable": {
+            "type": "boolean",
+            "title": "Selectable",
+            "default": true
+          },
+          "blocked_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked Reason"
           }
         },
         "type": "object",
@@ -24412,6 +26083,21 @@
           "items"
         ],
         "title": "FirstArticleParticipantOptionListResult"
+      },
+      "FirstArticlePasswordActionRequest": {
+        "properties": {
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "title": "FirstArticlePasswordActionRequest"
       },
       "FirstArticleRequest": {
         "properties": {
@@ -24531,6 +26217,318 @@
           "verification_code"
         ],
         "title": "FirstArticleRequest"
+      },
+      "FirstArticleReviewSessionCreateRequest": {
+        "properties": {
+          "order_process_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Order Process Id"
+          },
+          "pipeline_instance_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pipeline Instance Id"
+          },
+          "template_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Id"
+          },
+          "check_content": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Check Content"
+          },
+          "test_value": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Test Value"
+          },
+          "participant_user_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Participant User Ids"
+          },
+          "assist_authorization_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assist Authorization Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "order_process_id",
+          "check_content",
+          "test_value"
+        ],
+        "title": "FirstArticleReviewSessionCreateRequest"
+      },
+      "FirstArticleReviewSessionDetail": {
+        "properties": {
+          "session_id": {
+            "type": "integer",
+            "title": "Session Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "order_id": {
+            "type": "integer",
+            "title": "Order Id"
+          },
+          "order_code": {
+            "type": "string",
+            "title": "Order Code"
+          },
+          "product_name": {
+            "type": "string",
+            "title": "Product Name"
+          },
+          "order_process_id": {
+            "type": "integer",
+            "title": "Order Process Id"
+          },
+          "process_name": {
+            "type": "string",
+            "title": "Process Name"
+          },
+          "operator_user_id": {
+            "type": "integer",
+            "title": "Operator User Id"
+          },
+          "operator_username": {
+            "type": "string",
+            "title": "Operator Username"
+          },
+          "template_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Id"
+          },
+          "check_content": {
+            "type": "string",
+            "title": "Check Content"
+          },
+          "test_value": {
+            "type": "string",
+            "title": "Test Value"
+          },
+          "participant_user_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Participant User Ids"
+          },
+          "review_remark": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Remark"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "status",
+          "expires_at",
+          "order_id",
+          "order_code",
+          "product_name",
+          "order_process_id",
+          "process_name",
+          "operator_user_id",
+          "operator_username",
+          "check_content",
+          "test_value"
+        ],
+        "title": "FirstArticleReviewSessionDetail"
+      },
+      "FirstArticleReviewSessionRefreshRequest": {
+        "properties": {
+          "check_content": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Check Content"
+          },
+          "test_value": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Test Value"
+          },
+          "participant_user_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Participant User Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "check_content",
+          "test_value"
+        ],
+        "title": "FirstArticleReviewSessionRefreshRequest"
+      },
+      "FirstArticleReviewSessionResult": {
+        "properties": {
+          "session_id": {
+            "type": "integer",
+            "title": "Session Id"
+          },
+          "review_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Url"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "first_article_record_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Article Record Id"
+          },
+          "reviewer_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer User Id"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "review_remark": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Remark"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_id",
+          "expires_at",
+          "status"
+        ],
+        "title": "FirstArticleReviewSessionResult"
+      },
+      "FirstArticleReviewSessionSubmitRequest": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 16,
+            "title": "Token"
+          },
+          "review_result": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Review Result"
+          },
+          "review_remark": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Remark"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token",
+          "review_result"
+        ],
+        "title": "FirstArticleReviewSessionSubmitRequest"
       },
       "FirstArticleTemplateItem": {
         "properties": {
@@ -25740,8 +27738,8 @@
           "result_summary": {
             "type": "string",
             "enum": [
-              "ÕÍ≥…",
-              " ß∞‹"
+              "ÂÆåÊàê",
+              "Â§±Ë¥•"
             ],
             "title": "Result Summary"
           },
@@ -26707,6 +28705,18 @@
             ],
             "title": "Published At"
           },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
           "is_read": {
             "type": "boolean",
             "title": "Is Read"
@@ -26792,7 +28802,7 @@
           "next_retry_at"
         ],
         "title": "MessageItem",
-        "description": "œ˚œ¢¡–±ÌÃıƒø"
+        "description": "Ê∂àÊÅØÂàóË°®Êù°ÁõÆ"
       },
       "MessageJumpResult": {
         "properties": {
@@ -27043,6 +29053,16 @@
             "type": "string",
             "title": "Current Process Name"
           },
+          "current_process_first_article_check_content": {
+            "type": "string",
+            "title": "Current Process First Article Check Content",
+            "default": ""
+          },
+          "current_process_first_article_test_value": {
+            "type": "string",
+            "title": "Current Process First Article Test Value",
+            "default": ""
+          },
           "current_process_order": {
             "type": "integer",
             "title": "Current Process Order"
@@ -27069,17 +29089,6 @@
               }
             ],
             "title": "User Sub Order Id"
-          },
-          "user_assigned_quantity": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "User Assigned Quantity"
           },
           "user_completed_quantity": {
             "anyOf": [
@@ -28983,10 +30992,6 @@
             ],
             "title": "Pipeline Link Id"
           },
-          "sub_order_id": {
-            "type": "integer",
-            "title": "Sub Order Id"
-          },
           "order_id": {
             "type": "integer",
             "title": "Order Id"
@@ -29011,9 +31016,9 @@
             "type": "integer",
             "title": "Pipeline Seq"
           },
-          "pipeline_sub_order_no": {
+          "pipeline_instance_no": {
             "type": "string",
-            "title": "Pipeline Sub Order No"
+            "title": "Pipeline Instance No"
           },
           "is_active": {
             "type": "boolean",
@@ -29056,14 +31061,13 @@
         "type": "object",
         "required": [
           "id",
-          "sub_order_id",
           "order_id",
           "order_code",
           "order_process_id",
           "process_code",
           "process_name",
           "pipeline_seq",
-          "pipeline_sub_order_no",
+          "pipeline_instance_no",
           "is_active",
           "created_at",
           "updated_at"
@@ -30331,11 +32335,6 @@
             },
             "type": "array",
             "title": "Items"
-          },
-          "confirmed": {
-            "type": "boolean",
-            "title": "Confirmed",
-            "default": false
           }
         },
         "type": "object",
@@ -31783,11 +33782,42 @@
         ],
         "title": "ProductionDataTodayRealtimeChartItem"
       },
+      "ProductionDataTodayRealtimeOverview": {
+        "properties": {
+          "pending_count": {
+            "type": "integer",
+            "title": "Pending Count"
+          },
+          "in_progress_count": {
+            "type": "integer",
+            "title": "In Progress Count"
+          },
+          "completed_count": {
+            "type": "integer",
+            "title": "Completed Count"
+          },
+          "finished_quantity": {
+            "type": "integer",
+            "title": "Finished Quantity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pending_count",
+          "in_progress_count",
+          "completed_count",
+          "finished_quantity"
+        ],
+        "title": "ProductionDataTodayRealtimeOverview"
+      },
       "ProductionDataTodayRealtimeResult": {
         "properties": {
           "stat_mode": {
             "type": "string",
             "title": "Stat Mode"
+          },
+          "overview": {
+            "$ref": "#/components/schemas/ProductionDataTodayRealtimeOverview"
           },
           "summary": {
             "$ref": "#/components/schemas/ProductionDataTodayRealtimeSummary"
@@ -31814,6 +33844,7 @@
         "type": "object",
         "required": [
           "stat_mode",
+          "overview",
           "summary",
           "table_rows",
           "chart_data",
@@ -32287,6 +34318,31 @@
             "type": "integer",
             "title": "Production Quantity"
           },
+          "manual_repair_quantity": {
+            "type": "integer",
+            "title": "Manual Repair Quantity",
+            "default": 0
+          },
+          "reported_defect_quantity": {
+            "type": "integer",
+            "title": "Reported Defect Quantity",
+            "default": 0
+          },
+          "total_defect_quantity": {
+            "type": "integer",
+            "title": "Total Defect Quantity",
+            "default": 0
+          },
+          "total_production_quantity": {
+            "type": "integer",
+            "title": "Total Production Quantity",
+            "default": 0
+          },
+          "defect_rate_percent": {
+            "type": "number",
+            "title": "Defect Rate Percent",
+            "default": 0
+          },
           "record_type": {
             "type": "string",
             "title": "Record Type"
@@ -32375,10 +34431,6 @@
             "type": "string",
             "title": "Operator Username"
           },
-          "assigned_quantity": {
-            "type": "integer",
-            "title": "Assigned Quantity"
-          },
           "completed_quantity": {
             "type": "integer",
             "title": "Completed Quantity"
@@ -32386,10 +34438,6 @@
           "status": {
             "type": "string",
             "title": "Status"
-          },
-          "is_visible": {
-            "type": "boolean",
-            "title": "Is Visible"
           },
           "created_at": {
             "type": "string",
@@ -32410,10 +34458,8 @@
           "process_name",
           "operator_user_id",
           "operator_username",
-          "assigned_quantity",
           "completed_quantity",
           "status",
-          "is_visible",
           "created_at",
           "updated_at"
         ],
@@ -32794,6 +34840,17 @@
               }
             ],
             "title": "End Date"
+          },
+          "keyword": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keyword"
           },
           "product_name": {
             "anyOf": [
@@ -33215,6 +35272,44 @@
         "type": "object",
         "title": "RejectRegistrationRequest"
       },
+      "RenewTokenRequest": {
+        "properties": {
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 6,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "title": "RenewTokenRequest"
+      },
+      "RenewTokenResult": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type",
+            "default": "bearer"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "expires_in"
+        ],
+        "title": "RenewTokenResult"
+      },
       "RepairCauseDetailItem": {
         "properties": {
           "id": {
@@ -33465,7 +35560,7 @@
           "created_at"
         ],
         "title": "RepairEventLogItem",
-        "description": "Œ¨–ﬁœÍ«È÷–πÿ¡™µƒ∂©µ• ¬º˛»’÷æ’™“™"
+        "description": "Áª¥‰øÆËØ¶ÊÉÖ‰∏≠ÂÖ≥ËÅîÁöÑËÆ¢Âçï‰∫ã‰ª∂Êó•ÂøóÊëòË¶Å"
       },
       "RepairOrderCompleteRequest": {
         "properties": {
@@ -34849,7 +36944,7 @@
           "repair_time"
         ],
         "title": "ScrapRelatedRepairItem",
-        "description": "±®∑œœÍ«È÷–πÿ¡™µƒŒ¨–ﬁµ•’™“™"
+        "description": "Êä•Â∫üËØ¶ÊÉÖ‰∏≠ÂÖ≥ËÅîÁöÑÁª¥‰øÆÂçïÊëòË¶Å"
       },
       "ScrapStatisticsDetailItem": {
         "properties": {
@@ -37406,6 +39501,82 @@
           "items"
         ],
         "title": "UserExportTaskListResult"
+      },
+      "UserImportItemResult": {
+        "properties": {
+          "row_number": {
+            "type": "integer",
+            "title": "Row Number"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "row_number",
+          "username",
+          "success"
+        ],
+        "title": "UserImportItemResult"
+      },
+      "UserImportResult": {
+        "properties": {
+          "total_rows": {
+            "type": "integer",
+            "title": "Total Rows"
+          },
+          "success_count": {
+            "type": "integer",
+            "title": "Success Count"
+          },
+          "failure_count": {
+            "type": "integer",
+            "title": "Failure Count"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UserImportItemResult"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_rows",
+          "success_count",
+          "failure_count",
+          "items"
+        ],
+        "title": "UserImportResult"
       },
       "UserItem": {
         "properties": {
