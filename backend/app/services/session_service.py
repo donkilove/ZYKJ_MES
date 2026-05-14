@@ -276,6 +276,18 @@ def _session_touch_interval_seconds() -> int:
     )
 
 
+def _online_session_idle_seconds() -> int:
+    return max(
+        1,
+        settings.online_status_ttl_seconds,
+        _session_touch_interval_seconds() * 3,
+    )
+
+
+def _online_session_active_since() -> datetime:
+    return _now_utc() - timedelta(seconds=_online_session_idle_seconds())
+
+
 def _cap_session_cache_ttl(ttl_seconds: int, expires_at: datetime, now: datetime) -> int:
     remaining = (expires_at - now).total_seconds()
     if remaining <= 0:
@@ -315,6 +327,13 @@ def _build_online_session_filters(
             filters.append(UserSession.status != "active")
         else:
             filters.append(UserSession.status == status_filter)
+            if status_filter == "active":
+                filters.append(
+                    UserSession.last_active_at >= _online_session_active_since()
+                )
+    else:
+        filters.append(UserSession.status == "active")
+        filters.append(UserSession.last_active_at >= _online_session_active_since())
     return filters
 
 
