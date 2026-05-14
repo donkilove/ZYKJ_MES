@@ -6,6 +6,7 @@ from pathlib import Path
 import psycopg2
 from alembic import command
 from alembic.config import Config
+from alembic.script import ScriptDirectory
 from psycopg2 import sql
 from psycopg2.errors import DuplicateDatabase
 
@@ -69,8 +70,26 @@ def run_alembic_upgrade() -> None:
     config.set_main_option("sqlalchemy.url", settings.database_url)
     # 禁止 alembic 重置日志配置（避免在 uvicorn lifespan 中吞掉异常）
     config.config_file_name = None
+    heads = _validate_alembic_graph(config)
     command.upgrade(config, "heads")
-    logger.info("[BOOTSTRAP] Alembic migration completed.")
+    logger.info("[BOOTSTRAP] Alembic migration completed. heads=%s", ", ".join(heads))
+
+
+def _validate_alembic_graph(config: Config) -> tuple[str, ...]:
+    try:
+        script = ScriptDirectory.from_config(config)
+        heads = tuple(script.get_heads())
+    except Exception as exc:
+        raise RuntimeError(
+            "[BOOTSTRAP] Alembic 迁移图损坏，可能存在重复 revision、循环依赖或无法解析的 heads。"
+            f" 详细信息：{exc}"
+        ) from exc
+
+    if not heads:
+        raise RuntimeError("[BOOTSTRAP] Alembic 迁移图损坏：未解析到任何 head。")
+
+    logger.info("[BOOTSTRAP] Alembic graph validated. heads=%s", ", ".join(heads))
+    return heads
 
 
 def seed_startup_data() -> None:
