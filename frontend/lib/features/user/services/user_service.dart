@@ -2,8 +2,10 @@ import 'dart:convert';
 
 import 'package:http/http.dart' show MultipartRequest, MultipartFile, Response;
 
+import 'package:mes_client/core/network/download_response_parser.dart';
 import 'package:mes_client/core/network/http_client.dart' as http;
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/network/api_error_message.dart';
 import 'package:mes_client/features/user/models/user_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 
@@ -195,20 +197,18 @@ class UserService {
       '${session.baseUrl}/users/export-tasks/$taskId/download',
     );
     final response = await http.get(uri, headers: _authHeaders);
-    if (response.statusCode != 200) {
-      final json = _decodeBody(response);
-      _throwIfNotSuccess(response, json, expectedCode: 200);
-    }
-    final contentDisposition = response.headers['content-disposition'] ?? '';
-    final filename =
-        _resolveDownloadFilename(contentDisposition) ??
-        'users_export.${_resolveFormatFromMime(response.headers['content-type'] ?? 'text/csv') == 'excel' ? 'xlsx' : 'csv'}';
-    final mimeType =
-        response.headers['content-type'] ?? 'application/octet-stream';
+    final fallbackExtension = _resolveFormatFromMime(
+      response.headers['content-type'] ?? 'text/csv',
+    );
+    final download = parseFileDownloadResponse(
+      response,
+      fallbackFilename:
+          'users_export.${fallbackExtension == 'excel' ? 'xlsx' : 'csv'}',
+    );
     return UserExportDownloadResult(
-      filename: filename,
-      mimeType: mimeType,
-      bytes: response.bodyBytes,
+      filename: download.filename,
+      mimeType: download.mimeType,
+      bytes: download.bytes,
     );
   }
 
@@ -781,24 +781,6 @@ class UserService {
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
-  String? _resolveDownloadFilename(String contentDisposition) {
-    final filenameUtf8Match = RegExp(
-      r"filename\\*=UTF-8''([^;]+)",
-      caseSensitive: false,
-    ).firstMatch(contentDisposition);
-    if (filenameUtf8Match != null) {
-      return Uri.decodeComponent(filenameUtf8Match.group(1)!);
-    }
-    final filenameMatch = RegExp(
-      r'filename=\"?([^\";]+)\"?',
-      caseSensitive: false,
-    ).firstMatch(contentDisposition);
-    if (filenameMatch != null) {
-      return filenameMatch.group(1);
-    }
-    return null;
-  }
-
   String _resolveFormatFromMime(String mimeType) {
     final normalized = mimeType.toLowerCase();
     if (normalized.contains('spreadsheetml')) {
@@ -830,15 +812,7 @@ class UserService {
   }
 
   String _extractErrorMessage(Map<String, dynamic> body, int statusCode) {
-    final detail = body['detail'];
-    if (detail is String && detail.isNotEmpty) {
-      return detail;
-    }
-    final message = body['message'];
-    if (message is String && message.isNotEmpty) {
-      return message;
-    }
-    return '请求失败，状态码：$statusCode';
+    return extractApiErrorMessage(body, statusCode);
   }
 
   Future<UserImportResult> importUsers({
@@ -852,8 +826,9 @@ class UserService {
       MultipartFile.fromBytes('file', fileBytes, filename: fileName),
     );
 
-    final streamedResponse =
-        await request.send().timeout(const Duration(seconds: 120));
+    final streamedResponse = await request.send().timeout(
+      const Duration(seconds: 120),
+    );
     final response = await Response.fromStream(streamedResponse);
     final json = _decodeBody(response);
     _throwIfNotSuccess(response, json, expectedCode: 200);

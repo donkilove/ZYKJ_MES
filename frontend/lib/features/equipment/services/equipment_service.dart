@@ -4,6 +4,7 @@ import 'package:mes_client/core/network/http_client.dart' as http;
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/equipment/models/equipment_models.dart';
+import 'package:mes_client/core/network/api_error_message.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 
 class EquipmentService {
@@ -743,15 +744,7 @@ class EquipmentService {
   }
 
   String _extractErrorMessage(Map<String, dynamic> body, int statusCode) {
-    final detail = body['detail'];
-    if (detail is String && detail.isNotEmpty) {
-      return detail;
-    }
-    final message = body['message'];
-    if (message is String && message.isNotEmpty) {
-      return message;
-    }
-    return 'Request failed ($statusCode)';
+    return extractApiErrorMessage(body, statusCode);
   }
 
   String _formatDate(DateTime value) {

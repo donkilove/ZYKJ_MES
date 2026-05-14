@@ -2,12 +2,16 @@ import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1.api import api_router
 from app.bootstrap import run_startup_bootstrap
 from app.core.config import ensure_runtime_settings_secure, settings
+from app.core.user_facing_errors import localize_user_facing_detail
 from app.services.maintenance_scheduler_service import run_maintenance_auto_generate_loop
 from app.services.message_service import run_message_delivery_maintenance_loop
 from app.web import first_article_review_router
@@ -57,6 +61,27 @@ app.add_middleware(
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.exception_handler(StarletteHTTPException)
+async def handle_http_exception(
+    _: Request, exc: StarletteHTTPException
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": localize_user_facing_detail(exc.detail)},
+        headers=exc.headers,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def handle_validation_exception(
+    _: Request, exc: RequestValidationError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content={"detail": localize_user_facing_detail(exc.errors())},
+    )
 
 
 app.include_router(first_article_review_router)

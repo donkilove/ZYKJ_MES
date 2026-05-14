@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/models/page_catalog_models.dart';
+import 'package:mes_client/core/network/api_error_message.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 
 class PageCatalogService {
@@ -45,14 +46,6 @@ class PageCatalogService {
   }
 
   String _extractErrorMessage(Map<String, dynamic> body, int statusCode) {
-    final detail = body['detail'];
-    if (detail is String && detail.isNotEmpty) {
-      return detail;
-    }
-    final message = body['message'];
-    if (message is String && message.isNotEmpty) {
-      return message;
-    }
-    return '请求失败，状态码 $statusCode';
+    return extractApiErrorMessage(body, statusCode);
   }
 }

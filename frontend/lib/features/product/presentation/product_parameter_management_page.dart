@@ -4,6 +4,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/network/api_error_message.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/services/export_file_service.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
@@ -660,7 +661,7 @@ class _ProductParameterManagementPageState
           items: items,
         );
       } on ApiException catch (error) {
-        if (!error.message.contains('Impact confirmation required')) {
+        if (!isImpactConfirmationRequiredMessage(error.message)) {
           rethrow;
         }
         final impact = await _productService.getProductImpactAnalysis(

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/network/api_error_message.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/shell/models/home_dashboard_models.dart';
 
@@ -63,11 +64,11 @@ class HomeDashboardService {
   String _extractErrorMessage(Map<String, dynamic> body) {
     final detail = body['detail'];
     if (detail is String && detail.isNotEmpty) {
-      return detail;
+      return normalizeApiErrorMessage(detail);
     }
     final message = body['message'];
     if (message is String && message.isNotEmpty) {
-      return message;
+      return normalizeApiErrorMessage(message);
     }
     return '加载首页工作台失败';
   }

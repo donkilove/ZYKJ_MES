@@ -1,9 +1,11 @@
 import 'dart:convert';
 
+import 'package:mes_client/core/network/download_response_parser.dart';
 import 'package:mes_client/core/network/http_client.dart' as http;
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/product/models/product_models.dart';
+import 'package:mes_client/core/network/api_error_message.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 
 class ProductService {
@@ -673,15 +675,7 @@ class ProductService {
   }
 
   String _extractErrorMessage(Map<String, dynamic> body, int statusCode) {
-    final detail = body['detail'];
-    if (detail is String && detail.isNotEmpty) {
-      return detail;
-    }
-    final message = body['message'];
-    if (message is String && message.isNotEmpty) {
-      return message;
-    }
-    return '请求失败，状态码 $statusCode';
+    return extractApiErrorMessage(body, statusCode);
   }
 
   Future<ProductExportFile> exportProducts({
@@ -715,15 +709,7 @@ class ProductService {
       '${session.baseUrl}/products/export/list',
     ).replace(queryParameters: query.isEmpty ? null : query);
     final response = await http.get(uri, headers: _authHeaders);
-    final json = _decodeBody(response);
-    if (response.statusCode != 200) {
-      throw ApiException(
-        _extractErrorMessage(json, response.statusCode),
-        response.statusCode,
-      );
-    }
-    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
-    return ProductExportFile.fromJson(data, fallbackFilename: 'products.csv');
+    return _buildCsvExportFile(response, fallbackFilename: 'products.csv');
   }
 
   Future<ProductExportFile> exportProductVersionParameters({
@@ -734,16 +720,8 @@ class ProductService {
       '${session.baseUrl}/products/$productId/versions/$version/export',
     );
     final response = await http.get(uri, headers: _authHeaders);
-    final json = _decodeBody(response);
-    if (response.statusCode != 200) {
-      throw ApiException(
-        _extractErrorMessage(json, response.statusCode),
-        response.statusCode,
-      );
-    }
-    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
-    return ProductExportFile.fromJson(
-      data,
+    return _buildCsvExportFile(
+      response,
       fallbackFilename: 'product_version_parameters.csv',
     );
   }
@@ -792,17 +770,24 @@ class ProductService {
       '${session.baseUrl}/products/parameters/export',
     ).replace(queryParameters: query.isEmpty ? null : query);
     final response = await http.get(uri, headers: _authHeaders);
-    final json = _decodeBody(response);
-    if (response.statusCode != 200) {
-      throw ApiException(
-        _extractErrorMessage(json, response.statusCode),
-        response.statusCode,
-      );
-    }
-    final data = (json['data'] as Map<String, dynamic>?) ?? const {};
-    return ProductExportFile.fromJson(
-      data,
+    return _buildCsvExportFile(
+      response,
       fallbackFilename: 'product_parameters.csv',
+    );
+  }
+
+  ProductExportFile _buildCsvExportFile(
+    http.Response response, {
+    required String fallbackFilename,
+  }) {
+    final download = parseFileDownloadResponse(
+      response,
+      fallbackFilename: fallbackFilename,
+      fallbackMimeType: 'text/csv',
+    );
+    return ProductExportFile(
+      filename: download.filename,
+      contentBase64: base64Encode(download.bytes),
     );
   }
 }

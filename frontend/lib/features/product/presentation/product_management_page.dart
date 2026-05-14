@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mes_client/core/services/export_file_service.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/network/api_error_message.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_action_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_crud_page_scaffold.dart';
@@ -683,8 +684,8 @@ class _ProductManagementPageState extends State<ProductManagementPage> {
                                         );
                                   } catch (error) {
                                     if (_isUnauthorized(error) ||
-                                        !_errorMessage(error).contains(
-                                          'Impact confirmation required',
+                                        !isImpactConfirmationRequiredMessage(
+                                          _errorMessage(error),
                                         )) {
                                       rethrow;
                                     }

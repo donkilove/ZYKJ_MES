@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:mes_client/core/network/api_error_message.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/time_sync/models/time_sync_models.dart';
 
@@ -33,10 +34,6 @@ class ServerTimeService {
   }
 
   String _extractErrorMessage(Map<String, dynamic> body, int statusCode) {
-    final message = body['message'];
-    if (message is String && message.isNotEmpty) {
-      return message;
-    }
-    return '获取服务器时间失败，状态码 $statusCode';
+    return extractApiErrorMessage(body, statusCode);
   }
 }
