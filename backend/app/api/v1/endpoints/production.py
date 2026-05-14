@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -165,6 +166,7 @@ from app.services.production_order_service import (
     get_order_pipeline_mode,
     delete_order,
     get_order_by_id,
+    list_user_parallel_block_reasons_for_process,
     list_my_orders,
     list_orders,
     list_pipeline_instances,
@@ -308,7 +310,31 @@ def _to_sub_order_item(row: ProductionSubOrder) -> ProductionSubOrderItem:
     )
 
 
-def _to_record_item(row: ProductionRecord) -> ProductionRecordItem:
+def _extract_record_metric_payload_map(
+    event_rows: list[OrderEventLog],
+) -> dict[int, dict[str, object]]:
+    metrics_by_record_id: dict[int, dict[str, object]] = {}
+    for row in event_rows:
+        if row.event_type != "production_reported" or not row.payload_json:
+            continue
+        try:
+            payload = json.loads(row.payload_json)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        record_id = payload.get("production_record_id")
+        if not isinstance(record_id, int) or record_id <= 0:
+            continue
+        metrics_by_record_id[record_id] = payload
+    return metrics_by_record_id
+
+
+def _to_record_item(
+    row: ProductionRecord,
+    metric_payload: dict[str, object] | None = None,
+) -> ProductionRecordItem:
+    metric_payload = metric_payload or {}
     return ProductionRecordItem(
         id=row.id,
         order_process_id=row.order_process_id,
@@ -317,6 +343,11 @@ def _to_record_item(row: ProductionRecord) -> ProductionRecordItem:
         operator_user_id=row.operator_user_id,
         operator_username=row.operator.username if row.operator else "",
         production_quantity=row.production_quantity,
+        manual_repair_quantity=int(metric_payload.get("manual_repair_quantity_before_end") or 0),
+        reported_defect_quantity=int(metric_payload.get("defect_quantity") or 0),
+        total_defect_quantity=int(metric_payload.get("total_defect_quantity") or 0),
+        total_production_quantity=int(metric_payload.get("total_production_quantity") or 0),
+        defect_rate_percent=float(metric_payload.get("defect_rate_percent") or 0),
         record_type=row.record_type,
         created_at=row.created_at,
     )
@@ -562,12 +593,19 @@ def get_order_detail_api(
         key=lambda item: (item.created_at, item.id),
         reverse=True,
     )[:200]
+    record_metric_payloads = _extract_record_metric_payload_map(event_rows)
     return success_response(
         OrderDetail(
             order=_to_order_item(row),
             processes=[_to_process_item(item) for item in process_rows],
             sub_orders=[_to_sub_order_item(item) for item in sub_order_rows],
-            records=[_to_record_item(item) for item in record_rows],
+            records=[
+                _to_record_item(
+                    item,
+                    metric_payload=record_metric_payloads.get(int(item.id)),
+                )
+                for item in record_rows
+            ],
             events=[_to_event_item(item) for item in event_rows],
         )
     )
@@ -1153,15 +1191,15 @@ def list_first_article_templates_api(
 )
 def list_first_article_participant_users_api(
     order_id: int,
+    order_process_id: int = Query(gt=0),
     db: Session = Depends(get_db),
     _: None = Depends(require_permission_fast(PERM_PROD_EXECUTION_FIRST_ARTICLE)),
 ) -> ApiResponse[FirstArticleParticipantOptionListResult]:
-    order = db.get(ProductionOrder, order_id)
-    if order is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Order not found",
-        )
+    _, process_row = _get_first_article_order_context(
+        db,
+        order_id=order_id,
+        order_process_id=order_process_id,
+    )
     rows = (
         db.execute(
             select(User)
@@ -1172,6 +1210,13 @@ def list_first_article_participant_users_api(
         .scalars()
         .all()
     )
+    blocked_reason_by_user_id = list_user_parallel_block_reasons_for_process(
+        db,
+        user_ids=[int(row.id) for row in rows],
+        process_row=process_row,
+        user_label_by_id={int(row.id): row.username for row in rows},
+        for_participant=True,
+    )
     return success_response(
         FirstArticleParticipantOptionListResult(
             total=len(rows),
@@ -1180,6 +1225,8 @@ def list_first_article_participant_users_api(
                     id=row.id,
                     username=row.username,
                     full_name=row.full_name,
+                    selectable=int(row.id) not in blocked_reason_by_user_id,
+                    blocked_reason=blocked_reason_by_user_id.get(int(row.id)),
                 )
                 for row in rows
             ],

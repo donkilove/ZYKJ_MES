@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models.first_article_record import FirstArticleRecord
 from app.models.first_article_review_session import FirstArticleReviewSession
+from app.models.production_assist_authorization import ProductionAssistAuthorization
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
 from app.models.user import User
@@ -108,10 +109,25 @@ def _expire_if_needed(db: Session, row: FirstArticleReviewSession) -> None:
 
 
 def _normalize_required_text(value: str, field_name: str) -> str:
-    text = (value or "").strip()
-    if not text:
+    text = value or ""
+    if not text.strip():
         raise ValueError(f"{field_name} is required")
     return text
+
+
+def _validate_first_article_preset_changed(
+    *,
+    process_row: ProductionOrderProcess,
+    check_content: str,
+    test_value: str,
+) -> None:
+    process = process_row.process
+    preset_check_content = (
+        process.first_article_check_content if process is not None else ""
+    )
+    preset_test_value = process.first_article_test_value if process is not None else ""
+    if check_content == preset_check_content and test_value == preset_test_value:
+        raise ValueError("请至少修改首件内容或首件检验值后再生成二维码")
 
 
 def _prepare_first_article_draft(
@@ -125,21 +141,42 @@ def _prepare_first_article_draft(
     test_value: str,
     participant_user_ids: list[int] | None,
     operator: User,
+    assist_authorization_id: int | None = None,
 ) -> tuple[ProductionOrder, ProductionOrderProcess, list[int], str, str]:
     order, process_row = _lock_order_and_process(
         db,
         order_id=order_id,
         order_process_id=order_process_id,
     )
+    effective_operator_user_id = operator.id
+    if assist_authorization_id is not None:
+        assist_row = (
+            db.execute(
+                select(ProductionAssistAuthorization)
+                .where(ProductionAssistAuthorization.id == assist_authorization_id)
+                .with_for_update()
+            )
+            .scalars()
+            .first()
+        )
+        if assist_row is None:
+            raise ValueError("Assist authorization not found")
+        if assist_row.order_id != order_id or assist_row.order_process_id != order_process_id:
+            raise ValueError("Assist authorization does not match order process")
+        if assist_row.helper_user_id != operator.id:
+            raise PermissionError("Current user cannot use this assist authorization")
+        if assist_row.status != "approved":
+            raise ValueError("Assist authorization is not approved")
+        effective_operator_user_id = int(assist_row.target_operator_user_id)
     _ensure_effective_operator_can_operate_process(
         db,
-        effective_operator_user_id=operator.id,
+        effective_operator_user_id=effective_operator_user_id,
         process_row=process_row,
     )
     sub_order = _lock_sub_order(
         db,
         order_process_id=process_row.id,
-        operator_user_id=operator.id,
+        operator_user_id=effective_operator_user_id,
     )
     pipeline_instance = _get_required_pipeline_instance(
         db,
@@ -164,6 +201,11 @@ def _prepare_first_article_draft(
         "check_content",
     )
     normalized_test_value = _normalize_required_text(test_value, "test_value")
+    _validate_first_article_preset_changed(
+        process_row=process_row,
+        check_content=normalized_check_content,
+        test_value=normalized_test_value,
+    )
     normalized_participant_user_ids = _normalize_participant_user_ids(
         db,
         participant_user_ids=participant_user_ids,
@@ -201,6 +243,7 @@ def create_first_article_review_session(
             test_value=test_value,
             participant_user_ids=participant_user_ids,
             operator=operator,
+            assist_authorization_id=assist_authorization_id,
         )
     )
 
@@ -315,6 +358,7 @@ def refresh_first_article_review_session(
             test_value=test_value,
             participant_user_ids=participant_user_ids,
             operator=operator,
+            assist_authorization_id=row.assist_authorization_id,
         )
     )
     token = _new_token()
@@ -482,6 +526,7 @@ def submit_first_article_review_result(
         reviewer_user_id=reviewer.id,
         reviewed_at=reviewed_at,
         review_remark=normalized_remark,
+        preserve_input_text=True,
     )
     record = (
         db.execute(

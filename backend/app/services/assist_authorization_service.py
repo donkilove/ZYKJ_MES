@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, aliased, selectinload
 from app.core.production_constants import (
     ORDER_STATUS_COMPLETED,
     PROCESS_STATUS_COMPLETED,
+    SUB_ORDER_STATUS_PENDING,
 )
 from app.models.production_assist_authorization import ProductionAssistAuthorization
 from app.models.production_order import ProductionOrder
@@ -75,7 +76,29 @@ def _ensure_target_sub_order_exists(
     order_process_id: int,
     target_operator_user_id: int,
 ) -> None:
-    return
+    existing_row = (
+        db.execute(
+            select(ProductionSubOrder)
+            .where(
+                ProductionSubOrder.order_process_id == order_process_id,
+                ProductionSubOrder.operator_user_id == target_operator_user_id,
+            )
+            .with_for_update()
+        )
+        .scalars()
+        .first()
+    )
+    if existing_row is not None:
+        return
+    db.add(
+        ProductionSubOrder(
+            order_process_id=order_process_id,
+            operator_user_id=target_operator_user_id,
+            completed_quantity=0,
+            status=SUB_ORDER_STATUS_PENDING,
+        )
+    )
+    db.flush()
 
 
 def create_assist_authorization(
@@ -351,6 +374,23 @@ def mark_assist_authorization_used(
 ) -> None:
     if operation == ASSIST_OP_FIRST_ARTICLE:
         authorization_row.first_article_used_at = datetime.now(timezone.utc)
+        authorization_row.status = ASSIST_STATUS_CONSUMED
+        authorization_row.consumed_at = datetime.now(timezone.utc)
+        add_order_event_log(
+            db,
+            order_id=authorization_row.order_id,
+            event_type="assist_authorization_consumed",
+            event_title="代班授权已消耗",
+            event_detail=f"代班授权 {authorization_row.id} 已在开始首件时消耗",
+            operator_user_id=authorization_row.helper_user_id,
+            payload={
+                "assist_authorization_id": authorization_row.id,
+                "order_process_id": authorization_row.order_process_id,
+                "target_operator_user_id": authorization_row.target_operator_user_id,
+                "helper_user_id": authorization_row.helper_user_id,
+                "operation": ASSIST_OP_FIRST_ARTICLE,
+            },
+        )
         return
 
     if operation == ASSIST_OP_END_PRODUCTION:
@@ -369,6 +409,7 @@ def mark_assist_authorization_used(
                 "order_process_id": authorization_row.order_process_id,
                 "target_operator_user_id": authorization_row.target_operator_user_id,
                 "helper_user_id": authorization_row.helper_user_id,
+                "operation": ASSIST_OP_END_PRODUCTION,
             },
         )
         return

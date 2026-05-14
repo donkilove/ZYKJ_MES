@@ -520,6 +520,8 @@ def _rollback_first_article_execution_state(
         pipeline_instance.sub_order_id = None
     if context.assist_authorization is not None:
         context.assist_authorization.first_article_used_at = None
+        context.assist_authorization.status = "approved"
+        context.assist_authorization.consumed_at = None
     db.flush()
     _refresh_process_and_order_status_after_first_article_revert(
         db,

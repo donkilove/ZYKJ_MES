@@ -9,7 +9,6 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_first_article_parameters_dialog.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_first_article_participants_dialog.dart';
-import 'package:mes_client/features/production/presentation/widgets/production_first_article_template_picker_dialog.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 
@@ -38,6 +37,8 @@ class _ProductionFirstArticlePageState
     extends State<ProductionFirstArticlePage> {
   late final ProductionService _service;
   late final DateTime _firstArticleTime;
+  late final String _presetCheckContent;
+  late final String _presetTestValue;
   final TextEditingController _checkContentController = TextEditingController();
   final TextEditingController _testValueController = TextEditingController();
 
@@ -45,10 +46,8 @@ class _ProductionFirstArticlePageState
   bool _submitting = false;
   String _message = '';
   String? _reviewRejectMessage;
-  FirstArticleTemplateItem? _selectedTemplate;
   FirstArticleReviewSessionResult? _reviewSession;
   Timer? _reviewPollTimer;
-  List<FirstArticleTemplateItem> _templates = const [];
   List<FirstArticleParticipantOptionItem> _participantOptions = const [];
   List<FirstArticleParticipantOptionItem> _selectedParticipants = const [];
 
@@ -57,6 +56,10 @@ class _ProductionFirstArticlePageState
     super.initState();
     _service = widget.service ?? ProductionService(widget.session);
     _firstArticleTime = DateTime.now();
+    _presetCheckContent = widget.order.currentProcessFirstArticleCheckContent;
+    _presetTestValue = widget.order.currentProcessFirstArticleTestValue;
+    _checkContentController.text = _presetCheckContent;
+    _testValueController.text = _presetTestValue;
     _loadInitialData();
   }
 
@@ -136,18 +139,14 @@ class _ProductionFirstArticlePageState
       _message = '';
     });
     try {
-      final templates = await _service.listFirstArticleTemplates(
-        orderId: widget.order.orderId,
-        orderProcessId: widget.order.currentProcessId,
-      );
       final participants = await _service.listFirstArticleParticipantOptions(
         orderId: widget.order.orderId,
+        orderProcessId: widget.order.currentProcessId,
       );
       if (!mounted) {
         return;
       }
       setState(() {
-        _templates = templates.items;
         _participantOptions = participants.items;
       });
     } catch (error) {
@@ -168,31 +167,6 @@ class _ProductionFirstArticlePageState
         });
       }
     }
-  }
-
-  Future<void> _selectTemplate() async {
-    if (_templates.isEmpty) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('当前工序暂无可用首件模板')));
-      return;
-    }
-    final selected = await showProductionFirstArticleTemplatePickerDialog(
-      context: context,
-      templates: _templates,
-      selectedTemplateId: _selectedTemplate?.id,
-    );
-    if (selected == null || !mounted) {
-      return;
-    }
-    setState(() {
-      _selectedTemplate = selected;
-      _checkContentController.text = selected.checkContent ?? '';
-      _testValueController.text = selected.testValue ?? '';
-    });
   }
 
   Future<void> _showParametersDialog() async {
@@ -248,19 +222,71 @@ class _ProductionFirstArticlePageState
     });
   }
 
-  Future<void> _startScanReview() async {
-    final checkContent = _checkContentController.text.trim();
-    final testValue = _testValueController.text.trim();
-    if (checkContent.isEmpty) {
+  bool _hasMeaningfulText(String value) {
+    return value.trim().isNotEmpty;
+  }
+
+  bool _matchesCurrentPreset({
+    required String checkContent,
+    required String testValue,
+  }) {
+    return checkContent == _presetCheckContent && testValue == _presetTestValue;
+  }
+
+  void _restoreControllerText(TextEditingController controller, String value) {
+    controller.value = TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+    );
+  }
+
+  void _restoreCheckContentPreset() {
+    setState(() {
+      _restoreControllerText(_checkContentController, _presetCheckContent);
+    });
+  }
+
+  void _restoreTestValuePreset() {
+    setState(() {
+      _restoreControllerText(_testValueController, _presetTestValue);
+    });
+  }
+
+  bool _validateScanReviewInput({
+    required String checkContent,
+    required String testValue,
+  }) {
+    if (!_hasMeaningfulText(checkContent)) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('请输入首件内容')));
-      return;
+      return false;
     }
-    if (testValue.isEmpty) {
+    if (!_hasMeaningfulText(testValue)) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('请输入首件测试值')));
+      ).showSnackBar(const SnackBar(content: Text('请输入首件检验值')));
+      return false;
+    }
+    if (_matchesCurrentPreset(
+      checkContent: checkContent,
+      testValue: testValue,
+    )) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('请至少修改首件内容或首件检验值后再生成二维码')));
+      return false;
+    }
+    return true;
+  }
+
+  Future<void> _startScanReview() async {
+    final checkContent = _checkContentController.text;
+    final testValue = _testValueController.text;
+    if (!_validateScanReviewInput(
+      checkContent: checkContent,
+      testValue: testValue,
+    )) {
       return;
     }
 
@@ -273,7 +299,7 @@ class _ProductionFirstArticlePageState
         orderId: widget.order.orderId,
         orderProcessId: widget.order.currentProcessId,
         pipelineInstanceId: widget.order.pipelineInstanceId,
-        templateId: _selectedTemplate?.id,
+        templateId: null,
         checkContent: checkContent,
         testValue: testValue,
         participantUserIds: _selectedParticipants
@@ -314,12 +340,12 @@ class _ProductionFirstArticlePageState
     if (session == null) {
       return;
     }
-    final checkContent = _checkContentController.text.trim();
-    final testValue = _testValueController.text.trim();
-    if (checkContent.isEmpty || testValue.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请先填写首件内容和测试值')));
+    final checkContent = _checkContentController.text;
+    final testValue = _testValueController.text;
+    if (!_validateScanReviewInput(
+      checkContent: checkContent,
+      testValue: testValue,
+    )) {
       return;
     }
 
@@ -587,17 +613,6 @@ class _ProductionFirstArticlePageState
                                   runSpacing: 8,
                                   children: [
                                     OutlinedButton.icon(
-                                      onPressed: _selectTemplate,
-                                      icon: const Icon(
-                                        Icons.description_outlined,
-                                      ),
-                                      label: Text(
-                                        _selectedTemplate == null
-                                            ? '首件模板'
-                                            : '模板：${_selectedTemplate!.templateName}',
-                                      ),
-                                    ),
-                                    OutlinedButton.icon(
                                       onPressed: _showParametersDialog,
                                       icon: const Icon(Icons.tune_outlined),
                                       label: const Text('查看参数'),
@@ -652,21 +667,57 @@ class _ProductionFirstArticlePageState
                                   ).textTheme.titleMedium,
                                 ),
                                 const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '首件内容',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.titleSmall,
+                                      ),
+                                    ),
+                                    TextButton.icon(
+                                      onPressed: _restoreCheckContentPreset,
+                                      icon: const Icon(Icons.refresh),
+                                      label: const Text('刷新首件内容'),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
                                 TextField(
                                   controller: _checkContentController,
                                   maxLines: 4,
                                   decoration: const InputDecoration(
-                                    labelText: '首件内容',
+                                    hintText: '请输入首件内容',
                                     border: OutlineInputBorder(),
                                     alignLabelWithHint: true,
                                   ),
                                 ),
                                 const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        '首件检验值',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.titleSmall,
+                                      ),
+                                    ),
+                                    TextButton.icon(
+                                      onPressed: _restoreTestValuePreset,
+                                      icon: const Icon(Icons.refresh),
+                                      label: const Text('刷新首件检验值'),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
                                 TextField(
                                   controller: _testValueController,
                                   maxLines: 3,
                                   decoration: const InputDecoration(
-                                    labelText: '首件测试值',
+                                    hintText: '请输入首件检验值',
                                     border: OutlineInputBorder(),
                                     alignLabelWithHint: true,
                                   ),

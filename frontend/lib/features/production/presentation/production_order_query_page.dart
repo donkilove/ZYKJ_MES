@@ -203,6 +203,19 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     return '可见${item.visibleQuantity} / 完成$completed';
   }
 
+  String _buildProducibleSummary(MyOrderItem item) {
+    final assigned = item.userAssignedQuantity;
+    final userCompleted = item.userCompletedQuantity;
+    final completed = userCompleted != null && userCompleted > 0
+        ? userCompleted
+        : item.processCompletedQuantity;
+    final producible = item.maxProducibleQuantity;
+    if (assigned != null) {
+      return '可生产$producible / 分配$assigned / 完成$completed';
+    }
+    return '可生产$producible / 完成$completed';
+  }
+
   Future<String?> _saveExportFile({
     required String filename,
     required String contentBase64,
@@ -561,12 +574,15 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     return '暂无可执行生产工单';
   }
 
-  Future<MyOrderContextResult> _fetchOrderContextInCurrentView(
-    int orderId,
-  ) async {
+  Future<MyOrderContextResult> _fetchOrderContext({
+    required int orderId,
+    int? orderProcessId,
+    bool showErrorMessage = true,
+  }) async {
     try {
       return await _service.getMyOrderContext(
         orderId: orderId,
+        orderProcessId: orderProcessId,
         viewMode: _viewMode,
         proxyOperatorUserId: _proxyOperatorUserId,
       );
@@ -578,11 +594,48 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         widget.onLogout();
         return MyOrderContextResult(found: false, item: null);
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      if (showErrorMessage) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(_errorMessage(error))));
+      }
       return MyOrderContextResult(found: false, item: null);
     }
+  }
+
+  Future<MyOrderContextResult> _fetchOrderContextInCurrentView(
+    int orderId,
+  ) async {
+    return _fetchOrderContext(orderId: orderId);
+  }
+
+  Future<MyOrderItem?> _refreshActionableOrderContext({
+    required MyOrderItem item,
+    required bool Function(MyOrderItem item) canProceed,
+    required String unavailableMessage,
+  }) async {
+    final result = await _fetchOrderContext(
+      orderId: item.orderId,
+      orderProcessId: item.currentProcessId,
+      showErrorMessage: false,
+    );
+    if (!mounted) {
+      return null;
+    }
+    final refreshedItem = result.item;
+    if (!result.found || refreshedItem == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(unavailableMessage)));
+      return null;
+    }
+    if (!canProceed(refreshedItem)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(unavailableMessage)));
+      return null;
+    }
+    return refreshedItem;
   }
 
   Future<void> _openOrderDetailPage(
@@ -668,20 +721,29 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     bool reloadAfterAction = true,
   }) async {
     try {
+      final currentItem = await _refreshActionableOrderContext(
+        item: item,
+        canProceed: (target) =>
+            target.canEndProduction && target.maxProducibleQuantity > 0,
+        unavailableMessage: '当前工单已无可结束生产数量，请刷新后重试',
+      );
+      if (currentItem == null) {
+        return false;
+      }
       final payload = await showProductionEndProductionDialog(
         context: context,
-        order: item,
+        order: currentItem,
       );
       if (payload == null) {
         return false;
       }
       await _service.endProduction(
-        orderId: item.orderId,
-        orderProcessId: item.currentProcessId,
-        pipelineInstanceId: item.pipelineInstanceId,
+        orderId: currentItem.orderId,
+        orderProcessId: currentItem.currentProcessId,
+        pipelineInstanceId: currentItem.pipelineInstanceId,
         quantity: payload.quantity,
-        effectiveOperatorUserId: item.operatorUserId,
-        assistAuthorizationId: item.assistAuthorizationId,
+        effectiveOperatorUserId: currentItem.operatorUserId,
+        assistAuthorizationId: currentItem.assistAuthorizationId,
         defectItems: payload.defectItems,
       );
       if (!mounted) {
@@ -714,16 +776,25 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
     bool reloadAfterAction = true,
   }) async {
     try {
+      final currentItem = await _refreshActionableOrderContext(
+        item: item,
+        canProceed: (target) =>
+            target.canCreateManualRepair && target.maxProducibleQuantity > 1,
+        unavailableMessage: '当前工单当前不可手工送修建单，请刷新后重试',
+      );
+      if (currentItem == null) {
+        return false;
+      }
       final payload = await showProductionManualRepairDialog(
         context: context,
-        order: item,
+        order: currentItem,
       );
       if (payload == null) {
         return false;
       }
       await _service.createManualRepairOrder(
-        orderId: item.orderId,
-        orderProcessId: item.currentProcessId,
+        orderId: currentItem.orderId,
+        orderProcessId: currentItem.currentProcessId,
         productionQuantity: payload.productionQuantity,
         defectItems: payload.defectItems,
       );
@@ -1221,7 +1292,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                   ),
                 ),
                 DataCell(Text(item.currentProcessName)),
-                DataCell(Text(_buildQuantitySummary(item))),
+                DataCell(Text(_buildProducibleSummary(item))),
                 DataCell(ProductionOrderStatusChip(status: item.orderStatus)),
                 DataCell(Text(_formatDate(item.dueDate))),
                 DataCell(Text(remark == null || remark.isEmpty ? '-' : remark)),

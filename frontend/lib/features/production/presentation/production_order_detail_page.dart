@@ -371,8 +371,14 @@ class _ProductionOrderDetailPageState extends State<ProductionOrderDetailPage> {
                         DataColumn(label: Text('操作员')),
                         DataColumn(label: Text('类型')),
                         DataColumn(label: Text('数量')),
+                        DataColumn(label: Text('本次生产')),
+                        DataColumn(label: Text('总不良')),
+                        DataColumn(label: Text('不良率')),
                       ],
                       rows: sortedRecords.map((item) {
+                        final totalProduction = item.totalProductionQuantity > 0
+                            ? item.totalProductionQuantity
+                            : item.productionQuantity;
                         return DataRow(
                           cells: [
                             DataCell(Text(_formatDateTime(item.createdAt))),
@@ -380,6 +386,11 @@ class _ProductionOrderDetailPageState extends State<ProductionOrderDetailPage> {
                             DataCell(Text(item.operatorUsername)),
                             DataCell(Text(item.recordType)),
                             DataCell(Text('${item.productionQuantity}')),
+                            DataCell(Text('$totalProduction')),
+                            DataCell(Text('${item.totalDefectQuantity}')),
+                            DataCell(
+                              Text('${item.defectRatePercent.toStringAsFixed(2)}%'),
+                            ),
                           ],
                         );
                       }).toList(),

@@ -4,6 +4,7 @@ import 'package:mes_client/core/network/http_client.dart' as http;
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
+import 'package:mes_client/core/network/api_error_message.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/quality/services/repair_scrap_service.dart';
 
@@ -527,10 +528,13 @@ class ProductionService implements RepairScrapService {
   }
 
   Future<FirstArticleParticipantOptionListResult>
-  listFirstArticleParticipantOptions({required int orderId}) async {
+  listFirstArticleParticipantOptions({
+    required int orderId,
+    required int orderProcessId,
+  }) async {
     final uri = Uri.parse(
       '$_basePath/orders/$orderId/first-article/participant-users',
-    );
+    ).replace(queryParameters: {'order_process_id': '$orderProcessId'});
     final response = await http
         .get(uri, headers: _authHeaders)
         .timeout(const Duration(seconds: 30));
@@ -1497,21 +1501,7 @@ class ProductionService implements RepairScrapService {
   }
 
   String _extractErrorMessage(Map<String, dynamic> body, int statusCode) {
-    final detail = body['detail'];
-    if (detail is String && detail.isNotEmpty) {
-      return detail;
-    }
-    if (detail is List) {
-      final validationMessage = _extractValidationDetailMessage(detail);
-      if (validationMessage != null) {
-        return validationMessage;
-      }
-    }
-    final message = body['message'];
-    if (message is String && message.isNotEmpty) {
-      return message;
-    }
-    return '请求失败（状态码：$statusCode）';
+    return extractApiErrorMessage(body, statusCode);
   }
 
   String? _extractValidationDetailMessage(List<dynamic> detail) {

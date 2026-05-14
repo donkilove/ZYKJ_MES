@@ -49,7 +49,9 @@ class _ProductionManualRepairDialogState
   void initState() {
     super.initState();
     _productionQuantityController = TextEditingController(
-      text: '${widget.order.maxProducibleQuantity.clamp(1, 999999)}',
+      text: widget.order.maxProducibleQuantity > 0
+          ? '${widget.order.maxProducibleQuantity.clamp(0, 999999)}'
+          : '',
     );
   }
 
@@ -102,6 +104,23 @@ class _ProductionManualRepairDialogState
           quantity: defectQty,
         ),
       );
+    }
+    final defectTotal = defects.fold<int>(0, (sum, entry) => sum + entry.quantity);
+    if (productionQty < defectTotal) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('本次生产数量不能小于送修数量合计')),
+      );
+      return;
+    }
+    if (defectTotal >= widget.order.maxProducibleQuantity) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '手工送修后必须至少保留 1 件可生产数量，当前最多只能送修 ${widget.order.maxProducibleQuantity - 1} 件',
+          ),
+        ),
+      );
+      return;
     }
     Navigator.of(context).pop(
       ProductionManualRepairDialogResult(

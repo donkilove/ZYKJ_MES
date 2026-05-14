@@ -54,16 +54,26 @@ class _ProductionFirstArticleParticipantsDialogState
             return CheckboxListTile(
               value: _draftIds.contains(item.id),
               title: Text(item.displayName),
+              subtitle: item.blockedReason == null
+                  ? null
+                  : Text(
+                      item.blockedReason!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
               controlAffinity: ListTileControlAffinity.leading,
-              onChanged: (checked) {
-                setState(() {
-                  if (checked == true) {
-                    _draftIds.add(item.id);
-                  } else {
-                    _draftIds.remove(item.id);
-                  }
-                });
-              },
+              onChanged: item.selectable
+                  ? (checked) {
+                      setState(() {
+                        if (checked == true) {
+                          _draftIds.add(item.id);
+                        } else {
+                          _draftIds.remove(item.id);
+                        }
+                      });
+                    }
+                  : null,
             );
           }).toList(),
         ),

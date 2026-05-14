@@ -16,6 +16,7 @@ from app.core.production_constants import (
     ORDER_STATUS_COMPLETED,
     ORDER_STATUS_IN_PROGRESS,
     PROCESS_STATUS_COMPLETED,
+    PROCESS_STATUS_IN_PROGRESS,
     PROCESS_STATUS_PARTIAL,
     PROCESS_STATUS_PENDING,
     REPAIR_STATUS_ALL,
@@ -24,18 +25,25 @@ from app.core.production_constants import (
     SCRAP_PROGRESS_ALL,
     SCRAP_PROGRESS_APPLIED,
     SCRAP_PROGRESS_PENDING_APPLY,
+    SUB_ORDER_STATUS_IN_PROGRESS,
 )
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_record import ProductionRecord
 from app.models.production_scrap_statistics import ProductionScrapStatistics
+from app.models.production_sub_order import ProductionSubOrder
 from app.models.repair_cause import RepairCause
 from app.models.repair_defect_phenomenon import RepairDefectPhenomenon
 from app.models.repair_order import RepairOrder
 from app.models.repair_return_route import RepairReturnRoute
 from app.models.user import User
 from app.services.production_event_log_service import add_order_event_log
-from app.services.production_order_service import ensure_sub_orders_visible_quantity
+from app.services.production_order_service import (
+    ensure_sub_orders_visible_quantity,
+    get_in_progress_sub_order_count,
+    get_process_remaining_quantity,
+    get_runtime_max_producible_quantity,
+)
 from app.services.message_service import create_message_for_users
 
 
@@ -821,10 +829,55 @@ def create_manual_repair_order(
     defect_items: list[dict[str, Any]] | None,
     sender: User,
 ) -> RepairOrder:
-    return create_repair_order(
+    order, process_row = _load_order_with_process(
         db,
         order_id=order_id,
         order_process_id=order_process_id,
+    )
+    sender_sub_order = (
+        db.execute(
+            select(ProductionSubOrder)
+            .where(
+                ProductionSubOrder.order_process_id == process_row.id,
+                ProductionSubOrder.operator_user_id == sender.id,
+            )
+            .with_for_update()
+        )
+        .scalars()
+        .first()
+    )
+    if process_row.status not in {PROCESS_STATUS_IN_PROGRESS, PROCESS_STATUS_PARTIAL}:
+        raise ValueError("Current process does not allow manual repair order creation")
+    if sender_sub_order is None or sender_sub_order.status != SUB_ORDER_STATUS_IN_PROGRESS:
+        raise ValueError("Manual repair order can only be created while current sub-order is in progress")
+
+    process_remaining = get_process_remaining_quantity(
+        db,
+        process_row=process_row,
+    )
+    in_progress_count = get_in_progress_sub_order_count(
+        db,
+        order_process_id=process_row.id,
+    )
+    max_producible = get_runtime_max_producible_quantity(
+        process_remaining_quantity=process_remaining,
+        in_progress_count=in_progress_count,
+        current_sub_order_status=sender_sub_order.status,
+    )
+    repair_quantity = int(
+        sum(
+            int(item.get("quantity") or 0)
+            for item in (defect_items or [])
+            if isinstance(item, dict)
+        )
+    )
+    if repair_quantity >= max_producible:
+        raise ValueError("Manual repair quantity must leave at least 1 producible unit")
+
+    return create_repair_order(
+        db,
+        order_id=order.id,
+        order_process_id=process_row.id,
         sender=sender,
         production_quantity=_normalize_quantity(
             production_quantity, field_name="production_quantity"

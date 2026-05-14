@@ -33,6 +33,8 @@ from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_record import ProductionRecord
 from app.models.production_sub_order import ProductionSubOrder
+from app.models.repair_defect_phenomenon import RepairDefectPhenomenon
+from app.models.repair_order import RepairOrder
 from app.models.user import User
 from app.services.assist_authorization_service import (
     ASSIST_OP_END_PRODUCTION,
@@ -51,9 +53,14 @@ from app.services.production_order_service import (
     get_active_pipeline_instance_for_sub_order,
     get_active_pipeline_instance_for_link_id,
     get_active_pipeline_instance_for_process_sequence,
+    get_in_progress_sub_order_count,
+    get_process_remaining_quantity,
+    get_runtime_max_producible_quantity,
+    get_user_parallel_block_reason_for_process,
     invalidate_pipeline_instances_for_process,
     is_pipeline_parallel_edge_for_processes,
     is_pipeline_process_selected_for_order,
+    list_user_parallel_block_reasons_for_process,
 )
 from app.services.production_repair_service import create_repair_order
 
@@ -206,6 +213,58 @@ def _lock_sub_order(
         db.add(row)
         db.flush()
     return row
+
+
+def _get_cycle_started_at(
+    db: Session,
+    *,
+    sub_order_id: int | None,
+    operator_user_id: int,
+) -> datetime | None:
+    if sub_order_id is None:
+        return None
+    return (
+        db.execute(
+            select(FirstArticleRecord.created_at)
+            .where(
+                FirstArticleRecord.sub_order_id == sub_order_id,
+                FirstArticleRecord.operator_user_id == operator_user_id,
+                FirstArticleRecord.result == "passed",
+            )
+            .order_by(FirstArticleRecord.created_at.desc(), FirstArticleRecord.id.desc())
+        )
+        .scalars()
+        .first()
+    )
+
+
+def _get_manual_repair_quantity_in_current_cycle(
+    db: Session,
+    *,
+    order_process_id: int,
+    operator_user_id: int,
+    cycle_started_at: datetime | None,
+) -> int:
+    if cycle_started_at is None:
+        return 0
+    manual_repair_exists = (
+        select(RepairDefectPhenomenon.id).where(
+            RepairDefectPhenomenon.repair_order_id == RepairOrder.id,
+            RepairDefectPhenomenon.production_record_id.is_not(None),
+        )
+    ).exists()
+    quantity = (
+        db.execute(
+            select(func.coalesce(func.sum(RepairOrder.repair_quantity), 0)).where(
+                RepairOrder.source_order_process_id == order_process_id,
+                RepairOrder.sender_user_id == operator_user_id,
+                RepairOrder.repair_time >= cycle_started_at,
+                ~manual_repair_exists,
+            )
+        ).scalar()
+        or 0
+    )
+    return max(int(quantity), 0)
 
 
 def _lock_previous_process(
@@ -486,6 +545,12 @@ def _normalize_optional_text(value: str | None) -> str | None:
     return text or None
 
 
+def _normalize_optional_preserved_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    return value if value.strip() else None
+
+
 def _build_first_article_event_detail(
     *,
     operator_username: str,
@@ -587,6 +652,7 @@ def submit_first_article(
     reviewer_user_id: int | None = None,
     reviewed_at=None,
     review_remark: str | None = None,
+    preserve_input_text: bool = False,
 ) -> tuple[ProductionOrder, ProductionOrderProcess, ProductionSubOrder]:
     order, process_row = _lock_order_and_process(
         db,
@@ -653,21 +719,19 @@ def submit_first_article(
         current_instance=pipeline_instance,
     )
 
-    process_remaining = max(
-        process_row.visible_quantity - process_row.completed_quantity, 0
+    process_remaining = get_process_remaining_quantity(
+        db,
+        process_row=process_row,
     )
-    in_progress_count = (
-        db.execute(
-            select(func.count())
-            .select_from(ProductionSubOrder)
-            .where(
-                ProductionSubOrder.order_process_id == process_row.id,
-                ProductionSubOrder.status == SUB_ORDER_STATUS_IN_PROGRESS,
-            )
-        ).scalar()
-        or 0
+    in_progress_count = get_in_progress_sub_order_count(
+        db,
+        order_process_id=process_row.id,
     )
-    pool_remaining = max(process_remaining - in_progress_count, 0)
+    pool_remaining = get_runtime_max_producible_quantity(
+        process_remaining_quantity=process_remaining,
+        in_progress_count=in_progress_count,
+        current_sub_order_status=SUB_ORDER_STATUS_PENDING,
+    )
     pipeline_parallel_edge = False
     previous_process = _lock_previous_process(
         db,
@@ -702,19 +766,64 @@ def submit_first_article(
             product_id=order.product_id,
             process_code=process_row.process_code,
         )
-    normalized_check_content = _normalize_optional_text(check_content)
-    normalized_test_value = _normalize_optional_text(test_value)
+    normalize_text = (
+        _normalize_optional_preserved_text
+        if preserve_input_text
+        else _normalize_optional_text
+    )
+    normalized_check_content = normalize_text(check_content)
+    normalized_test_value = normalize_text(test_value)
     if template_row is not None:
         if normalized_check_content is None:
-            normalized_check_content = _normalize_optional_text(
-                template_row.check_content
-            )
+            normalized_check_content = normalize_text(template_row.check_content)
         if normalized_test_value is None:
-            normalized_test_value = _normalize_optional_text(template_row.test_value)
+            normalized_test_value = normalize_text(template_row.test_value)
     normalized_participant_user_ids = _normalize_participant_user_ids(
         db,
         participant_user_ids=participant_user_ids,
     )
+    if normalized_result == "passed":
+        effective_operator_label = operator.username
+        if effective_user_id != operator.id:
+            effective_operator_row = db.get(User, effective_user_id)
+            if effective_operator_row is not None:
+                effective_operator_label = effective_operator_row.username
+        effective_operator_block_reason = get_user_parallel_block_reason_for_process(
+            db,
+            user_id=effective_user_id,
+            process_row=process_row,
+            user_label=effective_operator_label,
+        )
+        if effective_operator_block_reason is not None:
+            raise ValueError(effective_operator_block_reason)
+        participant_candidate_ids = {
+            participant_user_id
+            for participant_user_id in normalized_participant_user_ids
+            if participant_user_id != effective_user_id
+        }
+        if participant_candidate_ids:
+            participant_rows = db.execute(
+                select(User.id, User.username, User.full_name).where(
+                    User.id.in_(participant_candidate_ids)
+                )
+            ).all()
+            participant_label_by_id = {
+                int(row.id): (
+                    f"{row.username}({row.full_name})"
+                    if (row.full_name or "").strip()
+                    else row.username
+                )
+                for row in participant_rows
+            }
+            participant_block_reasons = list_user_parallel_block_reasons_for_process(
+                db,
+                user_ids=participant_candidate_ids,
+                process_row=process_row,
+                user_label_by_id=participant_label_by_id,
+                for_participant=True,
+            )
+            if participant_block_reasons:
+                raise ValueError(next(iter(participant_block_reasons.values())))
 
     if normalized_result == "passed":
         if process_row.status == PROCESS_STATUS_PENDING:
@@ -842,22 +951,9 @@ def end_production(
             effective_operator_user_id = _assist.target_operator_user_id
 
     effective_user_id = effective_operator_user_id or operator.id
-    assist_row = None
     if effective_user_id != operator.id:
-        if assist_authorization_id:
-            assist_row = get_usable_assist_authorization_for_operation(
-                db,
-                authorization_id=assist_authorization_id,
-                order_id=order_id,
-                order_process_id=order_process_id,
-                target_operator_user_id=effective_user_id,
-                helper_user_id=operator.id,
-                operation=ASSIST_OP_END_PRODUCTION,
-            )
-        elif not _can_proxy_cross_user_operation(db, operator=operator):
-            raise ValueError(
-                "Assist authorization is required for cross-user operation"
-            )
+        raise PermissionError("结束生产只能由发起首件的操作员本人执行")
+    assist_row = None
 
     _ensure_effective_operator_can_operate_process(
         db,
@@ -887,21 +983,19 @@ def end_production(
         current_instance=pipeline_instance,
     )
 
-    process_remaining = max(
-        process_row.visible_quantity - process_row.completed_quantity, 0
+    process_remaining = get_process_remaining_quantity(
+        db,
+        process_row=process_row,
     )
-    in_progress_count = (
-        db.execute(
-            select(func.count())
-            .select_from(ProductionSubOrder)
-            .where(
-                ProductionSubOrder.order_process_id == process_row.id,
-                ProductionSubOrder.status == SUB_ORDER_STATUS_IN_PROGRESS,
-            )
-        ).scalar()
-        or 0
+    in_progress_count = get_in_progress_sub_order_count(
+        db,
+        order_process_id=process_row.id,
     )
-    max_producible = max(process_remaining - in_progress_count + 1, 0)
+    max_producible = get_runtime_max_producible_quantity(
+        process_remaining_quantity=process_remaining,
+        in_progress_count=in_progress_count,
+        current_sub_order_status=sub_order.status,
+    )
     if max_producible <= 0:
         raise ValueError("No producible quantity available for current user")
     defect_quantity = 0
@@ -1024,6 +1118,36 @@ def end_production(
                 defect_items=enriched_defect_items,
                 auto_created=True,
             )
+    cycle_started_at = _get_cycle_started_at(
+        db,
+        sub_order_id=record_row.sub_order_id,
+        operator_user_id=operator.id,
+    )
+    manual_repair_quantity_before_end = _get_manual_repair_quantity_in_current_cycle(
+        db,
+        order_process_id=process_row.id,
+        operator_user_id=operator.id,
+        cycle_started_at=cycle_started_at,
+    )
+    total_defect_quantity = manual_repair_quantity_before_end + defect_quantity
+    total_production_quantity = quantity + total_defect_quantity
+    defect_rate_percent = (
+        round((total_defect_quantity / total_production_quantity) * 100, 2)
+        if total_production_quantity > 0
+        else 0.0
+    )
+    event_detail = (
+        f"{operator.username} 在工序 {process_row.process_name} 报工 {quantity} 件。"
+        if not remark
+        else f"{operator.username} 在工序 {process_row.process_name} 报工 {quantity} 件。{remark.strip()}"
+    )
+    if total_defect_quantity > 0:
+        event_detail = (
+            f"{event_detail} 本次生产 {total_production_quantity} 件，"
+            f"不良 {total_defect_quantity} 件"
+            f"（手工送修 {manual_repair_quantity_before_end} + 结束统一送修 {defect_quantity}），"
+            f"本次不良率 {defect_rate_percent:.2f}%。"
+        )
     add_order_event_log(
         db,
         order_id=order.id,
@@ -1040,6 +1164,10 @@ def end_production(
             "process_code": process_row.process_code,
             "quantity": quantity,
             "defect_quantity": defect_quantity,
+            "manual_repair_quantity_before_end": manual_repair_quantity_before_end,
+            "total_defect_quantity": total_defect_quantity,
+            "total_production_quantity": total_production_quantity,
+            "defect_rate_percent": defect_rate_percent,
             "total_consumed_quantity": total_consumed_quantity,
             "operator_user_id": operator.id,
             "effective_operator_user_id": effective_user_id,

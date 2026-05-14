@@ -283,6 +283,11 @@ class ProductionRecordItem {
     required this.operatorUserId,
     required this.operatorUsername,
     required this.productionQuantity,
+    required this.manualRepairQuantity,
+    required this.reportedDefectQuantity,
+    required this.totalDefectQuantity,
+    required this.totalProductionQuantity,
+    required this.defectRatePercent,
     required this.recordType,
     required this.createdAt,
   });
@@ -294,6 +299,11 @@ class ProductionRecordItem {
   final int operatorUserId;
   final String operatorUsername;
   final int productionQuantity;
+  final int manualRepairQuantity;
+  final int reportedDefectQuantity;
+  final int totalDefectQuantity;
+  final int totalProductionQuantity;
+  final double defectRatePercent;
   final String recordType;
   final DateTime createdAt;
 
@@ -306,6 +316,12 @@ class ProductionRecordItem {
       operatorUserId: (json['operator_user_id'] as int?) ?? 0,
       operatorUsername: (json['operator_username'] as String?) ?? '',
       productionQuantity: (json['production_quantity'] as int?) ?? 0,
+      manualRepairQuantity: (json['manual_repair_quantity'] as int?) ?? 0,
+      reportedDefectQuantity: (json['reported_defect_quantity'] as int?) ?? 0,
+      totalDefectQuantity: (json['total_defect_quantity'] as int?) ?? 0,
+      totalProductionQuantity: (json['total_production_quantity'] as int?) ?? 0,
+      defectRatePercent: ((json['defect_rate_percent'] as num?) ?? 0)
+          .toDouble(),
       recordType: (json['record_type'] as String?) ?? 'production',
       createdAt: _parseDateOrDefault(json['created_at']),
     );
@@ -433,6 +449,8 @@ class MyOrderItem {
     required this.currentStageName,
     required this.currentProcessCode,
     required this.currentProcessName,
+    this.currentProcessFirstArticleCheckContent = '',
+    this.currentProcessFirstArticleTestValue = '',
     required this.currentProcessOrder,
     required this.processStatus,
     required this.visibleQuantity,
@@ -472,6 +490,8 @@ class MyOrderItem {
   final String? currentStageName;
   final String currentProcessCode;
   final String currentProcessName;
+  final String currentProcessFirstArticleCheckContent;
+  final String currentProcessFirstArticleTestValue;
   final int currentProcessOrder;
   final String processStatus;
   final int visibleQuantity;
@@ -512,6 +532,11 @@ class MyOrderItem {
       currentStageName: json['current_stage_name'] as String?,
       currentProcessCode: (json['current_process_code'] as String?) ?? '',
       currentProcessName: (json['current_process_name'] as String?) ?? '',
+      currentProcessFirstArticleCheckContent:
+          (json['current_process_first_article_check_content'] as String?) ??
+          '',
+      currentProcessFirstArticleTestValue:
+          (json['current_process_first_article_test_value'] as String?) ?? '',
       currentProcessOrder: (json['current_process_order'] as int?) ?? 0,
       processStatus: (json['process_status'] as String?) ?? 'pending',
       visibleQuantity: (json['visible_quantity'] as int?) ?? 0,
@@ -614,11 +639,15 @@ class FirstArticleParticipantOptionItem {
     required this.id,
     required this.username,
     required this.fullName,
+    this.selectable = true,
+    this.blockedReason,
   });
 
   final int id;
   final String username;
   final String? fullName;
+  final bool selectable;
+  final String? blockedReason;
 
   String get displayName {
     final normalized = (fullName ?? '').trim();
@@ -635,6 +664,8 @@ class FirstArticleParticipantOptionItem {
       id: (json['id'] as int?) ?? 0,
       username: (json['username'] as String?) ?? '',
       fullName: json['full_name'] as String?,
+      selectable: (json['selectable'] as bool?) ?? true,
+      blockedReason: json['blocked_reason'] as String?,
     );
   }
 }
@@ -1369,9 +1400,33 @@ class ProductionTodayRealtimeSummary {
   }
 }
 
+class ProductionTodayRealtimeOverview {
+  ProductionTodayRealtimeOverview({
+    required this.pendingCount,
+    required this.inProgressCount,
+    required this.completedCount,
+    required this.finishedQuantity,
+  });
+
+  final int pendingCount;
+  final int inProgressCount;
+  final int completedCount;
+  final int finishedQuantity;
+
+  factory ProductionTodayRealtimeOverview.fromJson(Map<String, dynamic> json) {
+    return ProductionTodayRealtimeOverview(
+      pendingCount: (json['pending_count'] as int?) ?? 0,
+      inProgressCount: (json['in_progress_count'] as int?) ?? 0,
+      completedCount: (json['completed_count'] as int?) ?? 0,
+      finishedQuantity: (json['finished_quantity'] as int?) ?? 0,
+    );
+  }
+}
+
 class ProductionTodayRealtimeResult {
   ProductionTodayRealtimeResult({
     required this.statMode,
+    required this.overview,
     required this.summary,
     required this.tableRows,
     required this.chartData,
@@ -1379,6 +1434,7 @@ class ProductionTodayRealtimeResult {
   });
 
   final String statMode;
+  final ProductionTodayRealtimeOverview overview;
   final ProductionTodayRealtimeSummary summary;
   final List<ProductionTodayRealtimeRow> tableRows;
   final List<ProductionTodayRealtimeChartItem> chartData;
@@ -1387,6 +1443,9 @@ class ProductionTodayRealtimeResult {
   factory ProductionTodayRealtimeResult.fromJson(Map<String, dynamic> json) {
     return ProductionTodayRealtimeResult(
       statMode: (json['stat_mode'] as String?) ?? 'main_order',
+      overview: ProductionTodayRealtimeOverview.fromJson(
+        json['overview'] as Map<String, dynamic>? ?? const {},
+      ),
       summary: ProductionTodayRealtimeSummary.fromJson(
         json['summary'] as Map<String, dynamic>? ?? const {},
       ),

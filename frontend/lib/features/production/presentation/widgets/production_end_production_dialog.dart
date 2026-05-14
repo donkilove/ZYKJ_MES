@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
@@ -28,10 +29,7 @@ Future<ProductionEndProductionDialogResult?> showProductionEndProductionDialog({
 }
 
 class ProductionEndProductionDialog extends StatefulWidget {
-  const ProductionEndProductionDialog({
-    super.key,
-    required this.order,
-  });
+  const ProductionEndProductionDialog({super.key, required this.order});
 
   final MyOrderItem order;
 
@@ -44,22 +42,54 @@ class _ProductionEndProductionDialogState
     extends State<ProductionEndProductionDialog> {
   late final TextEditingController _quantityController;
   final List<_DefectRowDraft> _defectRows = <_DefectRowDraft>[];
+  bool _isSyncingQuantityText = false;
+
+  int get _maxQuantity => widget.order.maxProducibleQuantity.clamp(0, 999999);
 
   @override
   void initState() {
     super.initState();
     _quantityController = TextEditingController(
-      text: '${widget.order.maxProducibleQuantity.clamp(1, 999999)}',
+      text: _maxQuantity > 0 ? '$_maxQuantity' : '',
     );
+    _quantityController.addListener(_syncQuantityWithinLimit);
   }
 
   @override
   void dispose() {
+    _quantityController.removeListener(_syncQuantityWithinLimit);
     _quantityController.dispose();
     for (final row in _defectRows) {
       row.dispose();
     }
     super.dispose();
+  }
+
+  void _syncQuantityWithinLimit() {
+    if (_isSyncingQuantityText) {
+      return;
+    }
+    final rawValue = _quantityController.text.trim();
+    if (rawValue.isEmpty) {
+      return;
+    }
+    final quantity = int.tryParse(rawValue);
+    if (quantity == null) {
+      _replaceQuantityText('');
+      return;
+    }
+    if (quantity > _maxQuantity) {
+      _replaceQuantityText('$_maxQuantity');
+    }
+  }
+
+  void _replaceQuantityText(String value) {
+    _isSyncingQuantityText = true;
+    _quantityController.value = TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+    );
+    _isSyncingQuantityText = false;
   }
 
   void _addRow() {
@@ -99,14 +129,14 @@ class _ProductionEndProductionDialogState
         return;
       }
       defects.add(
-        ProductionDefectItemInput(
-          phenomenon: phenomenon,
-          quantity: defectQty,
-        ),
+        ProductionDefectItemInput(phenomenon: phenomenon, quantity: defectQty),
       );
     }
 
-    final defectTotal = defects.fold<int>(0, (sum, entry) => sum + entry.quantity);
+    final defectTotal = defects.fold<int>(
+      0,
+      (sum, entry) => sum + entry.quantity,
+    );
     if (qty + defectTotal > widget.order.maxProducibleQuantity) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -119,10 +149,7 @@ class _ProductionEndProductionDialogState
     }
 
     Navigator.of(context).pop(
-      ProductionEndProductionDialogResult(
-        quantity: qty,
-        defectItems: defects,
-      ),
+      ProductionEndProductionDialogResult(quantity: qty, defectItems: defects),
     );
   }
 
@@ -154,6 +181,7 @@ class _ProductionEndProductionDialogState
                   TextField(
                     controller: _quantityController,
                     keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     decoration: const InputDecoration(
                       labelText: '有效流转数量',
                       border: OutlineInputBorder(),
@@ -164,9 +192,12 @@ class _ProductionEndProductionDialogState
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest.withAlpha(50),
+                      color: theme.colorScheme.surfaceContainerHighest
+                          .withAlpha(50),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: theme.colorScheme.outlineVariant),
+                      border: Border.all(
+                        color: theme.colorScheme.outlineVariant,
+                      ),
                     ),
                     child: Text(
                       '当前可生产数量：${widget.order.maxProducibleQuantity}。如存在不良，请在右侧补充异常明细。',
@@ -184,7 +215,9 @@ class _ProductionEndProductionDialogState
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest.withAlpha(50),
+                  color: theme.colorScheme.surfaceContainerHighest.withAlpha(
+                    50,
+                  ),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: theme.colorScheme.outlineVariant),
                 ),
@@ -266,10 +299,7 @@ class _ProductionEndProductionDialogState
           onPressed: () => Navigator.of(context).pop(null),
           child: const Text('取消'),
         ),
-        FilledButton(
-          onPressed: _submit,
-          child: const Text('提交'),
-        ),
+        FilledButton(onPressed: _submit, child: const Text('提交')),
       ],
     );
   }

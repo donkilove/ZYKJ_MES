@@ -114,6 +114,11 @@ class ProductionRecordItem(BaseModel):
     operator_user_id: int
     operator_username: str
     production_quantity: int
+    manual_repair_quantity: int = 0
+    reported_defect_quantity: int = 0
+    total_defect_quantity: int = 0
+    total_production_quantity: int = 0
+    defect_rate_percent: float = 0
     record_type: str
     created_at: datetime
 
@@ -223,6 +228,8 @@ class MyOrderItem(BaseModel):
     current_stage_name: str | None = None
     current_process_code: str
     current_process_name: str
+    current_process_first_article_check_content: str = ""
+    current_process_first_article_test_value: str = ""
     current_process_order: int
     process_status: str
     visible_quantity: int
@@ -382,6 +389,8 @@ class FirstArticleParticipantOptionItem(BaseModel):
     id: int
     username: str
     full_name: str | None = None
+    selectable: bool = True
+    blocked_reason: str | None = None
 
 
 class FirstArticleParticipantOptionListResult(BaseModel):
@@ -534,8 +543,16 @@ class ProductionDataTodayRealtimeSummary(BaseModel):
     total_quantity: int
 
 
+class ProductionDataTodayRealtimeOverview(BaseModel):
+    pending_count: int
+    in_progress_count: int
+    completed_count: int
+    finished_quantity: int
+
+
 class ProductionDataTodayRealtimeResult(BaseModel):
     stat_mode: str
+    overview: ProductionDataTodayRealtimeOverview
     summary: ProductionDataTodayRealtimeSummary
     table_rows: list[ProductionDataTodayRealtimeRow]
     chart_data: list[ProductionDataTodayRealtimeChartItem]

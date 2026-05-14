@@ -17,6 +17,9 @@ from app.core.production_constants import (
     ORDER_STATUS_PENDING,
     PROCESS_STATUS_COMPLETED,
     RECORD_TYPE_PRODUCTION,
+    SUB_ORDER_STATUS_DONE,
+    SUB_ORDER_STATUS_IN_PROGRESS,
+    SUB_ORDER_STATUS_PENDING,
     order_status_label,
 )
 from app.models.order_event_log import OrderEventLog
@@ -188,6 +191,7 @@ def _load_relevant_records(
             selectinload(ProductionRecord.order).selectinload(ProductionOrder.product),
             selectinload(ProductionRecord.order_process),
             selectinload(ProductionRecord.operator),
+            selectinload(ProductionRecord.sub_order),
         )
         .order_by(ProductionRecord.created_at.asc(), ProductionRecord.id.asc())
         .limit(1000)
@@ -253,6 +257,53 @@ def _format_datetime_text(value: datetime | None) -> str:
     return local.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _build_today_realtime_overview(
+    rows: list[ProductionRecord],
+    *,
+    stat_mode: str,
+) -> dict[str, int]:
+    overview = {
+        "pending_count": 0,
+        "in_progress_count": 0,
+        "completed_count": 0,
+        "finished_quantity": 0,
+    }
+    overview["finished_quantity"] = int(
+        sum(int(row.production_quantity or 0) for row in rows)
+    )
+
+    if stat_mode == STAT_MODE_MAIN_ORDER:
+        order_status_by_id: dict[int, str] = {}
+        for row in rows:
+            order = row.order
+            if order is None:
+                continue
+            order_status_by_id[order.id] = order.status
+        for status in order_status_by_id.values():
+            if status == ORDER_STATUS_PENDING:
+                overview["pending_count"] += 1
+            elif status == ORDER_STATUS_IN_PROGRESS:
+                overview["in_progress_count"] += 1
+            elif status == ORDER_STATUS_COMPLETED:
+                overview["completed_count"] += 1
+        return overview
+
+    sub_order_status_by_id: dict[int, str] = {}
+    for row in rows:
+        sub_order = row.sub_order
+        if sub_order is None:
+            continue
+        sub_order_status_by_id[sub_order.id] = sub_order.status
+    for status in sub_order_status_by_id.values():
+        if status == SUB_ORDER_STATUS_PENDING:
+            overview["pending_count"] += 1
+        elif status == SUB_ORDER_STATUS_IN_PROGRESS:
+            overview["in_progress_count"] += 1
+        elif status == SUB_ORDER_STATUS_DONE:
+            overview["completed_count"] += 1
+    return overview
+
+
 def get_today_realtime_data(
     db: Session,
     *,
@@ -266,6 +317,7 @@ def get_today_realtime_data(
     order_ids = {row.order_id for row in rows}
     last_process_order_map = _build_last_process_order_map(db, order_ids=order_ids)
 
+    matched_rows: list[ProductionRecord] = []
     product_bucket: dict[int, dict[str, Any]] = {}
     for row in rows:
         if not _record_matches_common_filters(
@@ -277,6 +329,7 @@ def get_today_realtime_data(
         order = row.order
         if order is None:
             continue
+        matched_rows.append(row)
         product = order.product
         product_name = product.name if product else ""
         bucket = product_bucket.get(order.product_id)
@@ -316,6 +369,10 @@ def get_today_realtime_data(
 
     return {
         "stat_mode": filters.stat_mode,
+        "overview": _build_today_realtime_overview(
+            matched_rows,
+            stat_mode=filters.stat_mode,
+        ),
         "summary": {
             "total_products": len(table_rows),
             "total_quantity": total_quantity,

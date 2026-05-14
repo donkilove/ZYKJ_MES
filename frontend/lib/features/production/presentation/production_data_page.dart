@@ -83,6 +83,15 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
     }
   }
 
+  ProductionTodayRealtimeOverview get _todayOverview =>
+      _todayResult?.overview ??
+      ProductionTodayRealtimeOverview(
+        pendingCount: 0,
+        inProgressCount: 0,
+        completedCount: 0,
+        finishedQuantity: 0,
+      );
+
   bool _isUnauthorized(Object error) {
     return error is ApiException && error.statusCode == 401;
   }
@@ -112,12 +121,16 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
   }
 
   Future<void> _loadInitialData() async {
-    await _reloadOverview();
+    if (widget.section != ProductionDataSection.todayRealtime) {
+      await _reloadOverview();
+    }
     await _reloadCurrentSection(clearMessage: false);
   }
 
   Future<void> _reloadAll() async {
-    await _reloadOverview();
+    if (widget.section != ProductionDataSection.todayRealtime) {
+      await _reloadOverview();
+    }
     await _reloadCurrentSection(clearMessage: false);
   }
 
@@ -172,6 +185,7 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
   Future<void> _reloadToday({bool clearMessage = true}) async {
     setState(() {
       _loadingToday = true;
+      _todayResult = null;
     });
     try {
       final result = await _service.getTodayRealtimeData(
@@ -274,96 +288,64 @@ class _ProductionDataPageState extends State<ProductionDataPage> {
     }
   }
 
-  Widget _buildOverviewCards() {
+  Widget _buildOverviewCard({required String label, required String value}) {
     final theme = Theme.of(context);
+    return SizedBox(
+      width: 180,
+      child: Card(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: theme.textTheme.bodyMedium),
+              const SizedBox(height: 8),
+              Text(
+                value,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverviewCards() {
+    final isTodayRealtime =
+        widget.section == ProductionDataSection.todayRealtime;
+    final pendingLabel = isTodayRealtime && _todayStatMode == _statModeSub
+        ? '待执行'
+        : '待生产';
+    final inProgressLabel = isTodayRealtime && _todayStatMode == _statModeSub
+        ? '执行中'
+        : '生产中';
+    final completedLabel = isTodayRealtime && _todayStatMode == _statModeSub
+        ? '已完成'
+        : '生产完成';
+    final pendingValue = isTodayRealtime
+        ? '${_todayOverview.pendingCount}'
+        : '${_overview.pendingOrders}';
+    final inProgressValue = isTodayRealtime
+        ? '${_todayOverview.inProgressCount}'
+        : '${_overview.inProgressOrders}';
+    final completedValue = isTodayRealtime
+        ? '${_todayOverview.completedCount}'
+        : '${_overview.completedOrders}';
+    final finishedValue = isTodayRealtime
+        ? '${_todayOverview.finishedQuantity}'
+        : '${_overview.finishedQuantity}';
+
     return Wrap(
       spacing: 12,
       runSpacing: 12,
       children: [
-        SizedBox(
-          width: 180,
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('待生产', style: theme.textTheme.bodyMedium),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${_overview.pendingOrders}',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        SizedBox(
-          width: 180,
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('生产中', style: theme.textTheme.bodyMedium),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${_overview.inProgressOrders}',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        SizedBox(
-          width: 180,
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('生产完成', style: theme.textTheme.bodyMedium),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${_overview.completedOrders}',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        SizedBox(
-          width: 180,
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('完成总量', style: theme.textTheme.bodyMedium),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${_overview.finishedQuantity}',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+        _buildOverviewCard(label: pendingLabel, value: pendingValue),
+        _buildOverviewCard(label: inProgressLabel, value: inProgressValue),
+        _buildOverviewCard(label: completedLabel, value: completedValue),
+        _buildOverviewCard(label: '完成总量', value: finishedValue),
       ],
     );
   }
