@@ -62,6 +62,9 @@ class CraftProcessCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     stage_id: int = Field(gt=0)
     remark: str = Field(default="", max_length=500)
+    first_article_check_content: str = Field(default="", max_length=4000)
+    first_article_test_value: str = Field(default="", max_length=4000)
+    allow_multi_device_production: bool = False
 
 
 class CraftProcessUpdate(BaseModel):
@@ -70,6 +73,9 @@ class CraftProcessUpdate(BaseModel):
     stage_id: int = Field(gt=0)
     is_enabled: bool = True
     remark: str | None = Field(default=None, max_length=500)
+    first_article_check_content: str | None = Field(default=None, max_length=4000)
+    first_article_test_value: str | None = Field(default=None, max_length=4000)
+    allow_multi_device_production: bool | None = None
 
 
 class CraftProcessItem(BaseModel):
@@ -81,6 +87,9 @@ class CraftProcessItem(BaseModel):
     stage_name: str | None = None
     is_enabled: bool
     remark: str = ""
+    first_article_check_content: str = ""
+    first_article_test_value: str = ""
+    allow_multi_device_production: bool = False
     created_at: datetime
     updated_at: datetime
 

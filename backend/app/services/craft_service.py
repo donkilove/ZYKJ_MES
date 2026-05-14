@@ -501,6 +501,10 @@ def _ensure_process_name_unique_in_stage(
         raise ValueError("Process name already exists in this stage")
 
 
+def _normalize_process_first_article_preset(value: str | None) -> str:
+    return value if value is not None else ""
+
+
 def create_process(
     db: Session,
     *,
@@ -508,6 +512,9 @@ def create_process(
     name: str,
     stage_id: int,
     remark: str = "",
+    first_article_check_content: str = "",
+    first_article_test_value: str = "",
+    allow_multi_device_production: bool = False,
 ) -> Process:
     stage = get_stage_for_process_write(db, stage_id=stage_id, require_enabled=True)
     normalized_code = validate_process_code_matches_stage(code=code, stage=stage)
@@ -521,6 +528,13 @@ def create_process(
         stage_id=stage.id,
         is_enabled=True,
         remark=_normalize_remark(remark),
+        first_article_check_content=_normalize_process_first_article_preset(
+            first_article_check_content
+        ),
+        first_article_test_value=_normalize_process_first_article_preset(
+            first_article_test_value
+        ),
+        allow_multi_device_production=bool(allow_multi_device_production),
     )
     db.add(row)
     db.commit()
@@ -537,6 +551,9 @@ def update_process(
     is_enabled: bool,
     code: str | None = None,
     remark: str | None = None,
+    first_article_check_content: str | None = None,
+    first_article_test_value: str | None = None,
+    allow_multi_device_production: bool | None = None,
 ) -> Process:
     stage = get_stage_for_process_write(db, stage_id=stage_id)
     candidate_code = code if code is not None else row.code
@@ -556,6 +573,16 @@ def update_process(
     row.is_enabled = is_enabled
     if remark is not None:
         row.remark = _normalize_remark(remark)
+    if first_article_check_content is not None:
+        row.first_article_check_content = _normalize_process_first_article_preset(
+            first_article_check_content
+        )
+    if first_article_test_value is not None:
+        row.first_article_test_value = _normalize_process_first_article_preset(
+            first_article_test_value
+        )
+    if allow_multi_device_production is not None:
+        row.allow_multi_device_production = bool(allow_multi_device_production)
     db.commit()
     db.refresh(row)
     return row

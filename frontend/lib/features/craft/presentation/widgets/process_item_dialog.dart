@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'package:mes_client/core/network/api_error_message.dart';
 import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 
@@ -24,6 +25,9 @@ class ProcessItemDialog extends StatefulWidget {
     required String name,
     required int stageId,
     required String remark,
+    required String firstArticleCheckContent,
+    required String firstArticleTestValue,
+    required bool allowMultiDeviceProduction,
     required bool isEnabled,
   })
   onSubmit;
@@ -36,7 +40,10 @@ class _ProcessItemDialogState extends State<ProcessItemDialog> {
   late final TextEditingController _codeSuffixController;
   late final TextEditingController _nameController;
   late final TextEditingController _remarkController;
+  late final TextEditingController _firstArticleCheckContentController;
+  late final TextEditingController _firstArticleTestValueController;
   late int _stageId;
+  late bool _allowMultiDeviceProduction;
   late bool _isEnabled;
   bool _submitting = false;
   bool _legacyCodeInvalid = false;
@@ -55,6 +62,14 @@ class _ProcessItemDialogState extends State<ProcessItemDialog> {
     _remarkController = TextEditingController(
       text: widget.existing?.remark ?? '',
     );
+    _firstArticleCheckContentController = TextEditingController(
+      text: widget.existing?.firstArticleCheckContent ?? '',
+    );
+    _firstArticleTestValueController = TextEditingController(
+      text: widget.existing?.firstArticleTestValue ?? '',
+    );
+    _allowMultiDeviceProduction =
+        widget.existing?.allowMultiDeviceProduction ?? false;
     _isEnabled = widget.existing?.isEnabled ?? true;
     if (widget.existing == null && initialSerial.isEmpty) {
       unawaited(_prefillNextCodeSuffix(stageId: _stageId));
@@ -86,6 +101,8 @@ class _ProcessItemDialogState extends State<ProcessItemDialog> {
     _codeSuffixController.dispose();
     _nameController.dispose();
     _remarkController.dispose();
+    _firstArticleCheckContentController.dispose();
+    _firstArticleTestValueController.dispose();
     super.dispose();
   }
 
@@ -103,6 +120,9 @@ class _ProcessItemDialogState extends State<ProcessItemDialog> {
         name: _nameController.text.trim(),
         stageId: _stageId,
         remark: _remarkController.text.trim(),
+        firstArticleCheckContent: _firstArticleCheckContentController.text,
+        firstArticleTestValue: _firstArticleTestValueController.text,
+        allowMultiDeviceProduction: _allowMultiDeviceProduction,
         isEnabled: _isEnabled,
       );
       if (mounted) {
@@ -124,9 +144,9 @@ class _ProcessItemDialogState extends State<ProcessItemDialog> {
   }
 
   Future<String> _resolveSubmitErrorMessage(Object error) async {
-    final text = error.toString().trim();
+    final text = normalizeApiErrorMessage(error.toString().trim());
     if (widget.existing == null &&
-        text.contains('Process code already exists')) {
+        (text.contains('工序编码已存在') || text.contains('当前工序编码已存在'))) {
       final nextSuffix = await _loadNextCodeSuffix(stageId: _stageId);
       if (nextSuffix != null) {
         _applyCodeSuffix(nextSuffix);
@@ -290,6 +310,36 @@ class _ProcessItemDialogState extends State<ProcessItemDialog> {
                 ),
                 maxLength: 500,
                 maxLines: 3,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _firstArticleCheckContentController,
+                decoration: const InputDecoration(
+                  labelText: '首件内容',
+                  border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
+                ),
+                maxLength: 4000,
+                maxLines: 5,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _firstArticleTestValueController,
+                decoration: const InputDecoration(
+                  labelText: '首件检验值',
+                  border: OutlineInputBorder(),
+                  alignLabelWithHint: true,
+                ),
+                maxLength: 4000,
+                maxLines: 5,
+              ),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _allowMultiDeviceProduction,
+                onChanged: (value) =>
+                    setState(() => _allowMultiDeviceProduction = value),
+                title: const Text('允许多设备同时生产'),
               ),
               if (widget.existing != null) ...[
                 const SizedBox(height: 12),

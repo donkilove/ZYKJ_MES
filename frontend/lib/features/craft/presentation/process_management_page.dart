@@ -320,6 +320,9 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
               required String name,
               required int stageId,
               required String remark,
+              required String firstArticleCheckContent,
+              required String firstArticleTestValue,
+              required bool allowMultiDeviceProduction,
               required bool isEnabled,
             }) async {
               final stage = _stageById(stageId);
@@ -330,6 +333,9 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                   name: name,
                   stageId: stageId,
                   remark: remark,
+                  firstArticleCheckContent: firstArticleCheckContent,
+                  firstArticleTestValue: firstArticleTestValue,
+                  allowMultiDeviceProduction: allowMultiDeviceProduction,
                 );
               } else {
                 await _service.updateProcess(
@@ -339,6 +345,9 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
                   stageId: stageId,
                   isEnabled: isEnabled,
                   remark: remark,
+                  firstArticleCheckContent: firstArticleCheckContent,
+                  firstArticleTestValue: firstArticleTestValue,
+                  allowMultiDeviceProduction: allowMultiDeviceProduction,
                 );
               }
             },
@@ -491,6 +500,9 @@ class _ProcessManagementPageState extends State<ProcessManagementPage> {
             stageId: item.stageId ?? 0,
             isEnabled: nextEnabled,
             remark: item.remark,
+            firstArticleCheckContent: item.firstArticleCheckContent,
+            firstArticleTestValue: item.firstArticleTestValue,
+            allowMultiDeviceProduction: item.allowMultiDeviceProduction,
           );
           await _loadData();
         } catch (error) {

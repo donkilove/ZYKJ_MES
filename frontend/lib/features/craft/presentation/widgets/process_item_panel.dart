@@ -72,6 +72,7 @@ class ProcessItemPanel extends StatelessWidget {
                 child: DataTable(
                   showCheckboxColumn: false,
                   columns: [
+                    UnifiedListTableHeaderStyle.column(context, '多设备'),
                     UnifiedListTableHeaderStyle.column(context, '所属工段'),
                     UnifiedListTableHeaderStyle.column(context, '工序编码'),
                     UnifiedListTableHeaderStyle.column(context, '工序名称'),
@@ -95,6 +96,9 @@ class ProcessItemPanel extends StatelessWidget {
                             )
                           : null,
                       cells: [
+                        DataCell(
+                          Text(item.allowMultiDeviceProduction ? '允许' : '不允许'),
+                        ),
                         DataCell(Text(item.stageName ?? '-')),
                         DataCell(Text(item.code)),
                         DataCell(Text(item.name)),

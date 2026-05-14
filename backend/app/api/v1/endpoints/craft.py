@@ -172,6 +172,9 @@ def _to_process_item(row: Process) -> CraftProcessItem:
         stage_name=stage.name if stage else None,
         is_enabled=row.is_enabled,
         remark=row.remark,
+        first_article_check_content=row.first_article_check_content,
+        first_article_test_value=row.first_article_test_value,
+        allow_multi_device_production=row.allow_multi_device_production,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -764,6 +767,9 @@ def create_process_api(
             name=payload.name,
             stage_id=payload.stage_id,
             remark=payload.remark,
+            first_article_check_content=payload.first_article_check_content,
+            first_article_test_value=payload.first_article_test_value,
+            allow_multi_device_production=payload.allow_multi_device_production,
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))
@@ -823,6 +829,9 @@ def update_process_api(
             is_enabled=payload.is_enabled,
             code=payload.code,
             remark=payload.remark,
+            first_article_check_content=payload.first_article_check_content,
+            first_article_test_value=payload.first_article_test_value,
+            allow_multi_device_production=payload.allow_multi_device_production,
         )
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error))

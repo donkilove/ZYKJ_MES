@@ -96,6 +96,9 @@ class CraftProcessItem {
     required this.stageName,
     required this.isEnabled,
     this.remark = '',
+    this.firstArticleCheckContent = '',
+    this.firstArticleTestValue = '',
+    this.allowMultiDeviceProduction = false,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -108,6 +111,9 @@ class CraftProcessItem {
   final String? stageName;
   final bool isEnabled;
   final String remark;
+  final String firstArticleCheckContent;
+  final String firstArticleTestValue;
+  final bool allowMultiDeviceProduction;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -121,6 +127,12 @@ class CraftProcessItem {
       stageName: json['stage_name'] as String?,
       isEnabled: (json['is_enabled'] as bool?) ?? true,
       remark: (json['remark'] as String?) ?? '',
+      firstArticleCheckContent:
+          (json['first_article_check_content'] as String?) ?? '',
+      firstArticleTestValue:
+          (json['first_article_test_value'] as String?) ?? '',
+      allowMultiDeviceProduction:
+          (json['allow_multi_device_production'] as bool?) ?? false,
       createdAt: _parseDateTimeOrDefault(json['created_at']),
       updatedAt: _parseDateTimeOrDefault(json['updated_at']),
     );

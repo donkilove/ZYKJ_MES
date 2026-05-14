@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, ForeignKey, String, text
+from sqlalchemy import Boolean, ForeignKey, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.associations import user_processes
@@ -24,6 +24,24 @@ class Process(Base, TimestampMixin):
         index=True,
     )
     remark: Mapped[str] = mapped_column(String(500), nullable=False, default="", server_default=text("''"))
+    first_article_check_content: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="",
+        server_default=text("''"),
+    )
+    first_article_test_value: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+        default="",
+        server_default=text("''"),
+    )
+    allow_multi_device_production: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
 
     users = relationship("User", secondary=user_processes, back_populates="processes")
     stage = relationship("ProcessStage", back_populates="processes")

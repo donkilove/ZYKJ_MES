@@ -4,6 +4,7 @@ import 'package:mes_client/core/network/http_client.dart' as http;
 
 import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
+import 'package:mes_client/core/network/api_error_message.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 
 class CraftService {
@@ -268,6 +269,9 @@ class CraftService {
     required String name,
     required int stageId,
     String remark = '',
+    String firstArticleCheckContent = '',
+    String firstArticleTestValue = '',
+    bool allowMultiDeviceProduction = false,
   }) async {
     final uri = Uri.parse('$_basePath/processes');
     final response = await http.post(
@@ -278,6 +282,9 @@ class CraftService {
         'name': name,
         'stage_id': stageId,
         'remark': remark,
+        'first_article_check_content': firstArticleCheckContent,
+        'first_article_test_value': firstArticleTestValue,
+        'allow_multi_device_production': allowMultiDeviceProduction,
       }),
     );
     final body = _decodeBody(response);
@@ -299,6 +306,9 @@ class CraftService {
     required int stageId,
     required bool isEnabled,
     String? remark,
+    String? firstArticleCheckContent,
+    String? firstArticleTestValue,
+    bool? allowMultiDeviceProduction,
   }) async {
     final uri = Uri.parse('$_basePath/processes/$processId');
     final payload = <String, dynamic>{
@@ -309,6 +319,15 @@ class CraftService {
     };
     if (remark != null) {
       payload['remark'] = remark;
+    }
+    if (firstArticleCheckContent != null) {
+      payload['first_article_check_content'] = firstArticleCheckContent;
+    }
+    if (firstArticleTestValue != null) {
+      payload['first_article_test_value'] = firstArticleTestValue;
+    }
+    if (allowMultiDeviceProduction != null) {
+      payload['allow_multi_device_production'] = allowMultiDeviceProduction;
     }
     final response = await http.put(
       uri,
@@ -1210,20 +1229,6 @@ class CraftService {
   }
 
   String _extractErrorMessage(Map<String, dynamic> body, int statusCode) {
-    final detail = body['detail'];
-    if (detail is String && detail.isNotEmpty) {
-      return detail;
-    }
-    if (detail is Map<String, dynamic>) {
-      final message = detail['message'];
-      if (message is String && message.isNotEmpty) {
-        return message;
-      }
-    }
-    final message = body['message'];
-    if (message is String && message.isNotEmpty) {
-      return message;
-    }
-    return '请求失败，状态码 $statusCode';
+    return extractApiErrorMessage(body, statusCode);
   }
 }
