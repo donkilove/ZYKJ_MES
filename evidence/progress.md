@@ -251,3 +251,67 @@
   - `50` 分册改为轻量模板，历史“指挥官模板”仅保留追溯用途。
   - Graphify 项目记忆改为“有长期复用价值时写入”，不再要求每次任务都回写。
 - 本轮仅调整规则与文档，不修改业务代码，也不执行 Graphify 文档语义重抽取。
+
+## 2026-05-18 订单查询用户级状态与代班单次授权收口
+
+- 用户要求订单查询页“状态”按当前视角操作者口径展示，并在用户当前无可生产数量时隐藏该订单对该用户的可见性。
+- 已收口后端 `my-orders` 运行态：新增 `sub_order_status`，按子工单状态 + 当前用户可生产数量决定 `待生产 / 生产中 / 隐藏`，导出接口同步支持 `sub_order_status` 过滤。
+- 已改造代班运行态：代班视角改为帮助者本人子工单；首件不再立即消费授权，手工送修/结束生产可复用同一次授权，成功结束生产后再消耗授权。
+- 已补手工送修链路：前后端请求统一补 `production_quantity`、`effective_operator_user_id`、`assist_authorization_id`，查询页弹窗重新要求填写“本次生产数量”。
+- 已完成验证：
+  - `pytest tests/test_production_module_integration.py -k "my_orders_runtime_sub_order_status_controls_visibility or my_orders_assist_view_uses_helper_runtime_and_manual_repair_stays_authorized or end_production_consumes_assist_authorization_and_writes_event"` 通过。
+  - `flutter test` 定向通过：`production_models_test.dart` 的 `my-order/stats/options models parse and payload serializes`，`production_service_test.dart` 的 `ProductionService covers production api including assist authorization flows`，以及 `production_order_query_page_test.dart` 中与筛选、导出、手工送修、代班送修相关的定向用例。
+  - `flutter test -d windows integration_test/login_flow_test.dart --plain-name "登录后进入生产总页并切换关键页签完成详情链路"` 失败，现象为未找到文本 `生产订单查询`；该失败看起来与本次状态/代班改动不直接相关，已保留为当前环境下的剩余验证阻塞。
+
+## 2026-05-19 生产中送修与周期聚合收口
+
+- 用户要求生产中手工送修不再填写本次生产数量，仍即时生成独立维修单；报工后按同订单工序、同操作员、同首件周期在展示层聚合，原维修单保留独立生命周期。
+- 已收口后端维修聚合读模型：周期起点改为同订单工序/操作员的最近已通过且未取消首件，下一次首件作为周期边界；生产记录只作为“已报工”和周期生产数量来源，自动报工维修单纳入同一周期。
+- 已同步维修列表、详情、现象汇总、导出和质量统计口径：聚合态只显示聚合行，详情展示子维修单、现象汇总、原因汇总；质量 overview、产品统计和趋势统计按聚合维修行计数，避免原单与聚合结果重复。
+- 已收口前端手工送修：请求体不再发送 `production_quantity`，弹窗不再出现“本次生产数量”文案；代班手工送修仍透传 `effective_operator_user_id` 与 `assist_authorization_id`。
+- 已重新生成 `backend/openapi.generated.json`，`RepairOrderCreateRequest` 不再包含 `production_quantity`。
+- 已完成验证：
+  - `python -m py_compile backend/app/schemas/production.py backend/app/services/production_repair_service.py backend/app/services/quality_service.py backend/app/api/v1/endpoints/production.py backend/app/api/v1/endpoints/quality.py backend/tests/test_production_module_integration.py` 通过。
+  - `python -m pytest tests/test_production_module_integration.py -k "manual_repair_order_api_accepts_missing_production_quantity_and_defaults_to_zero or repair_orders_aggregate_after_cycle_report_and_all_children_closed or my_orders_assist_view_uses_helper_runtime_and_manual_repair_stays_authorized" -q` 通过，3 passed。
+- 未完成验证与阻塞：
+  - 当前环境没有 `flutter` / `dart` 命令，无法运行前端真实编译和 widget 测试；已用静态检索确认手工送修请求体旧字段和弹窗旧文案已清理。
+  - `python -m pytest tests/test_quality_service_stats_unit.py -q` 仍有既有失败：`_resolve_query_verification_code` 缺失；与本次维修聚合改动无直接关系。
+  - `tests/test_quality_module_integration.py` 质量维修相关定向用例在当前环境超时并残留 Python 进程，已清理残留；本次用新增生产集成用例覆盖质量 overview、产品统计与趋势统计的聚合计数。
+
+## 2026-05-19 结束生产总数与流转数分离
+
+- 用户补充明确：结束生产时填写的是“本次生产数量”，不是流转至下一工序数量；流转数应为 `本次生产数量 - 当前首件周期手工送修数量 - 本次报工送修数量`。
+- 已收口后端 `end_production` 数量口径：`ProductionRecord.production_quantity` 与自动维修单 `production_quantity` 保存本次生产总数；工序完成量、子工单完成量和下工序可见量只累加 `transfer_quantity`；事件 payload 新增 `transfer_quantity` 并保留 `manual_repair_quantity_before_end`、`defect_quantity`、`total_consumed_quantity`。
+- 已新增 `current_cycle_manual_repair_quantity` 到 `MyOrderItem`，`my-orders` 与上下文接口按同订单工序、同操作员、最近已通过且未取消首件周期统计手工送修量；即使当前可生产量为 0，只要本周期存在手工送修量，也允许进入结束生产弹窗完成零流转报工。
+- 已修正维修周期聚合生产量：聚合行 `production_quantity` 取周期内结束生产记录的生产总数合计，不再额外叠加维修数量。
+- 已同步 Flutter 模型与结束生产弹窗：文案改为“本次生产数量”，默认上限为 `max_producible_quantity + current_cycle_manual_repair_quantity`，弹窗展示预计流转数并按手工送修量与本次报工送修量校验。
+- 已重新生成 `backend/openapi.generated.json`，确认 `MyOrderItem` 暴露 `current_cycle_manual_repair_quantity`，`RepairOrderCreateRequest` 仍不包含 `production_quantity`。
+- Graphify：本轮读取 `graphify-out/GRAPH_REPORT.md` 作为结构导航；最终实现以源码、测试和 OpenAPI 为准，未刷新图谱。
+- 已完成验证：
+  - `python -m py_compile backend/app/services/production_execution_service.py backend/app/services/production_order_service.py backend/app/services/production_repair_service.py backend/app/schemas/production.py backend/tests/test_production_module_integration.py` 通过。
+  - `python -m pytest tests/test_production_module_integration.py -k "end_production_uses_transfer_quantity_after_report_defects or end_production_subtracts_current_cycle_manual_repairs_from_transfer or end_production_rejects_negative_transfer_quantity or end_production_allows_zero_transfer_without_releasing_next_process or repair_orders_aggregate_after_cycle_report_and_all_children_closed or manual_repair_order_api_accepts_missing_production_quantity" -q` 在 `backend/` 下通过，6 passed。
+  - 静态检索确认前端旧文案 `有效流转数量` 仅保留为 `findsNothing` 断言，新增模型字段和弹窗预计流转展示均已同步。
+- 失败重试与降级：
+  - 首次从仓库根目录执行 pytest 失败，原因是 `backend/tests/conftest.py` 无法导入 `app`；切换到 `backend/` 目录后同一组测试通过。
+  - 当前环境 `flutter` 与 `dart` 命令不可用，无法执行 Flutter 真实编译/widget 测试；已用静态检索和测试代码同步作为替代检查。
+
+## 2026-05-19 维修完成回流与报废补回口径收敛
+
+- 用户要求维修完成统一采用：`回流总量 = 送修数量 - 报废且未补充数量`；勾选“报废已补充”后不再隐式补首工序，补回数量必须显式写入 `return_allocations`。
+- 已收口后端 `complete_repair_order`：
+  - `repaired_quantity` 改为“有效回流总量”，即 `repair_quantity - unreplenished_scrap_quantity`。
+  - 回流校验错误信息改为中文公式提示：`送修数量 - 未补充报废数量 = 有效回流总量`。
+  - 删除 `scrap_replenished=True` 时自动给首工序 `visible_quantity += scrap_quantity` 的隐式补量逻辑。
+  - 来源工序只扣减“未补充报废量 + 回到前工序的回流量”；回到来源工序本身的数量不再额外隐式并入。
+- 已收口当前周期手工送修统计：`production_order_service.get_current_cycle_manual_repair_quantity` 仅统计 `status=in_repair` 的手工维修单，已完成维修单不再继续占用周期送修量。
+- 已同步前端维修完成弹窗：
+  - 文案改为“回流分配（合计需等于送修数量-未补充报废数量）”。
+  - 未勾选“报废已补充”时，报废量会从目标回流总数中扣除；勾选后，要求回流总数回到整笔送修数量。
+  - 错误提示直接展示公式和目标数量。
+- 已同步文档：`docs/生产订单流转/01-业务流转总览.md` 去掉“报废已补充自动补首工序”的旧口径，改为“补回必须在 `return_allocations` 显式分配”。
+- 已完成验证：
+  - `cd backend; $env:PYTHONPATH='.'; python -m py_compile app/services/production_repair_service.py app/services/production_order_service.py tests/test_production_module_integration.py tests/test_quality_module_integration.py` 通过。
+  - `cd backend; $env:PYTHONPATH='.'; python -m pytest tests/test_production_module_integration.py -k "current_cycle_manual_repair_quantity_ignores_completed_repairs or complete_repair_order_accepts_multiple_return_allocations or complete_repair_order_rejects_scrap_replenished_without_scrap or complete_repair_order_rejects_unreplenished_scrap_return_mismatch or complete_repair_order_uses_only_explicit_return_allocations"` 通过，5 passed。
+- 未完成验证与限制：
+  - `tests/test_quality_module_integration.py` 定向 `repair` 用例在当前环境下连续超时，未拿到可靠结果；本轮仅保留语法校验与生产端定向集成通过作为补偿。
+  - `flutter` / `dart` 命令在当前会话不可用，无法执行 `frontend` 的真实 widget / service 测试；已用静态检查和新增测试代码同步作为替代。
