@@ -92,15 +92,14 @@ class _ProductionApplyAssistDialogState
           },
         );
 
-    final helperRoleOptions = _roleOptions(widget.assistUsers);
-    _helperRoleCode = _defaultRoleCode(helperRoleOptions);
-    _helperStageId = _helperRoleCode == _operatorRoleCode
-        ? _resolveInitialStageId(
-            users: widget.assistUsers,
-            preferredStageId: widget.order.currentStageId,
-            roleCode: _helperRoleCode,
-          )
-        : null;
+    final initialSelection = _resolveSelection(
+      preferredRoleCode: _defaultRoleCode(_roleOptions(widget.assistUsers)),
+      preferredStageId: widget.order.currentStageId,
+      preferredUserId: null,
+    );
+    _helperRoleCode = initialSelection.roleCode;
+    _helperStageId = initialSelection.stageId;
+    _helperUserId = initialSelection.userId;
   }
 
   @override
@@ -191,6 +190,9 @@ class _ProductionApplyAssistDialogState
       if (!user.roleCodes.contains(_operatorRoleCode) || user.stageId == null) {
         continue;
       }
+      if (_isCurrentOrderStage(user.stageId)) {
+        continue;
+      }
       optionsById.putIfAbsent(
         user.stageId!,
         () => _AssistStageOption(
@@ -232,6 +234,9 @@ class _ProductionApplyAssistDialogState
         return false;
       }
       if (_helperRoleCode == _operatorRoleCode) {
+        if (_isCurrentOrderStage(user.stageId)) {
+          return false;
+        }
         return _helperStageId != null && user.stageId == _helperStageId;
       }
       return true;
@@ -247,25 +252,121 @@ class _ProductionApplyAssistDialogState
     return null;
   }
 
+  bool _isCurrentOrderStage(int? stageId) {
+    final currentStageId = widget.order.currentStageId;
+    return stageId != null &&
+        currentStageId != null &&
+        stageId == currentStageId;
+  }
+
+  _AssistSelection _resolveSelection({
+    String? preferredRoleCode,
+    int? preferredStageId,
+    int? preferredUserId,
+  }) {
+    final roleOptions = _roleOptions(widget.assistUsers);
+    final orderedRoles = <String>[
+      if (preferredRoleCode != null && roleOptions.contains(preferredRoleCode))
+        preferredRoleCode,
+      ...roleOptions.where((code) => code != preferredRoleCode),
+    ];
+    if (orderedRoles.isEmpty) {
+      return const _AssistSelection(roleCode: null, stageId: null, userId: null);
+    }
+    for (final roleCode in orderedRoles) {
+      if (roleCode == _operatorRoleCode) {
+        final stageOptions = _stageOptionsForRole(
+          users: widget.assistUsers,
+          roleCode: roleCode,
+        );
+        if (stageOptions.isEmpty) {
+          continue;
+        }
+        final resolvedStageId =
+            preferredStageId != null &&
+                stageOptions.any((item) => item.id == preferredStageId)
+            ? preferredStageId
+            : stageOptions.first.id;
+        final users = _helperUsersFor(roleCode: roleCode, stageId: resolvedStageId);
+        if (users.isEmpty) {
+          continue;
+        }
+        final resolvedUserId =
+            preferredUserId != null && users.any((item) => item.id == preferredUserId)
+            ? preferredUserId
+            : null;
+        return _AssistSelection(
+          roleCode: roleCode,
+          stageId: resolvedStageId,
+          userId: resolvedUserId,
+        );
+      }
+      final users = _helperUsersFor(roleCode: roleCode, stageId: null);
+      if (users.isEmpty) {
+        continue;
+      }
+      final resolvedUserId =
+          preferredUserId != null && users.any((item) => item.id == preferredUserId)
+          ? preferredUserId
+          : null;
+      return _AssistSelection(
+        roleCode: roleCode,
+        stageId: null,
+        userId: resolvedUserId,
+      );
+    }
+    return _AssistSelection(
+      roleCode: orderedRoles.first,
+      stageId: orderedRoles.first == _operatorRoleCode
+          ? _resolveInitialStageId(
+              users: widget.assistUsers,
+              preferredStageId: preferredStageId,
+              roleCode: orderedRoles.first,
+            )
+          : null,
+      userId: null,
+    );
+  }
+
+  List<AssistUserOptionItem> _helperUsersFor({
+    required String roleCode,
+    required int? stageId,
+  }) {
+    return widget.assistUsers.where((user) {
+      if (_targetOperatorUserId != null && user.id == _targetOperatorUserId) {
+        return false;
+      }
+      if (!user.roleCodes.contains(roleCode)) {
+        return false;
+      }
+      if (roleCode == _operatorRoleCode) {
+        if (_isCurrentOrderStage(user.stageId)) {
+          return false;
+        }
+        return stageId != null && user.stageId == stageId;
+      }
+      return true;
+    }).toList()..sort((a, b) => a.displayName.compareTo(b.displayName));
+  }
+
   void _onHelperRoleChanged(String? roleCode) {
-    final stageId = roleCode == _operatorRoleCode
-        ? _resolveInitialStageId(
-            users: widget.assistUsers,
-            preferredStageId: widget.order.currentStageId,
-            roleCode: roleCode,
-          )
-        : null;
+    final selection = _resolveSelection(
+      preferredRoleCode: roleCode,
+      preferredStageId: _helperStageId ?? widget.order.currentStageId,
+      preferredUserId: _helperUserId,
+    );
     setState(() {
-      _helperRoleCode = roleCode;
-      _helperStageId = stageId;
-      _helperUserId = _resolveInitialHelperUserId(_helperUserId);
+      _helperRoleCode = selection.roleCode;
+      _helperStageId = selection.stageId;
+      _helperUserId = selection.userId;
     });
   }
 
   void _onHelperStageChanged(int? stageId) {
+    final preferredUserId = _helperUserId;
     setState(() {
       _helperStageId = stageId;
-      _helperUserId = _resolveInitialHelperUserId(_helperUserId);
+      _helperUserId = _resolveInitialHelperUserId(preferredUserId);
     });
   }
 
@@ -410,6 +511,11 @@ class _ProductionApplyAssistDialogState
       roleCode: _helperRoleCode,
     );
     final helperUsers = _helperUsersForSelection();
+    final hasAvailableHelper = helperUsers.isNotEmpty;
+    final helperHintText = _helperRoleCode == _operatorRoleCode &&
+            helperStageOptions.isEmpty
+        ? '本工段操作员无需发起代班'
+        : '暂无可选代班人';
     final targetDisplay = _targetOperator?.displayName ?? '未识别目标操作员';
     final targetStageDisplay =
         (_targetOperator?.stageName ?? widget.order.currentStageName ?? '')
@@ -507,9 +613,10 @@ class _ProductionApplyAssistDialogState
                         DropdownButtonFormField<int>(
                           isExpanded: true,
                           initialValue: _helperUserId,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: '代班人',
-                            border: OutlineInputBorder(),
+                            border: const OutlineInputBorder(),
+                            helperText: hasAvailableHelper ? null : helperHintText,
                           ),
                           items: helperUsers
                               .map(
@@ -597,10 +704,25 @@ class _ProductionApplyAssistDialogState
           onPressed: () => Navigator.of(context).pop(null),
           child: const Text('取消'),
         ),
-        FilledButton(onPressed: _submit, child: const Text('发起代班')),
+        FilledButton(
+          onPressed: hasAvailableHelper ? _submit : null,
+          child: const Text('发起代班'),
+        ),
       ],
     );
   }
+}
+
+class _AssistSelection {
+  const _AssistSelection({
+    required this.roleCode,
+    required this.stageId,
+    required this.userId,
+  });
+
+  final String? roleCode;
+  final int? stageId;
+  final int? userId;
 }
 
 class _AssistStageOption {

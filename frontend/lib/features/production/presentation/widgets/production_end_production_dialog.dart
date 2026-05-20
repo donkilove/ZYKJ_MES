@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
+import 'package:mes_client/features/production/models/defect_catalog.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 
 class ProductionEndProductionDialogResult {
@@ -44,7 +45,27 @@ class _ProductionEndProductionDialogState
   final List<_DefectRowDraft> _defectRows = <_DefectRowDraft>[];
   bool _isSyncingQuantityText = false;
 
-  int get _maxQuantity => widget.order.maxProducibleQuantity.clamp(0, 999999);
+  int get _manualRepairQuantity =>
+      widget.order.currentCycleManualRepairQuantity.clamp(0, 999999).toInt();
+
+  int get _maxQuantity =>
+      (widget.order.maxProducibleQuantity + _manualRepairQuantity)
+          .clamp(0, 999999)
+          .toInt();
+
+  int get _inputQuantity =>
+      int.tryParse(_quantityController.text.trim()) ?? 0;
+
+  int get _defectTotal {
+    var total = 0;
+    for (final row in _defectRows) {
+      total += int.tryParse(row.quantityController.text.trim()) ?? 0;
+    }
+    return total;
+  }
+
+  int get _estimatedTransferQuantity =>
+      _inputQuantity - _manualRepairQuantity - _defectTotal;
 
   @override
   void initState() {
@@ -76,11 +97,13 @@ class _ProductionEndProductionDialogState
     final quantity = int.tryParse(rawValue);
     if (quantity == null) {
       _replaceQuantityText('');
+      setState(() {});
       return;
     }
     if (quantity > _maxQuantity) {
       _replaceQuantityText('$_maxQuantity');
     }
+    setState(() {});
   }
 
   void _replaceQuantityText(String value) {
@@ -94,7 +117,9 @@ class _ProductionEndProductionDialogState
 
   void _addRow() {
     setState(() {
-      _defectRows.add(_DefectRowDraft());
+      _defectRows.add(
+        _DefectRowDraft(phenomenon: productionDefectPhenomena.first),
+      );
     });
   }
 
@@ -116,9 +141,9 @@ class _ProductionEndProductionDialogState
 
     final defects = <ProductionDefectItemInput>[];
     for (final row in _defectRows) {
-      final phenomenon = row.phenomenonController.text.trim();
+      final phenomenon = row.phenomenon.trim();
       final qtyText = row.quantityController.text.trim();
-      if (phenomenon.isEmpty && qtyText.isEmpty) {
+      if (qtyText.isEmpty) {
         continue;
       }
       final defectQty = int.tryParse(qtyText);
@@ -137,11 +162,23 @@ class _ProductionEndProductionDialogState
       0,
       (sum, entry) => sum + entry.quantity,
     );
-    if (qty + defectTotal > widget.order.maxProducibleQuantity) {
+    if (qty < _manualRepairQuantity + defectTotal) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '结束生产数量与异常数量合计不能超过当前可生产数量 ${widget.order.maxProducibleQuantity}',
+            '本次生产数量不能小于已手工送修 ${_manualRepairQuantity} 件与本次报工送修 $defectTotal 件之和',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final consumedQuantity = qty - _manualRepairQuantity;
+    if (consumedQuantity > widget.order.maxProducibleQuantity) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '本次生产数量扣除已手工送修后不能超过当前可生产数量 ${widget.order.maxProducibleQuantity}',
           ),
         ),
       );
@@ -156,6 +193,10 @@ class _ProductionEndProductionDialogState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final estimatedTransferQuantity = _estimatedTransferQuantity;
+    final transferText = estimatedTransferQuantity < 0
+        ? '预计流转数：-（本次生产数量不足以覆盖已送修和本次异常）'
+        : '预计流转至下一工序：$estimatedTransferQuantity 件';
     return MesDialog(
       title: const Text('结束生产'),
       width: 760,
@@ -183,7 +224,7 @@ class _ProductionEndProductionDialogState
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     decoration: const InputDecoration(
-                      labelText: '有效流转数量',
+                      labelText: '本次生产数量',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -200,7 +241,9 @@ class _ProductionEndProductionDialogState
                       ),
                     ),
                     child: Text(
-                      '当前可生产数量：${widget.order.maxProducibleQuantity}。如存在不良，请在右侧补充异常明细。',
+                      '当前可生产数量：${widget.order.maxProducibleQuantity}；'
+                      '生产中已手工送修：$_manualRepairQuantity；'
+                      '本次最多可填生产数量：$_maxQuantity。$transferText。',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -257,13 +300,33 @@ class _ProductionEndProductionDialogState
                           children: [
                             Expanded(
                               flex: 3,
-                              child: TextField(
-                                controller: row.phenomenonController,
+                              child: DropdownButtonFormField<String>(
+                                key: ValueKey(
+                                  'production-end-defect-phenomenon-$index',
+                                ),
+                                initialValue: row.phenomenon,
+                                isExpanded: true,
                                 decoration: const InputDecoration(
                                   labelText: '现象',
                                   border: OutlineInputBorder(),
                                   isDense: true,
                                 ),
+                                items: productionDefectPhenomena
+                                    .map(
+                                      (value) => DropdownMenuItem<String>(
+                                        value: value,
+                                        child: Text(value),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (value) {
+                                  if (value == null) {
+                                    return;
+                                  }
+                                  setState(() {
+                                    row.phenomenon = value;
+                                  });
+                                },
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -272,6 +335,10 @@ class _ProductionEndProductionDialogState
                               child: TextField(
                                 controller: row.quantityController,
                                 keyboardType: TextInputType.number,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                ],
+                                onChanged: (_) => setState(() {}),
                                 decoration: const InputDecoration(
                                   labelText: '数量',
                                   border: OutlineInputBorder(),
@@ -307,16 +374,15 @@ class _ProductionEndProductionDialogState
 
 class _DefectRowDraft {
   _DefectRowDraft({String? phenomenon, int? quantity})
-    : phenomenonController = TextEditingController(text: phenomenon ?? ''),
+    : phenomenon = phenomenon ?? productionDefectPhenomena.first,
       quantityController = TextEditingController(
         text: quantity == null ? '' : '$quantity',
       );
 
-  final TextEditingController phenomenonController;
+  String phenomenon;
   final TextEditingController quantityController;
 
   void dispose() {
-    phenomenonController.dispose();
     quantityController.dispose();
   }
 }

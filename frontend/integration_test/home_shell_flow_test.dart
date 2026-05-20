@@ -1695,6 +1695,7 @@ class _IntegrationAuthzService extends AuthzService {
             'quality.first_articles.detail',
             'quality.scrap_statistics.export',
             'quality.repair_orders.complete',
+            'quality.repair_orders.return_to_production',
             'quality.repair_orders.export',
           ],
           effectiveActionPermissionCodes: [],

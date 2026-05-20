@@ -852,6 +852,31 @@ class QualityService implements RepairScrapService {
   }
 
   @override
+  Future<RepairOrderItem> returnRepairOrderToProduction({
+    required int repairOrderId,
+    required String password,
+  }) async {
+    final uri = Uri.parse(
+      '$_basePath/repair-orders/$repairOrderId/return-to-production',
+    );
+    final response = await http.post(
+      uri,
+      headers: _authHeaders,
+      body: jsonEncode({'password': password}),
+    );
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    return RepairOrderItem.fromJson(
+      body['data'] as Map<String, dynamic>? ?? const {},
+    );
+  }
+
+  @override
   Future<ProductionExportResult> exportRepairOrders({
     String? keyword,
     String status = 'all',

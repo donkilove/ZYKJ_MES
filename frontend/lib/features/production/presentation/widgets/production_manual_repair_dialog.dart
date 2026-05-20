@@ -2,15 +2,14 @@ import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
+import 'package:mes_client/features/production/models/defect_catalog.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 
 class ProductionManualRepairDialogResult {
   const ProductionManualRepairDialogResult({
-    required this.productionQuantity,
     required this.defectItems,
   });
 
-  final int productionQuantity;
   final List<ProductionDefectItemInput> defectItems;
 }
 
@@ -28,10 +27,7 @@ Future<ProductionManualRepairDialogResult?> showProductionManualRepairDialog({
 }
 
 class ProductionManualRepairDialog extends StatefulWidget {
-  const ProductionManualRepairDialog({
-    super.key,
-    required this.order,
-  });
+  const ProductionManualRepairDialog({super.key, required this.order});
 
   final MyOrderItem order;
 
@@ -42,22 +38,12 @@ class ProductionManualRepairDialog extends StatefulWidget {
 
 class _ProductionManualRepairDialogState
     extends State<ProductionManualRepairDialog> {
-  late final TextEditingController _productionQuantityController;
-  final List<_DefectRowDraft> _defectRows = <_DefectRowDraft>[_DefectRowDraft()];
-
-  @override
-  void initState() {
-    super.initState();
-    _productionQuantityController = TextEditingController(
-      text: widget.order.maxProducibleQuantity > 0
-          ? '${widget.order.maxProducibleQuantity.clamp(0, 999999)}'
-          : '',
-    );
-  }
+  final List<_DefectRowDraft> _defectRows = <_DefectRowDraft>[
+    _DefectRowDraft(phenomenon: productionDefectPhenomena.first),
+  ];
 
   @override
   void dispose() {
-    _productionQuantityController.dispose();
     for (final row in _defectRows) {
       row.dispose();
     }
@@ -66,7 +52,9 @@ class _ProductionManualRepairDialogState
 
   void _addRow() {
     setState(() {
-      _defectRows.add(_DefectRowDraft());
+      _defectRows.add(
+        _DefectRowDraft(phenomenon: productionDefectPhenomena.first),
+      );
     });
   }
 
@@ -81,37 +69,24 @@ class _ProductionManualRepairDialogState
   }
 
   void _submit() {
-    final productionQty = int.tryParse(_productionQuantityController.text.trim());
-    if (productionQty == null || productionQty <= 0) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('请输入本次生产数量')));
-      return;
-    }
     final defects = <ProductionDefectItemInput>[];
     for (final row in _defectRows) {
-      final phenomenon = row.phenomenonController.text.trim();
+      final phenomenon = row.phenomenon.trim();
       final defectQty = int.tryParse(row.quantityController.text.trim());
       if (phenomenon.isEmpty || defectQty == null || defectQty <= 0) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('请完整填写不良现象明细')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('请完整填写不良现象和数量')),
+        );
         return;
       }
       defects.add(
-        ProductionDefectItemInput(
-          phenomenon: phenomenon,
-          quantity: defectQty,
-        ),
+        ProductionDefectItemInput(phenomenon: phenomenon, quantity: defectQty),
       );
     }
-    final defectTotal = defects.fold<int>(0, (sum, entry) => sum + entry.quantity);
-    if (productionQty < defectTotal) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('本次生产数量不能小于送修数量合计')),
-      );
-      return;
-    }
+    final defectTotal = defects.fold<int>(
+      0,
+      (sum, entry) => sum + entry.quantity,
+    );
     if (defectTotal >= widget.order.maxProducibleQuantity) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -123,10 +98,7 @@ class _ProductionManualRepairDialogState
       return;
     }
     Navigator.of(context).pop(
-      ProductionManualRepairDialogResult(
-        productionQuantity: productionQty,
-        defectItems: defects,
-      ),
+      ProductionManualRepairDialogResult(defectItems: defects),
     );
   }
 
@@ -155,25 +127,19 @@ class _ProductionManualRepairDialogState
                     ),
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: _productionQuantityController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: '本次生产数量',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.surfaceContainerHighest.withAlpha(50),
+                      color: theme.colorScheme.surfaceContainerHighest
+                          .withAlpha(50),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: theme.colorScheme.outlineVariant),
+                      border: Border.all(
+                        color: theme.colorScheme.outlineVariant,
+                      ),
                     ),
                     child: Text(
-                      '本弹窗会直接生成维修单，请在右侧完整填写不良明细。',
+                      '生产中送修会立即生成维修单，请在右侧完整填写不良明细。',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -188,7 +154,9 @@ class _ProductionManualRepairDialogState
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest.withAlpha(50),
+                  color: theme.colorScheme.surfaceContainerHighest.withAlpha(
+                    50,
+                  ),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: theme.colorScheme.outlineVariant),
                 ),
@@ -221,13 +189,33 @@ class _ProductionManualRepairDialogState
                           children: [
                             Expanded(
                               flex: 3,
-                              child: TextField(
-                                controller: row.phenomenonController,
+                              child: DropdownButtonFormField<String>(
+                                key: ValueKey(
+                                  'production-manual-repair-phenomenon-$index',
+                                ),
+                                initialValue: row.phenomenon,
+                                isExpanded: true,
                                 decoration: const InputDecoration(
                                   labelText: '现象',
                                   border: OutlineInputBorder(),
                                   isDense: true,
                                 ),
+                                items: productionDefectPhenomena
+                                    .map(
+                                      (value) => DropdownMenuItem<String>(
+                                        value: value,
+                                        child: Text(value),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (value) {
+                                  if (value == null) {
+                                    return;
+                                  }
+                                  setState(() {
+                                    row.phenomenon = value;
+                                  });
+                                },
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -265,10 +253,7 @@ class _ProductionManualRepairDialogState
           onPressed: () => Navigator.of(context).pop(null),
           child: const Text('取消'),
         ),
-        FilledButton(
-          onPressed: _submit,
-          child: const Text('提交建单'),
-        ),
+        FilledButton(onPressed: _submit, child: const Text('提交建单')),
       ],
     );
   }
@@ -276,16 +261,15 @@ class _ProductionManualRepairDialogState
 
 class _DefectRowDraft {
   _DefectRowDraft({String? phenomenon, int? quantity})
-    : phenomenonController = TextEditingController(text: phenomenon ?? ''),
+    : phenomenon = phenomenon ?? productionDefectPhenomena.first,
       quantityController = TextEditingController(
         text: quantity == null ? '' : '$quantity',
       );
 
-  final TextEditingController phenomenonController;
+  String phenomenon;
   final TextEditingController quantityController;
 
   void dispose() {
-    phenomenonController.dispose();
     quantityController.dispose();
   }
 }

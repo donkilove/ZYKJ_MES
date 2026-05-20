@@ -9,6 +9,7 @@ import 'package:mes_client/features/production/presentation/production_repair_or
 import 'package:mes_client/features/production/presentation/widgets/production_repair_complete_dialog.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_repair_orders_page_header.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_repair_phenomena_summary_dialog.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_repair_return_to_production_dialog.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
@@ -20,7 +21,7 @@ import 'package:mes_client/core/widgets/crud_list_table_section.dart';
 import 'package:mes_client/core/widgets/unified_list_table_header_style.dart';
 import 'package:mes_client/features/quality/presentation/widgets/quality_workbench_summary_grid.dart';
 
-enum _RepairOrderAction { detail, summary, complete }
+enum _RepairOrderAction { detail, summary, complete, returnToProduction }
 
 class ProductionRepairOrdersPage extends StatefulWidget {
   const ProductionRepairOrdersPage({
@@ -28,6 +29,7 @@ class ProductionRepairOrdersPage extends StatefulWidget {
     required this.session,
     required this.onLogout,
     required this.canComplete,
+    required this.canReturnToProduction,
     required this.canExport,
     this.jumpPayloadJson,
     this.service,
@@ -36,6 +38,7 @@ class ProductionRepairOrdersPage extends StatefulWidget {
   final AppSession session;
   final VoidCallback onLogout;
   final bool canComplete;
+  final bool canReturnToProduction;
   final bool canExport;
   final String? jumpPayloadJson;
   final RepairScrapService? service;
@@ -122,9 +125,12 @@ class _ProductionRepairOrdersPageState
     });
   }
 
+  int _lookupRepairOrderId(RepairOrderItem item) =>
+      item.aggregateAnchorRepairOrderId ?? item.id;
+
   Future<void> _showRepairDetail(RepairOrderItem item) async {
     await _showRepairDetailById(
-      repairOrderId: item.id,
+      repairOrderId: _lookupRepairOrderId(item),
       repairOrderCode: item.repairOrderCode,
     );
   }
@@ -323,7 +329,7 @@ class _ProductionRepairOrdersPageState
   Future<void> _showPhenomenaSummary(RepairOrderItem item) async {
     try {
       final result = await _service.getRepairOrderPhenomenaSummary(
-        repairOrderId: item.id,
+        repairOrderId: _lookupRepairOrderId(item),
       );
       if (!mounted) {
         return;
@@ -393,7 +399,7 @@ class _ProductionRepairOrdersPageState
     setState(() => _acting = true);
     try {
       final summary = await _service.getRepairOrderPhenomenaSummary(
-        repairOrderId: item.id,
+        repairOrderId: _lookupRepairOrderId(item),
       );
       final processOptions = await _loadReturnProcessOptions(item);
       if (!mounted) {
@@ -447,6 +453,57 @@ class _ProductionRepairOrdersPageState
     }
   }
 
+  Future<void> _showReturnToProductionDialog(RepairOrderItem item) async {
+    if (!widget.canReturnToProduction) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('当前角色无退回生产权限')));
+      return;
+    }
+    if (item.status != 'in_repair') {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('仅维修中的工单可退回生产')));
+      return;
+    }
+    final result = await showProductionRepairReturnToProductionDialog(
+      context: context,
+      repairOrder: item,
+    );
+    if (result == null) {
+      return;
+    }
+    setState(() => _acting = true);
+    try {
+      await _service.returnRepairOrderToProduction(
+        repairOrderId: item.id,
+        password: result.password,
+      );
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('已退回生产')));
+      await _loadItems();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      if (_isUnauthorized(error)) {
+        widget.onLogout();
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('退回生产失败：${_errorMessage(error)}')));
+    } finally {
+      if (mounted) {
+        setState(() => _acting = false);
+      }
+    }
+  }
+
   int get _inRepairCount =>
       _items.where((item) => item.status == 'in_repair').length;
 
@@ -455,6 +512,20 @@ class _ProductionRepairOrdersPageState
 
   int get _pendingCompleteCount =>
       _items.where((item) => item.status == 'in_repair').length;
+
+  String _formatRepairOrderCode(RepairOrderItem item) {
+    if (!item.isAggregated) {
+      return item.repairOrderCode;
+    }
+    return '${item.repairOrderCode} (${item.childRepairOrderCount}单聚合)';
+  }
+
+  String _formatProductionQuantity(int value) {
+    if (value <= 0) {
+      return '未报工';
+    }
+    return '$value';
+  }
 
   Widget _buildSummarySection() {
     return MesSectionCard(
@@ -548,7 +619,7 @@ class _ProductionRepairOrdersPageState
                 .map(
                   (item) => DataRow(
                     cells: [
-                      DataCell(Text(item.repairOrderCode)),
+                      DataCell(Text(_formatRepairOrderCode(item))),
                       DataCell(Text(item.sourceOrderCode ?? '-')),
                       DataCell(Text(item.productName ?? '-')),
                       DataCell(Text(item.sourceProcessName)),
@@ -574,6 +645,9 @@ class _ProductionRepairOrdersPageState
                               case _RepairOrderAction.complete:
                                 _showCompleteDialog(item);
                                 break;
+                              case _RepairOrderAction.returnToProduction:
+                                _showReturnToProductionDialog(item);
+                                break;
                             }
                           },
                           itemBuilder: (_) => [
@@ -589,9 +663,19 @@ class _ProductionRepairOrdersPageState
                               value: _RepairOrderAction.complete,
                               enabled:
                                   widget.canComplete &&
+                                  !item.isAggregated &&
                                   item.status == 'in_repair' &&
                                   !_acting,
                               child: const Text('完成维修'),
+                            ),
+                            PopupMenuItem(
+                              value: _RepairOrderAction.returnToProduction,
+                              enabled:
+                                  widget.canReturnToProduction &&
+                                  !item.isAggregated &&
+                                  item.status == 'in_repair' &&
+                                  !_acting,
+                              child: const Text('退回生产'),
                             ),
                           ],
                         ),

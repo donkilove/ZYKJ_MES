@@ -53,6 +53,19 @@ String productionSubOrderStatusLabel(String status) {
   }
 }
 
+String myOrderRuntimeStatusLabel(String status) {
+  switch (status) {
+    case 'pending':
+      return '待生产';
+    case 'in_progress':
+      return '生产中';
+    case 'done':
+      return '已完成';
+    default:
+      return status;
+  }
+}
+
 String assistAuthorizationStatusLabel(String status) {
   switch (status) {
     case 'pending':
@@ -74,6 +87,8 @@ String repairOrderStatusLabel(String status) {
       return '维修中';
     case 'completed':
       return '已完成';
+    case 'returned_to_production':
+      return '已退回生产';
     default:
       return status;
   }
@@ -453,6 +468,7 @@ class MyOrderItem {
     this.currentProcessFirstArticleTestValue = '',
     required this.currentProcessOrder,
     required this.processStatus,
+    this.subOrderStatus = 'pending',
     required this.visibleQuantity,
     required this.processCompletedQuantity,
     required this.userSubOrderId,
@@ -468,6 +484,7 @@ class MyOrderItem {
     required this.pipelineStartAllowed,
     required this.pipelineEndAllowed,
     required this.maxProducibleQuantity,
+    this.currentCycleManualRepairQuantity = 0,
     required this.canFirstArticle,
     required this.canEndProduction,
     required this.canApplyAssist,
@@ -494,6 +511,7 @@ class MyOrderItem {
   final String currentProcessFirstArticleTestValue;
   final int currentProcessOrder;
   final String processStatus;
+  final String subOrderStatus;
   final int visibleQuantity;
   final int processCompletedQuantity;
   final int? userSubOrderId;
@@ -509,6 +527,7 @@ class MyOrderItem {
   final bool pipelineStartAllowed;
   final bool pipelineEndAllowed;
   final int maxProducibleQuantity;
+  final int currentCycleManualRepairQuantity;
   final bool canFirstArticle;
   final bool canEndProduction;
   final bool canApplyAssist;
@@ -539,6 +558,10 @@ class MyOrderItem {
           (json['current_process_first_article_test_value'] as String?) ?? '',
       currentProcessOrder: (json['current_process_order'] as int?) ?? 0,
       processStatus: (json['process_status'] as String?) ?? 'pending',
+      subOrderStatus:
+          (json['sub_order_status'] as String?) ??
+          (json['order_status'] as String?) ??
+          'pending',
       visibleQuantity: (json['visible_quantity'] as int?) ?? 0,
       processCompletedQuantity:
           (json['process_completed_quantity'] as int?) ?? 0,
@@ -555,6 +578,8 @@ class MyOrderItem {
       pipelineStartAllowed: (json['pipeline_start_allowed'] as bool?) ?? false,
       pipelineEndAllowed: (json['pipeline_end_allowed'] as bool?) ?? false,
       maxProducibleQuantity: (json['max_producible_quantity'] as int?) ?? 0,
+      currentCycleManualRepairQuantity:
+          (json['current_cycle_manual_repair_quantity'] as int?) ?? 0,
       canFirstArticle: (json['can_first_article'] as bool?) ?? false,
       canEndProduction: (json['can_end_production'] as bool?) ?? false,
       canApplyAssist: (json['can_apply_assist'] as bool?) ?? false,
@@ -1811,6 +1836,12 @@ class RepairOrderItem {
     required this.completedAt,
     required this.repairOperatorUserId,
     required this.repairOperatorUsername,
+    required this.isAggregated,
+    required this.aggregateStatus,
+    required this.aggregateAnchorRepairOrderId,
+    required this.childRepairOrderCount,
+    required this.childRepairOrderIds,
+    required this.childRepairOrderCodes,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -1836,6 +1867,12 @@ class RepairOrderItem {
   final DateTime? completedAt;
   final int? repairOperatorUserId;
   final String? repairOperatorUsername;
+  final bool isAggregated;
+  final String? aggregateStatus;
+  final int? aggregateAnchorRepairOrderId;
+  final int childRepairOrderCount;
+  final List<int> childRepairOrderIds;
+  final List<String> childRepairOrderCodes;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -1862,6 +1899,19 @@ class RepairOrderItem {
       completedAt: _parseDateOrNull(json['completed_at']),
       repairOperatorUserId: json['repair_operator_user_id'] as int?,
       repairOperatorUsername: json['repair_operator_username'] as String?,
+      isAggregated: (json['is_aggregated'] as bool?) ?? false,
+      aggregateStatus: json['aggregate_status'] as String?,
+      aggregateAnchorRepairOrderId:
+          json['aggregate_anchor_repair_order_id'] as int?,
+      childRepairOrderCount: (json['child_repair_order_count'] as int?) ?? 0,
+      childRepairOrderIds:
+          (json['child_repair_order_ids'] as List<dynamic>? ?? const [])
+              .map((entry) => (entry as num).toInt())
+              .toList(),
+      childRepairOrderCodes:
+          (json['child_repair_order_codes'] as List<dynamic>? ?? const [])
+              .map((entry) => entry.toString())
+              .toList(),
       createdAt: _parseDateOrDefault(json['created_at']),
       updatedAt: _parseDateOrDefault(json['updated_at']),
     );
@@ -2043,6 +2093,11 @@ class ScrapRelatedRepairOrderItem {
     required this.scrapQuantity,
     required this.repairTime,
     required this.completedAt,
+    required this.isAggregated,
+    required this.aggregateStatus,
+    required this.aggregateAnchorRepairOrderId,
+    required this.childRepairOrderCount,
+    required this.childRepairOrderIds,
   });
 
   final int id;
@@ -2053,6 +2108,11 @@ class ScrapRelatedRepairOrderItem {
   final int scrapQuantity;
   final DateTime repairTime;
   final DateTime? completedAt;
+  final bool isAggregated;
+  final String? aggregateStatus;
+  final int? aggregateAnchorRepairOrderId;
+  final int childRepairOrderCount;
+  final List<int> childRepairOrderIds;
 
   factory ScrapRelatedRepairOrderItem.fromJson(Map<String, dynamic> json) {
     return ScrapRelatedRepairOrderItem(
@@ -2064,6 +2124,15 @@ class ScrapRelatedRepairOrderItem {
       scrapQuantity: (json['scrap_quantity'] as int?) ?? 0,
       repairTime: _parseDateOrDefault(json['repair_time']),
       completedAt: _parseDateOrNull(json['completed_at']),
+      isAggregated: (json['is_aggregated'] as bool?) ?? false,
+      aggregateStatus: json['aggregate_status'] as String?,
+      aggregateAnchorRepairOrderId:
+          json['aggregate_anchor_repair_order_id'] as int?,
+      childRepairOrderCount: (json['child_repair_order_count'] as int?) ?? 0,
+      childRepairOrderIds:
+          (json['child_repair_order_ids'] as List<dynamic>? ?? const [])
+              .map((entry) => (entry as num).toInt())
+              .toList(),
     );
   }
 }
@@ -2228,6 +2297,29 @@ class RepairCauseDetailItem {
   }
 }
 
+class RepairCauseSummaryItem {
+  RepairCauseSummaryItem({
+    required this.phenomenon,
+    required this.reason,
+    required this.quantity,
+    required this.isScrap,
+  });
+
+  final String phenomenon;
+  final String reason;
+  final int quantity;
+  final bool isScrap;
+
+  factory RepairCauseSummaryItem.fromJson(Map<String, dynamic> json) {
+    return RepairCauseSummaryItem(
+      phenomenon: (json['phenomenon'] as String?) ?? '',
+      reason: (json['reason'] as String?) ?? '',
+      quantity: (json['quantity'] as int?) ?? 0,
+      isScrap: (json['is_scrap'] as bool?) ?? false,
+    );
+  }
+}
+
 class RepairReturnRouteDetailItem {
   RepairReturnRouteDetailItem({
     required this.id,
@@ -2277,6 +2369,12 @@ class RepairOrderDetailItem {
     required this.completedAt,
     required this.repairOperatorUserId,
     required this.repairOperatorUsername,
+    required this.isAggregated,
+    required this.aggregateStatus,
+    required this.aggregateAnchorRepairOrderId,
+    required this.childRepairOrders,
+    required this.phenomenonSummary,
+    required this.causeSummary,
     required this.defectRows,
     required this.causeRows,
     required this.returnRoutes,
@@ -2304,6 +2402,12 @@ class RepairOrderDetailItem {
   final DateTime? completedAt;
   final int? repairOperatorUserId;
   final String? repairOperatorUsername;
+  final bool isAggregated;
+  final String? aggregateStatus;
+  final int? aggregateAnchorRepairOrderId;
+  final List<RepairOrderItem> childRepairOrders;
+  final List<RepairOrderPhenomenonSummaryItem> phenomenonSummary;
+  final List<RepairCauseSummaryItem> causeSummary;
   final List<RepairDefectPhenomenonDetailItem> defectRows;
   final List<RepairCauseDetailItem> causeRows;
   final List<RepairReturnRouteDetailItem> returnRoutes;
@@ -2332,6 +2436,25 @@ class RepairOrderDetailItem {
       completedAt: _parseDateOrNull(json['completed_at']),
       repairOperatorUserId: json['repair_operator_user_id'] as int?,
       repairOperatorUsername: json['repair_operator_username'] as String?,
+      isAggregated: (json['is_aggregated'] as bool?) ?? false,
+      aggregateStatus: json['aggregate_status'] as String?,
+      aggregateAnchorRepairOrderId:
+          json['aggregate_anchor_repair_order_id'] as int?,
+      childRepairOrders:
+          (json['child_repair_orders'] as List<dynamic>? ?? const [])
+              .map((e) => RepairOrderItem.fromJson(e as Map<String, dynamic>))
+              .toList(),
+      phenomenonSummary:
+          (json['phenomenon_summary'] as List<dynamic>? ?? const [])
+              .map(
+                (e) => RepairOrderPhenomenonSummaryItem.fromJson(
+                  e as Map<String, dynamic>,
+                ),
+              )
+              .toList(),
+      causeSummary: (json['cause_summary'] as List<dynamic>? ?? const [])
+          .map((e) => RepairCauseSummaryItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
       defectRows: (json['defect_rows'] as List<dynamic>? ?? const [])
           .map(
             (e) => RepairDefectPhenomenonDetailItem.fromJson(

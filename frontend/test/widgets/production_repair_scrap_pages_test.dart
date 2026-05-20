@@ -6,6 +6,7 @@ import 'package:mes_client/core/ui/patterns/mes_metric_card.dart';
 import 'package:mes_client/core/ui/patterns/mes_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
+import 'package:mes_client/features/production/models/defect_catalog.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/production_repair_order_detail_page.dart';
 import 'package:mes_client/features/production/presentation/production_repair_orders_page.dart';
@@ -13,6 +14,7 @@ import 'package:mes_client/features/production/presentation/production_scrap_sta
 import 'package:mes_client/features/production/presentation/production_scrap_statistics_page.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_repair_complete_dialog.dart';
 import 'package:mes_client/features/production/presentation/widgets/production_repair_phenomena_summary_dialog.dart';
+import 'package:mes_client/features/production/presentation/widgets/production_repair_return_to_production_dialog.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 
 class _FakeRepairAndScrapService extends ProductionService {
@@ -27,6 +29,10 @@ class _FakeRepairAndScrapService extends ProductionService {
   String? lastRepairKeyword;
   String lastRepairStatus = 'all';
   int? lastRepairPage;
+  int returnToProductionCallCount = 0;
+  int? lastReturnedRepairOrderId;
+  String? lastReturnPassword;
+  bool returnedToProduction = false;
 
   @override
   Future<ScrapStatisticsListResult> getScrapStatistics({
@@ -101,10 +107,12 @@ class _FakeRepairAndScrapService extends ProductionService {
           'scrap_quantity': 0,
           'scrap_replenished': false,
           'repair_time': '2026-03-01T00:00:00Z',
-          'status': 'in_repair',
-          'completed_at': null,
+          'status': returnedToProduction
+              ? 'returned_to_production'
+              : 'in_repair',
+          'completed_at': returnedToProduction ? '2026-03-01T01:00:00Z' : null,
           'repair_operator_user_id': null,
-          'repair_operator_username': null,
+          'repair_operator_username': returnedToProduction ? 'admin' : null,
           'created_at': '2026-03-01T00:00:00Z',
           'updated_at': '2026-03-01T00:00:00Z',
         }),
@@ -232,6 +240,18 @@ class _FakeRepairAndScrapService extends ProductionService {
         },
       ],
     });
+  }
+
+  @override
+  Future<RepairOrderItem> returnRepairOrderToProduction({
+    required int repairOrderId,
+    required String password,
+  }) async {
+    returnToProductionCallCount += 1;
+    lastReturnedRepairOrderId = repairOrderId;
+    lastReturnPassword = password;
+    returnedToProduction = true;
+    return (await getRepairOrders(page: 1, pageSize: 1)).items.first;
   }
 }
 
@@ -394,6 +414,7 @@ void main() {
             session: AppSession(baseUrl: '', accessToken: ''),
             onLogout: () {},
             canComplete: true,
+            canReturnToProduction: true,
             canExport: true,
             service: service,
           ),
@@ -439,6 +460,63 @@ void main() {
     expect(service.lastRepairStatus, 'completed');
     expect(service.lastRepairPage, 1);
     expect(find.text('第 1 / 3 页'), findsOneWidget);
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('已退回生产').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('查询'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(service.lastRepairStatus, 'returned_to_production');
+  });
+
+  testWidgets('production repair orders page can return order to production', (
+    tester,
+  ) async {
+    setDesktopViewport(tester);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final service = _FakeRepairAndScrapService();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionRepairOrdersPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canComplete: true,
+            canReturnToProduction: true,
+            canExport: false,
+            service: service,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    await tester.tap(find.text('操作').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('退回生产').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(
+        const ValueKey('production-repair-return-to-production-dialog'),
+      ),
+      findsOneWidget,
+    );
+    await tester.enterText(find.byType(TextField).last, 'Pass123');
+    await tester.tap(find.widgetWithText(FilledButton, '退回生产').last);
+    await tester.pumpAndSettle();
+
+    expect(service.returnToProductionCallCount, 1);
+    expect(service.lastReturnedRepairOrderId, 1);
+    expect(service.lastReturnPassword, 'Pass123');
+    expect(find.text('已退回生产'), findsWidgets);
   });
 
   testWidgets('production repair orders page uses task workbench skeleton', (
@@ -456,6 +534,7 @@ void main() {
             session: AppSession(baseUrl: '', accessToken: ''),
             onLogout: () {},
             canComplete: true,
+            canReturnToProduction: true,
             canExport: true,
             service: service,
           ),
@@ -617,7 +696,215 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('完成维修'), findsOneWidget);
-    expect(find.text('回流分配（仅对非报废数量生效）'), findsOneWidget);
+    expect(find.text('不良原因明细'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, '新增原因项'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('production-repair-cause-phenomenon-0')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('production-repair-cause-category-0')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        ValueKey(
+          'production-repair-cause-reason-0-${productionDefectReasonCategories().first}',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('一级原因'), findsOneWidget);
+    expect(find.text('二级原因'), findsOneWidget);
+    expect(
+      find.text('回流分配（合计需等于送修数量-未补充报废数量）'),
+      findsOneWidget,
+    );
     expect(find.text('报废已补充'), findsOneWidget);
+
+    final scrapReplenishedFinder = find.byKey(
+      const ValueKey('production-repair-scrap-replenished'),
+    );
+    var scrapReplenished = tester.widget<Checkbox>(scrapReplenishedFinder);
+    expect(scrapReplenished.value, isFalse);
+    expect(scrapReplenished.onChanged, isNull);
+
+    await tester.tap(
+      find.byKey(const ValueKey('production-repair-cause-scrap-0')),
+    );
+    await tester.pumpAndSettle();
+
+    scrapReplenished = tester.widget<Checkbox>(scrapReplenishedFinder);
+    expect(scrapReplenished.onChanged, isNotNull);
+
+    await tester.tap(scrapReplenishedFinder);
+    await tester.pumpAndSettle();
+    scrapReplenished = tester.widget<Checkbox>(scrapReplenishedFinder);
+    expect(scrapReplenished.value, isTrue);
+
+    await tester.tap(
+      find.byKey(const ValueKey('production-repair-cause-scrap-0')),
+    );
+    await tester.pumpAndSettle();
+    scrapReplenished = tester.widget<Checkbox>(scrapReplenishedFinder);
+    expect(scrapReplenished.value, isFalse);
+    expect(scrapReplenished.onChanged, isNull);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '新增原因项'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('production-repair-cause-phenomenon-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('production-repair-cause-category-1')),
+      findsOneWidget,
+    );
+    expect(find.text('毛刺'), findsNWidgets(2));
+  });
+
+  testWidgets('维修完成弹窗按报废已补充校验回流总量', (tester) async {
+    ProductionRepairCompleteDialogResult? dialogResult;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () {
+                showDialog<ProductionRepairCompleteDialogResult?>(
+                  context: context,
+                  builder: (_) => ProductionRepairCompleteDialog(
+                    repairOrder: RepairOrderItem.fromJson({
+                      'id': 1,
+                      'repair_order_code': 'RW-1',
+                      'source_order_id': 1,
+                      'source_order_code': 'PO-1',
+                      'product_id': 1,
+                      'product_name': '产品A',
+                      'source_order_process_id': 11,
+                      'source_process_code': '01-01',
+                      'source_process_name': '切割',
+                      'sender_user_id': 8,
+                      'sender_username': 'worker',
+                      'production_quantity': 6,
+                      'repair_quantity': 2,
+                      'repaired_quantity': 0,
+                      'scrap_quantity': 0,
+                      'scrap_replenished': false,
+                      'repair_time': '2026-03-01T00:00:00Z',
+                      'status': 'in_repair',
+                      'completed_at': null,
+                      'repair_operator_user_id': null,
+                      'repair_operator_username': null,
+                      'created_at': '2026-03-01T00:00:00Z',
+                      'updated_at': '2026-03-01T00:00:00Z',
+                    }),
+                    phenomena: const [
+                      RepairOrderPhenomenonSummaryItem(
+                        phenomenon: '毛刺',
+                        quantity: 2,
+                      ),
+                    ],
+                    processOptions: const [
+                      ProductionRepairReturnProcessOption(
+                        id: 11,
+                        code: '01-01',
+                        name: '切割',
+                      ),
+                    ],
+                  ),
+                ).then((value) => dialogResult = value);
+              },
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const ValueKey('production-repair-cause-quantity-0')),
+      '1',
+    );
+    await tester.tap(find.widgetWithText(OutlinedButton, '新增原因项'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('production-repair-cause-quantity-1')),
+      '1',
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('production-repair-cause-scrap-1')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilledButton, '提交完成'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('回流数量合计必须等于送修数量 2 - 未补充报废数量 1 = 1'),
+      findsOneWidget,
+    );
+    expect(dialogResult, isNull);
+
+    await tester.tap(
+      find.byKey(const ValueKey('production-repair-scrap-replenished')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '提交完成'));
+    await tester.pumpAndSettle();
+
+    expect(dialogResult, isNotNull);
+    expect(dialogResult!.scrapReplenished, isTrue);
+    expect(dialogResult!.returnAllocations.single.quantity, 2);
+  });
+
+  testWidgets('退回生产弹窗展示密码确认和影响说明', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionRepairReturnToProductionDialog(
+            repairOrder: RepairOrderItem.fromJson({
+              'id': 1,
+              'repair_order_code': 'RW-1',
+              'source_order_id': 1,
+              'source_order_code': 'PO-1',
+              'product_id': 1,
+              'product_name': '产品A',
+              'source_order_process_id': 11,
+              'source_process_code': '01-01',
+              'source_process_name': '切割',
+              'sender_user_id': 8,
+              'sender_username': 'worker',
+              'production_quantity': 6,
+              'repair_quantity': 2,
+              'repaired_quantity': 0,
+              'scrap_quantity': 0,
+              'scrap_replenished': false,
+              'repair_time': '2026-03-01T00:00:00Z',
+              'status': 'in_repair',
+              'completed_at': null,
+              'repair_operator_user_id': null,
+              'repair_operator_username': null,
+              'created_at': '2026-03-01T00:00:00Z',
+              'updated_at': '2026-03-01T00:00:00Z',
+            }),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(
+        const ValueKey('production-repair-return-to-production-dialog'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('退回生产'), findsWidgets);
+    expect(find.text('当前登录密码'), findsOneWidget);
+    expect(find.textContaining('不进入质量统计'), findsOneWidget);
   });
 }

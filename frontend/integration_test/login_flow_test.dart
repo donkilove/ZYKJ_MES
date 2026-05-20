@@ -520,6 +520,80 @@ void main() {
     expect(authService.lastUsername, 'tester');
   });
 
+  testWidgets('登录后进入角色管理页签可打开首行操作菜单', (tester) async {
+    final authService = _FakeAuthService();
+    final userService = _FakeUserService();
+
+    await _pumpTestApp(
+      tester,
+      authService: authService,
+      userService: userService,
+      homeBuilder: (session) {
+        return Scaffold(
+          body: UserPage(
+            session: session,
+            onLogout: ({String? reason}) {},
+            visibleTabCodes: const ['role_management', 'audit_log'],
+            capabilityCodes: const {
+              UserFeaturePermissionCodes.roleManagementUpdate,
+              UserFeaturePermissionCodes.roleManagementLifecycle,
+              UserFeaturePermissionCodes.roleManagementDelete,
+            },
+            preferredTabCode: 'audit_log',
+            tabPageBuilder: (tabCode, child) {
+              if (child is RoleManagementPage) {
+                return RoleManagementPage(
+                  session: child.session,
+                  onLogout: child.onLogout,
+                  canCreateRole: child.canCreateRole,
+                  canEditRole: child.canEditRole,
+                  canToggleRole: child.canToggleRole,
+                  canDeleteRole: child.canDeleteRole,
+                  userService: userService,
+                );
+              }
+              if (child is AuditLogPage) {
+                return AuditLogPage(
+                  session: child.session,
+                  onLogout: child.onLogout,
+                  userService: userService,
+                );
+              }
+              return child;
+            },
+          ),
+        );
+      },
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('login-account-field')),
+      'tester',
+    );
+    await tester.enterText(
+      find.byKey(const Key('login-password-field')),
+      'Pass123',
+    );
+    await tester.tap(find.byKey(const Key('login-submit-button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('角色管理'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('role-management-row-menu-1')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('role-management-row-menu-1')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('编辑'), findsOneWidget);
+    expect(find.text('停用'), findsOneWidget);
+    expect(find.text('删除'), findsNothing);
+    expect(authService.lastUsername, 'tester');
+  });
+
   testWidgets('登录后进入工艺总页并切换关键页签完成关键动作', (tester) async {
     final authService = _FakeAuthService();
     final craftService = _FakeIntegrationCraftService();
@@ -1445,6 +1519,7 @@ class _FakeIntegrationProductionPageService extends ProductionService {
     String? viewMode,
     int? proxyOperatorUserId,
     String? orderStatus,
+    String? subOrderStatus,
     int? currentProcessId,
   }) async {
     return MyOrderListResult(
@@ -1466,6 +1541,7 @@ class _FakeIntegrationProductionPageService extends ProductionService {
           currentProcessName: '切割',
           currentProcessOrder: 1,
           processStatus: 'in_progress',
+          subOrderStatus: 'in_progress',
           visibleQuantity: 12,
           processCompletedQuantity: 4,
           userSubOrderId: 31,
@@ -1590,6 +1666,8 @@ class _FakeIntegrationQualityService extends QualityService {
   @override
   Future<FirstArticleListResult> listFirstArticles({
     DateTime? date,
+    DateTime? startDate,
+    DateTime? endDate,
     String? keyword,
     String? result,
     String? productName,

@@ -6,22 +6,28 @@ class ProductionOrderStatusChip extends StatelessWidget {
   const ProductionOrderStatusChip({
     super.key,
     required this.status,
+    this.label,
   });
 
   final String status;
+  final String? label;
 
   @override
   Widget build(BuildContext context) {
-    final label = productionOrderStatusLabel(status);
+    final resolvedLabel =
+        label != null && label!.trim().isNotEmpty
+            ? label!.trim()
+            : productionOrderStatusLabel(status);
     switch (status) {
       case 'pending':
-        return MesStatusChip.warning(label: label);
+        return MesStatusChip.warning(label: resolvedLabel);
       case 'in_progress':
-        return MesStatusChip.success(label: label);
+        return MesStatusChip.success(label: resolvedLabel);
       case 'completed':
-        return MesStatusChip.success(label: label);
+      case 'done':
+        return MesStatusChip.success(label: resolvedLabel);
       default:
-        return MesStatusChip.warning(label: label);
+        return MesStatusChip.warning(label: resolvedLabel);
     }
   }
 }

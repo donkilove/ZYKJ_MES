@@ -419,6 +419,7 @@ void main() {
             },
             permissionCodes: const {
               'quality.repair_orders.complete',
+              'quality.repair_orders.return_to_production',
               'quality.repair_orders.export',
             },
             preferredTabCode: qualityRepairOrdersTabCode,

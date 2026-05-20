@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mes_client/core/models/app_session.dart';
+import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/quality/models/quality_models.dart';
@@ -34,6 +35,7 @@ class _FakeProductionOrderManagementService extends ProductionService {
   int deleteOrderCallCount = 0;
   int completeOrderCallCount = 0;
   int pipelineUpdateCallCount = 0;
+  Object? completeOrderError;
   String? lastCompletedPassword;
   List<String> lastPipelineProcessCodes = const <String>[];
   bool? lastPipelineEnabled;
@@ -207,6 +209,10 @@ class _FakeProductionOrderManagementService extends ProductionService {
   }) async {
     completeOrderCallCount += 1;
     lastCompletedPassword = password;
+    final error = completeOrderError;
+    if (error != null) {
+      throw error;
+    }
     return ProductionActionResult(
       orderId: orderId,
       status: 'completed',
@@ -557,6 +563,59 @@ void main() {
     expect(service.pipelineUpdateCallCount, 1);
     expect(service.lastPipelineEnabled, isTrue);
     expect(service.lastPipelineProcessCodes, ['01-01', '02-01']);
+  });
+
+  testWidgets('手工完工遇到维修中维修单时展示中文阻塞提示', (tester) async {
+    const repairCode = 'RW20260512084745635772CDF0';
+    final service = _FakeProductionOrderManagementService()
+      ..completeOrderError = ApiException(
+        'Order has in-progress repair orders that must be completed first: '
+        repairCode,
+        409,
+      );
+    await tester.binding.setSurfaceSize(const Size(1600, 1200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionOrderManagementPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canCreateOrder: true,
+            canEditOrder: true,
+            canDeleteOrder: true,
+            canCompleteOrder: true,
+            canUpdatePipelineMode: true,
+            service: service,
+            craftService: _FakeCraftService(),
+            supplierService: _FakeQualitySupplierService(),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.tap(find.byIcon(Icons.more_vert).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('手工完工').last);
+    await tester.pumpAndSettle();
+    final completeDialogFields = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(completeDialogFields.first, 'Pass123');
+    await tester.tap(find.widgetWithText(FilledButton, '结束'));
+    await tester.pumpAndSettle();
+
+    expect(service.completeOrderCallCount, 1);
+    expect(
+      find.text('该订单仍有维修中的维修单，请先完成维修单后再手工完工：$repairCode'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Order has in-progress repair orders'), findsNothing);
   });
 
   testWidgets('关闭并行模式确认弹窗展示统一骨架', (tester) async {

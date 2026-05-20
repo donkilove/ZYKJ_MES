@@ -51,6 +51,36 @@ class _ProductionFirstArticlePageState
   List<FirstArticleParticipantOptionItem> _participantOptions = const [];
   List<FirstArticleParticipantOptionItem> _selectedParticipants = const [];
 
+  int? get _effectiveOperatorUserId {
+    final candidate = widget.order.operatorUserId;
+    if (candidate != null && candidate > 0) {
+      return candidate;
+    }
+    return null;
+  }
+
+  String get _effectiveOperatorUsername {
+    return (widget.order.operatorUsername ?? '').trim();
+  }
+
+  bool _isCurrentEffectiveOperator(FirstArticleParticipantOptionItem item) {
+    final effectiveOperatorUserId = _effectiveOperatorUserId;
+    if (effectiveOperatorUserId != null) {
+      return item.id == effectiveOperatorUserId;
+    }
+    final effectiveOperatorUsername = _effectiveOperatorUsername;
+    if (effectiveOperatorUsername.isEmpty) {
+      return false;
+    }
+    return item.username.trim() == effectiveOperatorUsername;
+  }
+
+  List<FirstArticleParticipantOptionItem> _filterParticipantOptions(
+    Iterable<FirstArticleParticipantOptionItem> options,
+  ) {
+    return options.where((item) => !_isCurrentEffectiveOperator(item)).toList();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -142,12 +172,15 @@ class _ProductionFirstArticlePageState
       final participants = await _service.listFirstArticleParticipantOptions(
         orderId: widget.order.orderId,
         orderProcessId: widget.order.currentProcessId,
+        effectiveOperatorUserId: _effectiveOperatorUserId,
       );
       if (!mounted) {
         return;
       }
+      final filteredOptions = _filterParticipantOptions(participants.items);
       setState(() {
-        _participantOptions = participants.items;
+        _participantOptions = filteredOptions;
+        _selectedParticipants = _filterParticipantOptions(_selectedParticipants);
       });
     } catch (error) {
       if (!mounted) {
@@ -214,9 +247,9 @@ class _ProductionFirstArticlePageState
     if (selectedIds == null || !mounted) {
       return;
     }
-    final selected = _participantOptions
-        .where((item) => selectedIds.contains(item.id))
-        .toList();
+    final selected = _filterParticipantOptions(
+      _participantOptions.where((item) => selectedIds.contains(item.id)).toList(),
+    );
     setState(() {
       _selectedParticipants = selected;
     });

@@ -1071,6 +1071,7 @@ void main() {
           session: session,
           onLogout: () {},
           canComplete: true,
+          canReturnToProduction: true,
           canExport: true,
         ),
       ),
@@ -1586,6 +1587,7 @@ void main() {
           session: session,
           onLogout: () {},
           canComplete: true,
+          canReturnToProduction: true,
           canExport: true,
           jumpPayloadJson: '{"action":"detail","repair_order_id":7}',
           service: repairScrapService,
@@ -1597,6 +1599,7 @@ void main() {
       find.byType(ProductionRepairOrdersPage),
     );
     expect(repairPage.canComplete, isTrue);
+    expect(repairPage.canReturnToProduction, isTrue);
     expect(repairPage.canExport, isTrue);
     expect(
       repairPage.jumpPayloadJson,

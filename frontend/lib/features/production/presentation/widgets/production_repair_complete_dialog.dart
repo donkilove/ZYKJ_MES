@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/ui/patterns/mes_dialog.dart';
 import 'package:mes_client/core/ui/patterns/mes_locked_form_dialog.dart';
+import 'package:mes_client/features/production/models/defect_catalog.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 
 class ProductionRepairReturnProcessOption {
@@ -67,22 +68,40 @@ class ProductionRepairCompleteDialog extends StatefulWidget {
 
 class _ProductionRepairCompleteDialogState
     extends State<ProductionRepairCompleteDialog> {
-  late final List<_RepairCauseDraft> _causeDrafts;
+  static const double _dialogWidth = 1080;
+
+  final List<_RepairCauseDraft> _causeDrafts = <_RepairCauseDraft>[];
   late final List<_ReturnAllocationDraft> _allocationDrafts;
+  late final Map<String, int> _phenomenonTargets;
+  late final List<String> _phenomenonOptions;
   bool _scrapReplenished = false;
   String _dialogError = '';
 
   @override
   void initState() {
     super.initState();
-    _causeDrafts = widget.phenomena
-        .map(
-          (entry) => _RepairCauseDraft(
-            phenomenon: entry.phenomenon,
-            quantity: entry.quantity,
+    _phenomenonTargets = _buildPhenomenonTargets();
+    _phenomenonOptions = _buildPhenomenonOptions();
+    if (_phenomenonTargets.isNotEmpty) {
+      for (final entry in _phenomenonTargets.entries) {
+        _causeDrafts.add(
+          _RepairCauseDraft(
+            phenomenon: entry.key,
+            quantity: entry.value,
+            reasonCategory: _defaultReasonCategory,
+            reason: _defaultReason(_defaultReasonCategory),
           ),
-        )
-        .toList();
+        );
+      }
+    } else {
+      _causeDrafts.add(
+        _RepairCauseDraft(
+          phenomenon: _defaultPhenomenon,
+          reasonCategory: _defaultReasonCategory,
+          reason: _defaultReason(_defaultReasonCategory),
+        ),
+      );
+    }
     _allocationDrafts = widget.processOptions.isNotEmpty
         ? <_ReturnAllocationDraft>[
             _ReturnAllocationDraft(
@@ -102,6 +121,75 @@ class _ProductionRepairCompleteDialogState
       draft.dispose();
     }
     super.dispose();
+  }
+
+  Map<String, int> _buildPhenomenonTargets() {
+    final targets = <String, int>{};
+    for (final entry in widget.phenomena) {
+      final phenomenon = entry.phenomenon.trim();
+      if (phenomenon.isEmpty || entry.quantity <= 0) {
+        continue;
+      }
+      targets[phenomenon] = (targets[phenomenon] ?? 0) + entry.quantity;
+    }
+    return targets;
+  }
+
+  List<String> _buildPhenomenonOptions() {
+    final options = <String>[];
+    for (final entry in widget.phenomena) {
+      final phenomenon = entry.phenomenon.trim();
+      if (phenomenon.isNotEmpty && !options.contains(phenomenon)) {
+        options.add(phenomenon);
+      }
+    }
+    for (final phenomenon in productionDefectPhenomena) {
+      if (!options.contains(phenomenon)) {
+        options.add(phenomenon);
+      }
+    }
+    return options.isEmpty ? <String>['未归类'] : options;
+  }
+
+  String get _defaultPhenomenon {
+    if (_phenomenonTargets.isNotEmpty) {
+      return _phenomenonTargets.keys.first;
+    }
+    return _phenomenonOptions.first;
+  }
+
+  String get _defaultReasonCategory => productionDefectReasonCategories().first;
+
+  String _defaultReason(String category) {
+    final reasons = productionDefectReasonsForCategory(category);
+    return reasons.isEmpty ? '' : reasons.first;
+  }
+
+  bool get _hasScrap => _causeDrafts.any((draft) => draft.isScrap);
+
+  void _addCauseRow() {
+    setState(() {
+      _causeDrafts.add(
+        _RepairCauseDraft(
+          phenomenon: _defaultPhenomenon,
+          reasonCategory: _defaultReasonCategory,
+          reason: _defaultReason(_defaultReasonCategory),
+        ),
+      );
+    });
+  }
+
+  void _removeCauseRow(int index) {
+    if (_causeDrafts.length <= 1) {
+      return;
+    }
+    setState(() {
+      final removed = _causeDrafts.removeAt(index);
+      removed.dispose();
+      if (!_hasScrap) {
+        _scrapReplenished = false;
+      }
+    });
   }
 
   void _addAllocation() {
@@ -127,27 +215,59 @@ class _ProductionRepairCompleteDialogState
 
   void _submit() {
     final causeItems = <RepairCauseItemInput>[];
+    final actualByPhenomenon = <String, int>{};
     var total = 0;
     var scrapTotal = 0;
     for (final draft in _causeDrafts) {
-      final reason = draft.reasonController.text.trim();
-      if (reason.isEmpty) {
+      final phenomenon = draft.phenomenon.trim();
+      final reason = draft.reason.trim();
+      final quantity = int.tryParse(draft.quantityController.text.trim());
+      if (phenomenon.isEmpty ||
+          reason.isEmpty ||
+          quantity == null ||
+          quantity <= 0) {
         setState(() {
-          _dialogError = '请填写每条现象的维修原因';
+          _dialogError = '请为每条原因填写不良现象、维修原因和正整数数量';
         });
         return;
       }
       causeItems.add(
         RepairCauseItemInput(
-          phenomenon: draft.phenomenon,
+          phenomenon: phenomenon,
           reason: reason,
-          quantity: draft.quantity,
+          quantity: quantity,
           isScrap: draft.isScrap,
         ),
       );
-      total += draft.quantity;
+      actualByPhenomenon[phenomenon] =
+          (actualByPhenomenon[phenomenon] ?? 0) + quantity;
+      total += quantity;
       if (draft.isScrap) {
-        scrapTotal += draft.quantity;
+        scrapTotal += quantity;
+      }
+    }
+    if (_phenomenonTargets.isNotEmpty) {
+      final extra = actualByPhenomenon.keys
+          .where((name) => !_phenomenonTargets.containsKey(name))
+          .toList();
+      if (extra.isNotEmpty) {
+        setState(() {
+          _dialogError = '存在未匹配送修记录的不良现象：${extra.join('、')}';
+        });
+        return;
+      }
+      final mismatch = <String>[];
+      for (final entry in _phenomenonTargets.entries) {
+        final current = actualByPhenomenon[entry.key] ?? 0;
+        if (current != entry.value) {
+          mismatch.add('${entry.key} 需 ${entry.value}，当前 $current');
+        }
+      }
+      if (mismatch.isNotEmpty) {
+        setState(() {
+          _dialogError = '不良现象数量需与送修明细一致：${mismatch.join('；')}';
+        });
+        return;
       }
     }
     if (total != widget.repairOrder.repairQuantity) {
@@ -157,12 +277,14 @@ class _ProductionRepairCompleteDialogState
       return;
     }
 
-    final repairedQuantity = widget.repairOrder.repairQuantity - scrapTotal;
+    final unreplenishedScrapQuantity = _scrapReplenished ? 0 : scrapTotal;
+    final repairedQuantity =
+        widget.repairOrder.repairQuantity - unreplenishedScrapQuantity;
     final allocations = <RepairReturnAllocationInput>[];
     if (repairedQuantity > 0) {
       if (_allocationDrafts.isEmpty) {
         setState(() {
-          _dialogError = '存在可回流数量时必须至少配置一条回流分配';
+          _dialogError = '存在有效回流数量时必须至少配置一条回流分配';
         });
         return;
       }
@@ -170,8 +292,12 @@ class _ProductionRepairCompleteDialogState
       var allocationTotal = 0;
       for (final draft in _allocationDrafts) {
         final targetProcessId = draft.targetProcessId;
-        final allocationQty = int.tryParse(draft.quantityController.text.trim());
-        if (targetProcessId == null || allocationQty == null || allocationQty <= 0) {
+        final allocationQty = int.tryParse(
+          draft.quantityController.text.trim(),
+        );
+        if (targetProcessId == null ||
+            allocationQty == null ||
+            allocationQty <= 0) {
           setState(() {
             _dialogError = '请为每条回流分配填写目标工序和正整数数量';
           });
@@ -193,7 +319,9 @@ class _ProductionRepairCompleteDialogState
       }
       if (allocationTotal != repairedQuantity) {
         setState(() {
-          _dialogError = '回流数量合计必须等于非报废数量 $repairedQuantity';
+          _dialogError =
+              '回流数量合计必须等于送修数量 ${widget.repairOrder.repairQuantity}'
+              ' - 未补充报废数量 $unreplenishedScrapQuantity = $repairedQuantity';
         });
         return;
       }
@@ -202,7 +330,7 @@ class _ProductionRepairCompleteDialogState
     Navigator.of(context).pop(
       ProductionRepairCompleteDialogResult(
         causeItems: causeItems,
-        scrapReplenished: _scrapReplenished,
+        scrapReplenished: scrapTotal > 0 && _scrapReplenished,
         returnAllocations: allocations,
       ),
     );
@@ -213,10 +341,10 @@ class _ProductionRepairCompleteDialogState
     final theme = Theme.of(context);
     return MesDialog(
       title: Text('完成维修 - ${widget.repairOrder.repairOrderCode}'),
-      width: 760,
+      width: _dialogWidth,
       content: SizedBox(
         key: const ValueKey('production-repair-complete-dialog'),
-        width: 760,
+        width: _dialogWidth,
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -224,22 +352,134 @@ class _ProductionRepairCompleteDialogState
             children: [
               Text('送修数量：${widget.repairOrder.repairQuantity}'),
               const SizedBox(height: 12),
-              ..._causeDrafts.map((draft) {
+              Row(
+                children: [
+                  const Text('不良原因明细'),
+                  const Spacer(),
+                  OutlinedButton.icon(
+                    onPressed: _addCauseRow,
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('新增原因项'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ...List.generate(_causeDrafts.length, (index) {
+                final draft = _causeDrafts[index];
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Row(
                     children: [
-                      Expanded(flex: 3, child: Text(draft.phenomenon)),
+                      Expanded(
+                        flex: 3,
+                        child: DropdownButtonFormField<String>(
+                          key: ValueKey(
+                            'production-repair-cause-phenomenon-$index',
+                          ),
+                          initialValue: draft.phenomenon,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: '不良现象',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: _phenomenonOptions
+                              .map(
+                                (value) => DropdownMenuItem<String>(
+                                  value: value,
+                                  child: Text(value),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setState(() {
+                              draft.phenomenon = value;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 3,
+                        child: DropdownButtonFormField<String>(
+                          key: ValueKey(
+                            'production-repair-cause-category-$index',
+                          ),
+                          initialValue: draft.reasonCategory,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: '一级原因',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: productionDefectReasonCategories()
+                              .map(
+                                (value) => DropdownMenuItem<String>(
+                                  value: value,
+                                  child: Text(value),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setState(() {
+                              draft.reasonCategory = value;
+                              draft.reason = _defaultReason(value);
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 3,
+                        child: DropdownButtonFormField<String>(
+                          key: ValueKey(
+                            'production-repair-cause-reason-$index-${draft.reasonCategory}',
+                          ),
+                          initialValue: draft.reason,
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            labelText: '二级原因',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items:
+                              productionDefectReasonsForCategory(
+                                    draft.reasonCategory,
+                                  )
+                                  .map(
+                                    (value) => DropdownMenuItem<String>(
+                                      value: value,
+                                      child: Text(value),
+                                    ),
+                                  )
+                                  .toList(),
+                          onChanged: (value) {
+                            if (value == null) {
+                              return;
+                            }
+                            setState(() {
+                              draft.reason = value;
+                            });
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
                       Expanded(
                         flex: 2,
-                        child: Text('数量：${draft.quantity}'),
-                      ),
-                      Expanded(
-                        flex: 4,
                         child: TextField(
-                          controller: draft.reasonController,
+                          key: ValueKey(
+                            'production-repair-cause-quantity-$index',
+                          ),
+                          controller: draft.quantityController,
+                          keyboardType: TextInputType.number,
                           decoration: const InputDecoration(
-                            labelText: '原因',
+                            labelText: '数量',
                             border: OutlineInputBorder(),
                             isDense: true,
                           ),
@@ -249,15 +489,27 @@ class _ProductionRepairCompleteDialogState
                       Column(
                         children: [
                           Checkbox(
+                            key: ValueKey(
+                              'production-repair-cause-scrap-$index',
+                            ),
                             value: draft.isScrap,
                             onChanged: (value) {
                               setState(() {
                                 draft.isScrap = value ?? false;
+                                if (!_hasScrap) {
+                                  _scrapReplenished = false;
+                                }
                               });
                             },
                           ),
                           const Text('报废'),
                         ],
+                      ),
+                      IconButton(
+                        onPressed: _causeDrafts.length <= 1
+                            ? null
+                            : () => _removeCauseRow(index),
+                        icon: const Icon(Icons.delete_outline),
                       ),
                     ],
                   ),
@@ -267,12 +519,15 @@ class _ProductionRepairCompleteDialogState
               Row(
                 children: [
                   Checkbox(
+                    key: const ValueKey('production-repair-scrap-replenished'),
                     value: _scrapReplenished,
-                    onChanged: (value) {
-                      setState(() {
-                        _scrapReplenished = value ?? false;
-                      });
-                    },
+                    onChanged: _hasScrap
+                        ? (value) {
+                            setState(() {
+                              _scrapReplenished = value ?? false;
+                            });
+                          }
+                        : null,
                   ),
                   const Text('报废已补充'),
                 ],
@@ -280,10 +535,12 @@ class _ProductionRepairCompleteDialogState
               const SizedBox(height: 8),
               Row(
                 children: [
-                  const Text('回流分配（仅对非报废数量生效）'),
+                  const Text('回流分配（合计需等于送修数量-未补充报废数量）'),
                   const Spacer(),
                   OutlinedButton.icon(
-                    onPressed: widget.processOptions.isEmpty ? null : _addAllocation,
+                    onPressed: widget.processOptions.isEmpty
+                        ? null
+                        : _addAllocation,
                     icon: const Icon(Icons.add, size: 16),
                     label: const Text('新增回流项'),
                   ),
@@ -363,26 +620,30 @@ class _ProductionRepairCompleteDialogState
           onPressed: () => Navigator.of(context).pop(null),
           child: const Text('取消'),
         ),
-        FilledButton(
-          onPressed: _submit,
-          child: const Text('提交完成'),
-        ),
+        FilledButton(onPressed: _submit, child: const Text('提交完成')),
       ],
     );
   }
 }
 
 class _RepairCauseDraft {
-  _RepairCauseDraft({required this.phenomenon, required this.quantity})
-    : reasonController = TextEditingController();
+  _RepairCauseDraft({
+    required this.phenomenon,
+    required this.reasonCategory,
+    required this.reason,
+    int? quantity,
+  }) : quantityController = TextEditingController(
+         text: quantity == null || quantity <= 0 ? '' : '$quantity',
+       );
 
-  final String phenomenon;
-  final int quantity;
-  final TextEditingController reasonController;
+  String phenomenon;
+  String reasonCategory;
+  String reason;
+  final TextEditingController quantityController;
   bool isScrap = false;
 
   void dispose() {
-    reasonController.dispose();
+    quantityController.dispose();
   }
 }
 

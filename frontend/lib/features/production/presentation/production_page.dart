@@ -286,6 +286,9 @@ class _ProductionPageState extends State<ProductionPage>
         canComplete: _hasPermission(
           ProductionFeaturePermissionCodes.repairOrdersManage,
         ),
+        canReturnToProduction: _hasPermission(
+          ProductionFeaturePermissionCodes.repairOrdersManage,
+        ),
         canExport: _hasPermission(
           ProductionFeaturePermissionCodes.repairOrdersExport,
         ),

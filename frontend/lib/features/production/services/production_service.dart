@@ -383,6 +383,7 @@ class ProductionService implements RepairScrapService {
     String? viewMode,
     int? proxyOperatorUserId,
     String? orderStatus,
+    String? subOrderStatus,
     int? currentProcessId,
   }) async {
     final normalizedPageSize = pageSize.clamp(1, 200).toInt();
@@ -403,6 +404,11 @@ class ProductionService implements RepairScrapService {
         orderStatus.trim().isNotEmpty &&
         orderStatus.trim() != 'all') {
       query['order_status'] = orderStatus.trim();
+    }
+    if (subOrderStatus != null &&
+        subOrderStatus.trim().isNotEmpty &&
+        subOrderStatus.trim() != 'all') {
+      query['sub_order_status'] = subOrderStatus.trim();
     }
     if (currentProcessId != null && currentProcessId > 0) {
       query['current_process_id'] = '$currentProcessId';
@@ -465,6 +471,7 @@ class ProductionService implements RepairScrapService {
     String viewMode = 'own',
     int? proxyOperatorUserId,
     String? orderStatus,
+    String? subOrderStatus,
     int? currentProcessId,
   }) async {
     final payload = <String, dynamic>{'view_mode': viewMode};
@@ -478,6 +485,11 @@ class ProductionService implements RepairScrapService {
         orderStatus.trim().isNotEmpty &&
         orderStatus.trim() != 'all') {
       payload['order_status'] = orderStatus.trim();
+    }
+    if (subOrderStatus != null &&
+        subOrderStatus.trim().isNotEmpty &&
+        subOrderStatus.trim() != 'all') {
+      payload['sub_order_status'] = subOrderStatus.trim();
     }
     if (currentProcessId != null && currentProcessId > 0) {
       payload['current_process_id'] = currentProcessId;
@@ -531,10 +543,15 @@ class ProductionService implements RepairScrapService {
   listFirstArticleParticipantOptions({
     required int orderId,
     required int orderProcessId,
+    int? effectiveOperatorUserId,
   }) async {
+    final query = <String, String>{'order_process_id': '$orderProcessId'};
+    if (effectiveOperatorUserId != null && effectiveOperatorUserId > 0) {
+      query['effective_operator_user_id'] = '$effectiveOperatorUserId';
+    }
     final uri = Uri.parse(
       '$_basePath/orders/$orderId/first-article/participant-users',
-    ).replace(queryParameters: {'order_process_id': '$orderProcessId'});
+    ).replace(queryParameters: query);
     final response = await http
         .get(uri, headers: _authHeaders)
         .timeout(const Duration(seconds: 30));
@@ -1146,7 +1163,8 @@ class ProductionService implements RepairScrapService {
   Future<RepairOrderItem> createManualRepairOrder({
     required int orderId,
     required int orderProcessId,
-    required int productionQuantity,
+    int? effectiveOperatorUserId,
+    int? assistAuthorizationId,
     required List<ProductionDefectItemInput> defectItems,
   }) async {
     final uri = Uri.parse('$_basePath/orders/$orderId/repair-orders');
@@ -1156,7 +1174,10 @@ class ProductionService implements RepairScrapService {
           headers: _authHeaders,
           body: jsonEncode({
             'order_process_id': orderProcessId,
-            'production_quantity': productionQuantity,
+            if (effectiveOperatorUserId != null)
+              'effective_operator_user_id': effectiveOperatorUserId,
+            if (assistAuthorizationId != null)
+              'assist_authorization_id': assistAuthorizationId,
             'defect_items': defectItems.map((item) => item.toJson()).toList(),
           }),
         )
@@ -1212,6 +1233,32 @@ class ProductionService implements RepairScrapService {
                 .map((item) => item.toJson())
                 .toList(),
           }),
+        )
+        .timeout(const Duration(seconds: 30));
+    final body = _decodeBody(response);
+    if (response.statusCode != 200) {
+      throw ApiException(
+        _extractErrorMessage(body, response.statusCode),
+        response.statusCode,
+      );
+    }
+    final data = (body['data'] as Map<String, dynamic>?) ?? const {};
+    return RepairOrderItem.fromJson(data);
+  }
+
+  @override
+  Future<RepairOrderItem> returnRepairOrderToProduction({
+    required int repairOrderId,
+    required String password,
+  }) async {
+    final uri = Uri.parse(
+      '$_basePath/repair-orders/$repairOrderId/return-to-production',
+    );
+    final response = await http
+        .post(
+          uri,
+          headers: _authHeaders,
+          body: jsonEncode({'password': password}),
         )
         .timeout(const Duration(seconds: 30));
     final body = _decodeBody(response);

@@ -10,6 +10,7 @@ class QualityRepairOrdersPage extends StatelessWidget {
     required this.session,
     required this.onLogout,
     required this.canComplete,
+    required this.canReturnToProduction,
     required this.canExport,
     this.jumpPayloadJson,
     this.service,
@@ -18,6 +19,7 @@ class QualityRepairOrdersPage extends StatelessWidget {
   final AppSession session;
   final VoidCallback onLogout;
   final bool canComplete;
+  final bool canReturnToProduction;
   final bool canExport;
   final String? jumpPayloadJson;
   final QualityService? service;
@@ -28,6 +30,7 @@ class QualityRepairOrdersPage extends StatelessWidget {
       session: session,
       onLogout: onLogout,
       canComplete: canComplete,
+      canReturnToProduction: canReturnToProduction,
       canExport: canExport,
       jumpPayloadJson: jumpPayloadJson,
       service: service ?? QualityService(session),

@@ -49,6 +49,11 @@ abstract class RepairScrapService {
     required List<RepairReturnAllocationInput> returnAllocations,
   });
 
+  Future<RepairOrderItem> returnRepairOrderToProduction({
+    required int repairOrderId,
+    required String password,
+  });
+
   Future<ProductionExportResult> exportRepairOrders({
     String? keyword,
     String status = 'all',

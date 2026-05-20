@@ -11,6 +11,7 @@ String normalizeApiErrorMessage(String message, {int? statusCode}) {
     'Account is rejected, please resubmit registration': '账号注册申请已驳回，请重新提交注册申请',
     'Deleted user cannot be enabled': '已删除用户不能启用',
     'Active assist authorization already exists': '已存在生效中的代班授权',
+    'Current stage operator does not require assist authorization': '本工段操作员无需发起代班',
     'Current process pipeline instance already exists for requested sequence':
         '请求的工序序号已存在对应的流水线实例',
     'Current session not found': '当前会话不存在',
@@ -143,6 +144,14 @@ String normalizeApiErrorMessage(String message, {int? statusCode}) {
   }
   if (normalized == 'First article result must be passed or failed') {
     return '首件结果只能是通过或不通过';
+  }
+
+  final inProgressRepairOrdersMatch = RegExp(
+    r'^Order has in-progress repair orders that must be completed first:\s*(.+)$',
+  ).firstMatch(normalized);
+  if (inProgressRepairOrdersMatch != null) {
+    return '该订单仍有维修中的维修单，请先完成维修单后再手工完工：'
+        '${inProgressRepairOrdersMatch.group(1)!.trim()}';
   }
 
   final alreadyCompletedMatch = RegExp(

@@ -116,7 +116,7 @@ class _ProductionScrapStatisticsDetailPageState
         builder: (_) => ProductionRepairOrderDetailPage(
           session: widget.session,
           onLogout: widget.onLogout,
-          repairOrderId: item.id,
+          repairOrderId: item.aggregateAnchorRepairOrderId ?? item.id,
           repairOrderCode: item.repairOrderCode,
           service: _service,
         ),

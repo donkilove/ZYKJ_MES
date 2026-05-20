@@ -1016,6 +1016,8 @@ class ProductionPermissionCodes {
   static const String dataManualExport = 'production.data.manual.export';
   static const String scrapExport = 'production.scrap_statistics.export';
   static const String repairComplete = 'production.repair_orders.complete';
+  static const String repairReturnToProduction =
+      'production.repair_orders.return_to_production';
   static const String repairExport = 'production.repair_orders.export';
   static const String repairCreateManual =
       'production.repair_orders.create_manual';
@@ -1197,6 +1199,8 @@ class QualityPermissionCodes {
   static const String statsOverview = 'quality.stats.overview';
   static const String statsProcesses = 'quality.stats.processes';
   static const String statsOperators = 'quality.stats.operators';
+  static const String repairReturnToProduction =
+      'quality.repair_orders.return_to_production';
 }
 
 class UserFeaturePermissionCodes {

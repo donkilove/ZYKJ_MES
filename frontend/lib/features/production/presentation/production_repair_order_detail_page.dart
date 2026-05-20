@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:mes_client/core/ui/patterns/mes_detail_page_header.dart';
-import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_error_state.dart';
+import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
 import 'package:mes_client/core/ui/patterns/mes_section_card.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
-import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/core/network/api_exception.dart';
+import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/services/production_service.dart';
 import 'package:mes_client/features/quality/services/repair_scrap_service.dart';
 
@@ -89,6 +89,13 @@ class _ProductionRepairOrderDetailPageState
     return '${local.year}-$mm-$dd $hh:$min';
   }
 
+  String _formatProductionQuantity(int value) {
+    if (value <= 0) {
+      return '未报工';
+    }
+    return '$value';
+  }
+
   Widget _row(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -118,7 +125,7 @@ class _ProductionRepairOrderDetailPageState
       parts.add('类型${item.productionRecordType}');
     }
     if (item.productionRecordQuantity != null) {
-      parts.add('报工数${item.productionRecordQuantity}');
+      parts.add('报工量${item.productionRecordQuantity}');
     }
     if (item.productionSubOrderId != null) {
       parts.add('子单#${item.productionSubOrderId}');
@@ -133,9 +140,8 @@ class _ProductionRepairOrderDetailPageState
   Widget build(BuildContext context) {
     final detail = _detail;
     final title =
-        widget.repairOrderCode ??
-        detail?.repairOrderCode ??
-        '#${widget.repairOrderId}';
+        widget.repairOrderCode ?? detail?.repairOrderCode ?? '#${widget.repairOrderId}';
+
     return Scaffold(
       body: _loading
           ? const MesLoadingState(label: '维修详情加载中...')
@@ -149,9 +155,7 @@ class _ProductionRepairOrderDetailPageState
               child: ListView(
                 children: [
                   KeyedSubtree(
-                    key: const ValueKey(
-                      'production-repair-order-detail-page-header',
-                    ),
+                    key: const ValueKey('production-repair-order-detail-page-header'),
                     child: MesDetailPageHeader(title: '维修详情 - $title'),
                   ),
                   const SizedBox(height: 16),
@@ -166,17 +170,55 @@ class _ProductionRepairOrderDetailPageState
                         _row('工序', detail.sourceProcessName),
                         _row('送修人', detail.senderUsername ?? '-'),
                         _row('维修人', detail.repairOperatorUsername ?? '-'),
-                        _row('生产数量', '${detail.productionQuantity}'),
+                        _row('生产数量', _formatProductionQuantity(detail.productionQuantity)),
                         _row('送修数量', '${detail.repairQuantity}'),
                         _row('已修数量', '${detail.repairedQuantity}'),
                         _row('报废数量', '${detail.scrapQuantity}'),
                         _row('报废已补', detail.scrapReplenished ? '是' : '否'),
                         _row('状态', repairOrderStatusLabel(detail.status)),
+                        if (detail.isAggregated)
+                          _row('聚合状态', detail.aggregateStatus ?? '-'),
                         _row('送修时间', _formatDateTime(detail.repairTime)),
                         _row('完成时间', _formatDateTime(detail.completedAt)),
                       ],
                     ),
                   ),
+                  if (detail.phenomenonSummary.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    MesSectionCard(
+                      title: '现象汇总',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: detail.phenomenonSummary
+                            .map(
+                              (item) => Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: Text('• ${item.phenomenon}：${item.quantity}件'),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  ],
+                  if (detail.causeSummary.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    MesSectionCard(
+                      title: '原因汇总',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: detail.causeSummary
+                            .map(
+                              (item) => Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: Text(
+                                  '• ${item.phenomenon} -> ${item.reason}：${item.quantity}件${item.isScrap ? '，报废' : ''}',
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  ],
                   if (detail.defectRows.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     MesSectionCard(
@@ -209,7 +251,7 @@ class _ProductionRepairOrderDetailPageState
                               (item) => Padding(
                                 padding: const EdgeInsets.only(bottom: 4),
                                 child: Text(
-                                  '• ${item.phenomenon} → ${item.reason}（${item.quantity}件${item.isScrap ? '，报废' : ''}）',
+                                  '• ${item.phenomenon} -> ${item.reason}（${item.quantity}件${item.isScrap ? '，报废' : ''}）',
                                 ),
                               ),
                             )
@@ -227,8 +269,25 @@ class _ProductionRepairOrderDetailPageState
                             .map(
                               (item) => Padding(
                                 padding: const EdgeInsets.only(bottom: 4),
+                                child: Text('• ${item.targetProcessName}（${item.returnQuantity}件）'),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  ],
+                  if (detail.childRepairOrders.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    MesSectionCard(
+                      title: '原始维修单',
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: detail.childRepairOrders
+                            .map(
+                              (item) => Padding(
+                                padding: const EdgeInsets.only(bottom: 6),
                                 child: Text(
-                                  '• ${item.targetProcessName}（${item.returnQuantity}件）',
+                                  '${item.repairOrderCode} | ${repairOrderStatusLabel(item.status)} | 送修:${item.repairQuantity} 已修:${item.repairedQuantity} 报废:${item.scrapQuantity} | 生产:${_formatProductionQuantity(item.productionQuantity)}',
                                 ),
                               ),
                             )

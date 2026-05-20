@@ -210,10 +210,12 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         ? userCompleted
         : item.processCompletedQuantity;
     final producible = item.maxProducibleQuantity;
+    final manualRepair = item.currentCycleManualRepairQuantity;
+    final manualRepairText = manualRepair > 0 ? ' / 已送修$manualRepair' : '';
     if (assigned != null) {
-      return '可生产$producible / 分配$assigned / 完成$completed';
+      return '可生产$producible$manualRepairText / 分配$assigned / 完成$completed';
     }
-    return '可生产$producible / 完成$completed';
+    return '可生产$producible$manualRepairText / 完成$completed';
   }
 
   Future<String?> _saveExportFile({
@@ -267,7 +269,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
             : _keywordController.text.trim(),
         viewMode: _viewMode,
         proxyOperatorUserId: _proxyOperatorUserId,
-        orderStatus: _orderStatusFilter,
+        subOrderStatus: _orderStatusFilter,
         currentProcessId: _currentProcessIdFilter,
       );
       if (!mounted) {
@@ -514,7 +516,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
         keyword: _keywordController.text.trim(),
         viewMode: _viewMode,
         proxyOperatorUserId: _proxyOperatorUserId,
-        orderStatus: _orderStatusFilter,
+        subOrderStatus: _orderStatusFilter,
         currentProcessId: _currentProcessIdFilter,
       );
       if (!mounted) return;
@@ -724,7 +726,10 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
       final currentItem = await _refreshActionableOrderContext(
         item: item,
         canProceed: (target) =>
-            target.canEndProduction && target.maxProducibleQuantity > 0,
+            target.canEndProduction &&
+            (target.maxProducibleQuantity +
+                    target.currentCycleManualRepairQuantity) >
+                0,
         unavailableMessage: '当前工单已无可结束生产数量，请刷新后重试',
       );
       if (currentItem == null) {
@@ -795,7 +800,8 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
       await _service.createManualRepairOrder(
         orderId: currentItem.orderId,
         orderProcessId: currentItem.currentProcessId,
-        productionQuantity: payload.productionQuantity,
+        effectiveOperatorUserId: currentItem.operatorUserId,
+        assistAuthorizationId: currentItem.assistAuthorizationId,
         defectItems: payload.defectItems,
       );
       if (!mounted) {
@@ -1109,7 +1115,7 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
             DropdownMenuItem(value: 'all', child: Text('全部')),
             DropdownMenuItem(value: 'pending', child: Text('待生产')),
             DropdownMenuItem(value: 'in_progress', child: Text('生产中')),
-            DropdownMenuItem(value: 'completed', child: Text('生产完成')),
+            DropdownMenuItem(value: 'done', child: Text('已完成')),
           ],
           onChanged: (value) {
             if (value == null || value == _orderStatusFilter) {
@@ -1293,7 +1299,12 @@ class _ProductionOrderQueryPageState extends State<ProductionOrderQueryPage> {
                 ),
                 DataCell(Text(item.currentProcessName)),
                 DataCell(Text(_buildProducibleSummary(item))),
-                DataCell(ProductionOrderStatusChip(status: item.orderStatus)),
+                DataCell(
+                  ProductionOrderStatusChip(
+                    status: item.subOrderStatus,
+                    label: myOrderRuntimeStatusLabel(item.subOrderStatus),
+                  ),
+                ),
                 DataCell(Text(_formatDate(item.dueDate))),
                 DataCell(Text(remark == null || remark.isEmpty ? '-' : remark)),
                 DataCell(

@@ -4,6 +4,7 @@ import 'package:mes_client/core/models/app_session.dart';
 import 'package:mes_client/core/network/api_exception.dart';
 import 'package:mes_client/core/ui/patterns/mes_refresh_page_header.dart';
 import 'package:mes_client/features/craft/models/craft_models.dart';
+import 'package:mes_client/features/production/models/defect_catalog.dart';
 import 'package:mes_client/features/production/models/production_models.dart';
 import 'package:mes_client/features/production/presentation/production_first_article_page.dart';
 import 'package:mes_client/features/production/presentation/production_order_query_detail_page.dart';
@@ -23,6 +24,9 @@ String _extractColumnLabel(Widget widget) {
   }
   if (widget is Padding) {
     return _extractColumnLabel(widget.child!);
+  }
+  if (widget is Flexible) {
+    return _extractColumnLabel(widget.child);
   }
   throw StateError('未识别的列表表头组件：${widget.runtimeType}');
 }
@@ -45,8 +49,9 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
   int assistAuthorizationCallCount = 0;
   int? lastEndProductionQuantity;
   List<ProductionDefectItemInput> lastEndProductionDefects = const [];
-  int? lastManualRepairProductionQuantity;
   List<ProductionDefectItemInput> lastManualRepairDefects = const [];
+  int? lastManualRepairEffectiveOperatorUserId;
+  int? lastManualRepairAssistAuthorizationId;
   int? lastTargetOperatorUserId;
   int? lastHelperUserId;
   String? lastAssistReason;
@@ -58,6 +63,50 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
   Object? proxyOperatorOptionsError;
   Object? proxyViewOperatorOptionsError;
   Object? assistUserOptionsError;
+  Object? assistAuthorizationError;
+
+  MyOrderItem _buildMyOrderItem({required int page, int? orderId}) {
+    return MyOrderItem(
+      orderId: orderId ?? page,
+      orderCode: 'PO-QUERY-00$page',
+      productId: 10,
+      productName: '产线试产件$page',
+      supplierName: null,
+      quantity: 12,
+      orderStatus: 'in_progress',
+      currentProcessId: 21,
+      currentStageId: 5,
+      currentStageCode: 'CUT',
+      currentStageName: '切割段',
+      currentProcessCode: 'CUT-01',
+      currentProcessName: '切割',
+      currentProcessOrder: 1,
+      processStatus: 'in_progress',
+      subOrderStatus: 'in_progress',
+      visibleQuantity: 12,
+      processCompletedQuantity: processCompletedQuantity,
+      userSubOrderId: 31,
+      userAssignedQuantity: 12,
+      userCompletedQuantity: userCompletedQuantity,
+      operatorUserId: returnAssistViewItems ? 99 : 8,
+      operatorUsername: returnAssistViewItems ? 'lisi' : 'zhangsan',
+      workView: returnAssistViewItems ? 'assist' : 'own',
+      assistAuthorizationId: returnAssistViewItems ? 99 : null,
+      pipelineInstanceId: 301,
+      pipelineInstanceNo: 'P1-31-1-PIPE0001',
+      pipelineModeEnabled: true,
+      pipelineStartAllowed: true,
+      pipelineEndAllowed: true,
+      maxProducibleQuantity: 8,
+      canFirstArticle: true,
+      canEndProduction: true,
+      canApplyAssist: true,
+      canCreateManualRepair: true,
+      dueDate: DateTime.parse('2026-03-18T00:00:00Z'),
+      remark: '',
+      updatedAt: DateTime.parse('2026-03-01T08:00:00Z'),
+    );
+  }
 
   @override
   Future<MyOrderListResult> listMyOrders({
@@ -67,54 +116,28 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
     String? viewMode,
     int? proxyOperatorUserId,
     String? orderStatus,
+    String? subOrderStatus,
     int? currentProcessId,
   }) async {
     requestedPages.add(page);
     lastKeyword = keyword;
-    lastOrderStatus = orderStatus ?? 'all';
+    lastOrderStatus = subOrderStatus ?? 'all';
     return MyOrderListResult(
       total: 401,
-      items: [
-        MyOrderItem(
-          orderId: 1,
-          orderCode: 'PO-QUERY-00$page',
-          productId: 10,
-          productName: '产线试产件$page',
-          supplierName: null,
-          quantity: 12,
-          orderStatus: 'in_progress',
-          currentProcessId: 21,
-          currentStageId: 5,
-          currentStageCode: 'CUT',
-          currentStageName: '切割段',
-          currentProcessCode: 'CUT-01',
-          currentProcessName: '切割',
-          currentProcessOrder: 1,
-          processStatus: 'in_progress',
-          visibleQuantity: 12,
-          processCompletedQuantity: processCompletedQuantity,
-          userSubOrderId: 31,
-          userAssignedQuantity: 12,
-          userCompletedQuantity: userCompletedQuantity,
-          operatorUserId: returnAssistViewItems ? 99 : 8,
-          operatorUsername: returnAssistViewItems ? 'lisi' : 'zhangsan',
-          workView: returnAssistViewItems ? 'assist' : 'own',
-          assistAuthorizationId: returnAssistViewItems ? 99 : null,
-          pipelineInstanceId: 301,
-          pipelineInstanceNo: 'P1-31-1-PIPE0001',
-          pipelineModeEnabled: true,
-          pipelineStartAllowed: true,
-          pipelineEndAllowed: true,
-          maxProducibleQuantity: 8,
-          canFirstArticle: true,
-          canEndProduction: true,
-          canApplyAssist: true,
-          canCreateManualRepair: true,
-          dueDate: DateTime.parse('2026-03-18T00:00:00Z'),
-          remark: '',
-          updatedAt: DateTime.parse('2026-03-01T08:00:00Z'),
-        ),
-      ],
+      items: [_buildMyOrderItem(page: page, orderId: 1)],
+    );
+  }
+
+  @override
+  Future<MyOrderContextResult> getMyOrderContext({
+    required int orderId,
+    int? orderProcessId,
+    String? viewMode,
+    int? proxyOperatorUserId,
+  }) async {
+    return MyOrderContextResult(
+      found: true,
+      item: _buildMyOrderItem(page: 1, orderId: orderId),
     );
   }
 
@@ -124,13 +147,14 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
     String viewMode = 'own',
     int? proxyOperatorUserId,
     String? orderStatus,
+    String? subOrderStatus,
     int? currentProcessId,
   }) async {
     exportCallCount += 1;
     lastKeyword = keyword;
     lastExportViewMode = viewMode;
     lastExportProxyOperatorUserId = proxyOperatorUserId;
-    lastExportOrderStatus = orderStatus ?? 'all';
+    lastExportOrderStatus = subOrderStatus ?? 'all';
     lastExportCurrentProcessId = currentProcessId;
     return ProductionExportResult(
       fileName: 'my-orders.csv',
@@ -165,6 +189,8 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
             username: 'stage1_operator',
             fullName: '一段操作员',
             roleCodes: const ['operator'],
+            stageId: 1,
+            stageName: '切割段',
           ),
         ],
         2 => [
@@ -173,6 +199,8 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
             username: 'stage2_operator',
             fullName: '二段操作员',
             roleCodes: const ['operator'],
+            stageId: 2,
+            stageName: '组装段',
           ),
         ],
         _ => [
@@ -181,12 +209,16 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
             username: 'stage1_operator',
             fullName: '一段操作员',
             roleCodes: const ['operator'],
+            stageId: 1,
+            stageName: '切割段',
           ),
           AssistUserOptionItem(
             id: 201,
             username: 'stage2_operator',
             fullName: '二段操作员',
             roleCodes: const ['operator'],
+            stageId: 2,
+            stageName: '组装段',
           ),
         ],
       };
@@ -196,13 +228,31 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
       throw assistUserOptionsError!;
     }
     return AssistUserOptionListResult(
-      total: 1,
+      total: 3,
       items: [
         AssistUserOptionItem(
           id: 301,
           username: 'helper_user',
           fullName: '代班人',
-          roleCodes: const ['assist'],
+          roleCodes: const ['production_admin'],
+          stageId: null,
+          stageName: null,
+        ),
+        AssistUserOptionItem(
+          id: 302,
+          username: 'same_stage_operator',
+          fullName: '同工段操作员',
+          roleCodes: const ['operator'],
+          stageId: 5,
+          stageName: '切割段',
+        ),
+        AssistUserOptionItem(
+          id: 303,
+          username: 'other_stage_operator',
+          fullName: '异工段操作员',
+          roleCodes: const ['operator'],
+          stageId: 6,
+          stageName: '抛光段',
         ),
       ],
     );
@@ -230,7 +280,11 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
 
   @override
   Future<FirstArticleParticipantOptionListResult>
-  listFirstArticleParticipantOptions({required int orderId}) async {
+  listFirstArticleParticipantOptions({
+    required int orderId,
+    required int orderProcessId,
+    int? effectiveOperatorUserId,
+  }) async {
     return FirstArticleParticipantOptionListResult(
       total: 1,
       items: [
@@ -383,12 +437,14 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
   Future<RepairOrderItem> createManualRepairOrder({
     required int orderId,
     required int orderProcessId,
-    required int productionQuantity,
+    int? effectiveOperatorUserId,
+    int? assistAuthorizationId,
     required List<ProductionDefectItemInput> defectItems,
   }) async {
     manualRepairCallCount += 1;
-    lastManualRepairProductionQuantity = productionQuantity;
     lastManualRepairDefects = defectItems;
+    lastManualRepairEffectiveOperatorUserId = effectiveOperatorUserId;
+    lastManualRepairAssistAuthorizationId = assistAuthorizationId;
     return RepairOrderItem.fromJson({
       'id': 501,
       'order_id': orderId,
@@ -397,13 +453,14 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
       'process_code': 'CUT-01',
       'process_name': '切割',
       'status': 'in_repair',
-      'production_quantity': productionQuantity,
-      'defect_quantity': defectItems.fold<int>(
-        0,
-        (sum, item) => sum + item.quantity,
-      ),
-      'operator_user_id': 8,
-      'operator_username': 'zhangsan',
+      'production_quantity': 0,
+      'repair_quantity': defectItems.fold<int>(0, (sum, item) => sum + item.quantity),
+      'repaired_quantity': 0,
+      'scrap_quantity': 0,
+      'scrap_replenished': false,
+      'sender_user_id': 8,
+      'sender_username': 'zhangsan',
+      'repair_time': '2026-03-01T00:00:00Z',
       'created_at': '2026-03-01T00:00:00Z',
       'updated_at': '2026-03-01T00:00:00Z',
     });
@@ -417,6 +474,9 @@ class _FakeProductionOrderQueryPageService extends ProductionService {
     required int helperUserId,
     String? reason,
   }) async {
+    if (assistAuthorizationError != null) {
+      throw assistAuthorizationError!;
+    }
     assistAuthorizationCallCount += 1;
     lastTargetOperatorUserId = targetOperatorUserId;
     lastHelperUserId = helperUserId;
@@ -483,7 +543,7 @@ Finder _findDropdownByLabel(String labelText) {
   );
 }
 
-MyOrderItem _buildDialogOrderItem() {
+MyOrderItem _buildDialogOrderItem({int currentCycleManualRepairQuantity = 0}) {
   return MyOrderItem(
     orderId: 1,
     orderCode: 'PO-QUERY-001',
@@ -515,6 +575,7 @@ MyOrderItem _buildDialogOrderItem() {
     pipelineStartAllowed: true,
     pipelineEndAllowed: true,
     maxProducibleQuantity: 8,
+    currentCycleManualRepairQuantity: currentCycleManualRepairQuantity,
     canFirstArticle: true,
     canEndProduction: true,
     canApplyAssist: true,
@@ -677,7 +738,7 @@ void main() {
     expect(find.text('PO-QUERY-001'), findsAtLeastNWidgets(1));
     expect(find.text('产线试产件1'), findsOneWidget);
     expect(find.text('切割'), findsOneWidget);
-    expect(find.text('可见12 / 分配12 / 完成4'), findsAtLeastNWidgets(1));
+    expect(find.text('可生产8 / 分配12 / 完成4'), findsAtLeastNWidgets(1));
     expect(find.text('2026-03-18'), findsOneWidget);
     expect(find.text('-'), findsWidgets);
     expect(find.text('订单编号'), findsAtLeastNWidgets(1));
@@ -723,6 +784,15 @@ void main() {
     await tester.pump();
 
     expect(service.lastOrderStatus, 'in_progress');
+
+    await tester.tap(
+      find.widgetWithText(DropdownButtonFormField<String>, '生产中'),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('已完成').last);
+    await tester.pump();
+
+    expect(service.lastOrderStatus, 'done');
   });
 
   testWidgets('订单查询页个人完成数为0时回退展示工序完成数', (tester) async {
@@ -753,8 +823,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
-    expect(find.text('可见12 / 分配12 / 完成4'), findsAtLeastNWidgets(1));
-    expect(find.text('可见12 / 分配12 / 完成0'), findsNothing);
+    expect(find.text('可生产8 / 分配12 / 完成4'), findsAtLeastNWidgets(1));
+    expect(find.text('可生产8 / 分配12 / 完成0'), findsNothing);
   });
 
   testWidgets('订单查询页桌面较窄宽度下仍尽量保持单行', (tester) async {
@@ -1429,20 +1499,27 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(OutlinedButton, '新增'));
     await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('production-end-defect-phenomenon-0')),
+      findsOneWidget,
+    );
+    expect(find.text(productionDefectPhenomena.first), findsOneWidget);
     final endFields = find.descendant(
       of: find.byType(AlertDialog),
       matching: find.byType(TextField),
     );
     await tester.enterText(endFields.at(0), '3');
-    await tester.enterText(endFields.at(1), '毛刺');
-    await tester.enterText(endFields.at(2), '1');
+    await tester.enterText(endFields.at(1), '1');
     await tester.tap(find.widgetWithText(FilledButton, '提交'));
     await tester.pumpAndSettle();
 
     expect(service.endProductionCallCount, 1);
     expect(service.lastEndProductionQuantity, 3);
     expect(service.lastEndProductionDefects, hasLength(1));
-    expect(service.lastEndProductionDefects.first.phenomenon, '毛刺');
+    expect(
+      service.lastEndProductionDefects.first.phenomenon,
+      productionDefectPhenomena.first,
+    );
     expect(find.text('结束生产成功'), findsOneWidget);
   });
 
@@ -1475,20 +1552,25 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('送修').last);
     await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('production-manual-repair-phenomenon-0')),
+      findsOneWidget,
+    );
+    expect(find.text(productionDefectPhenomena.first), findsOneWidget);
     final repairFields = find.descendant(
       of: find.byType(AlertDialog),
       matching: find.byType(TextField),
     );
     await tester.enterText(repairFields.at(0), '4');
-    await tester.enterText(repairFields.at(1), '裂纹');
-    await tester.enterText(repairFields.at(2), '2');
     await tester.tap(find.widgetWithText(FilledButton, '提交建单'));
     await tester.pumpAndSettle();
 
     expect(service.manualRepairCallCount, 1);
-    expect(service.lastManualRepairProductionQuantity, 4);
     expect(service.lastManualRepairDefects, hasLength(1));
-    expect(service.lastManualRepairDefects.first.phenomenon, '裂纹');
+    expect(
+      service.lastManualRepairDefects.first.phenomenon,
+      productionDefectPhenomena.first,
+    );
   });
 
   testWidgets('订单查询页发起代班主链路可用', (tester) async {
@@ -1520,6 +1602,10 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('代班').last);
     await tester.pumpAndSettle();
+    await tester.tap(_findDropdownByLabel('代班角色'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('生产管理员').last);
+    await tester.pumpAndSettle();
     await tester.tap(_findDropdownByLabel('代班人'));
     await tester.pumpAndSettle();
     await tester.tap(find.textContaining('helper_user').last);
@@ -1532,6 +1618,226 @@ void main() {
     expect(service.lastTargetOperatorUserId, 8);
     expect(service.lastHelperUserId, 301);
     expect(service.lastAssistReason, '夜班支援');
+  });
+
+  testWidgets('发起代班弹窗会排除当前工段操作员和工段选项', (tester) async {
+    await _setWideViewport(tester);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionApplyAssistDialog(
+            order: _buildDialogOrderItem(),
+            targetOperators: [
+              AssistUserOptionItem(
+                id: 8,
+                username: 'zhangsan',
+                fullName: '张三',
+                roleCodes: ['operator'],
+                stageId: 5,
+                stageName: '切割段',
+              ),
+            ],
+            assistUsers: [
+              AssistUserOptionItem(
+                id: 302,
+                username: 'same_stage_operator',
+                fullName: '同工段操作员',
+                roleCodes: ['operator'],
+                stageId: 5,
+                stageName: '切割段',
+              ),
+              AssistUserOptionItem(
+                id: 303,
+                username: 'other_stage_operator',
+                fullName: '异工段操作员',
+                roleCodes: ['operator'],
+                stageId: 6,
+                stageName: '抛光段',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('同工段操作员'), findsNothing);
+    expect(find.widgetWithText(DropdownButtonFormField<String>, '代班角色'), findsOneWidget);
+    expect(find.widgetWithText(DropdownButtonFormField<int>, '代班工段'), findsOneWidget);
+    expect(find.text('抛光段'), findsOneWidget);
+    expect(find.text('切割段'), findsAtLeastNWidgets(1));
+    expect(find.text('本工段操作员无需发起代班'), findsNothing);
+
+    await tester.tap(_findDropdownByLabel('代班人'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('same_stage_operator'), findsNothing);
+    expect(find.textContaining('other_stage_operator'), findsOneWidget);
+  });
+
+  testWidgets('发起代班弹窗在操作员无候选时自动切到其他角色', (tester) async {
+    await _setWideViewport(tester);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionApplyAssistDialog(
+            order: _buildDialogOrderItem(),
+            targetOperators: [
+              AssistUserOptionItem(
+                id: 8,
+                username: 'zhangsan',
+                fullName: '张三',
+                roleCodes: ['operator'],
+                stageId: 5,
+                stageName: '切割段',
+              ),
+            ],
+            assistUsers: [
+              AssistUserOptionItem(
+                id: 302,
+                username: 'same_stage_operator',
+                fullName: '同工段操作员',
+                roleCodes: ['operator'],
+                stageId: 5,
+                stageName: '切割段',
+              ),
+              AssistUserOptionItem(
+                id: 301,
+                username: 'helper_user',
+                fullName: '代班人',
+                roleCodes: ['production_admin'],
+                stageId: null,
+                stageName: null,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final roleField = tester.widget<DropdownButtonFormField<String>>(
+      _findDropdownByLabel('代班角色'),
+    );
+    expect(roleField.initialValue, 'production_admin');
+    expect(find.byType(FilledButton), findsOneWidget);
+    final button = tester.widget<FilledButton>(find.byType(FilledButton));
+    expect(button.onPressed, isNotNull);
+  });
+
+  testWidgets('发起代班弹窗无可选代班人时禁用提交并显示提示', (tester) async {
+    await _setWideViewport(tester);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionApplyAssistDialog(
+            order: _buildDialogOrderItem(),
+            targetOperators: [
+              AssistUserOptionItem(
+                id: 8,
+                username: 'zhangsan',
+                fullName: '张三',
+                roleCodes: ['operator'],
+                stageId: 5,
+                stageName: '切割段',
+              ),
+            ],
+            assistUsers: [
+              AssistUserOptionItem(
+                id: 302,
+                username: 'same_stage_operator',
+                fullName: '同工段操作员',
+                roleCodes: ['operator'],
+                stageId: 5,
+                stageName: '切割段',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('本工段操作员无需发起代班'), findsOneWidget);
+    final button = tester.widget<FilledButton>(find.byType(FilledButton));
+    expect(button.onPressed, isNull);
+  });
+
+  testWidgets('订单查询页发起代班允许不同代班人并拦截同一代班人重复授权', (tester) async {
+    final service = _FakeProductionOrderQueryPageService();
+    await _setWideViewport(tester);
+
+    Future<void> openAssistDialog() async {
+      await tester.tap(find.byType(PopupMenuButton<String>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('代班').last);
+      await tester.pumpAndSettle();
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionOrderQueryPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canFirstArticle: true,
+            canEndProduction: true,
+            canCreateManualRepairOrder: true,
+            canCreateAssistAuthorization: true,
+            canProxyView: false,
+            canExportCsv: false,
+            service: service,
+            pollInterval: Duration.zero,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    await openAssistDialog();
+    await tester.tap(_findDropdownByLabel('代班角色'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('生产管理员').last);
+    await tester.pumpAndSettle();
+    await tester.tap(_findDropdownByLabel('代班人'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('helper_user').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '发起代班'));
+    await tester.pumpAndSettle();
+
+    expect(service.assistAuthorizationCallCount, 1);
+    expect(service.lastHelperUserId, 301);
+
+    await openAssistDialog();
+    await tester.tap(_findDropdownByLabel('代班人'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('other_stage_operator').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '发起代班'));
+    await tester.pumpAndSettle();
+
+    expect(service.assistAuthorizationCallCount, 2);
+    expect(service.lastHelperUserId, 303);
+
+    service.assistAuthorizationError = ApiException('已存在生效中的代班授权', 409);
+    await openAssistDialog();
+    await tester.tap(_findDropdownByLabel('代班角色'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('生产管理员').last);
+    await tester.pumpAndSettle();
+    await tester.tap(_findDropdownByLabel('代班人'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('helper_user').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '发起代班'));
+    await tester.pumpAndSettle();
+
+    expect(service.assistAuthorizationCallCount, 2);
   });
 
   testWidgets('订单查询页发起代班选项加载失败会展示错误提示', (tester) async {
@@ -1586,7 +1892,24 @@ void main() {
     expect(find.text('结束生产'), findsOneWidget);
     expect(find.text('生产结果'), findsOneWidget);
     expect(find.text('不良现象（可选）'), findsOneWidget);
-    expect(find.text('有效流转数量'), findsOneWidget);
+    expect(find.text('本次生产数量'), findsOneWidget);
+    expect(find.text('有效流转数量'), findsNothing);
+    expect(find.textContaining('预计流转至下一工序'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '新增'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(OutlinedButton, '新增'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('production-end-defect-phenomenon-0')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('production-end-defect-phenomenon-1')),
+      findsOneWidget,
+    );
+    expect(find.text(productionDefectPhenomena.first), findsNWidgets(2));
   });
 
   testWidgets('手工送修弹窗展示宽版骨架', (tester) async {
@@ -1606,7 +1929,20 @@ void main() {
     expect(find.text('手工送修建单'), findsOneWidget);
     expect(find.text('建单信息'), findsOneWidget);
     expect(find.text('不良现象明细'), findsOneWidget);
-    expect(find.text('本次生产数量'), findsOneWidget);
+    expect(find.text('本次生产数量'), findsNothing);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '新增'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('production-manual-repair-phenomenon-0')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('production-manual-repair-phenomenon-1')),
+      findsOneWidget,
+    );
+    expect(find.text(productionDefectPhenomena.first), findsNWidgets(2));
   });
 
   testWidgets('发起代班弹窗展示宽版骨架', (tester) async {
@@ -1621,6 +1957,8 @@ void main() {
                 username: 'zhangsan',
                 fullName: '张三',
                 roleCodes: ['operator'],
+                stageId: 1,
+                stageName: '切割段',
               ),
             ],
             assistUsers: [
@@ -1629,6 +1967,8 @@ void main() {
                 username: 'helper_user',
                 fullName: '代班人',
                 roleCodes: ['assist'],
+                stageId: null,
+                stageName: null,
               ),
             ],
           ),
@@ -1643,7 +1983,7 @@ void main() {
     );
     expect(find.text('发起代班'), findsAtLeastNWidgets(2));
     expect(find.text('代班安排'), findsOneWidget);
-    expect(find.text('目标操作员'), findsOneWidget);
+    expect(find.text('目标对象：'), findsOneWidget);
     expect(find.text('代班人'), findsOneWidget);
   });
 
@@ -1726,6 +2066,80 @@ void main() {
     expect(service.lastEndProductionEffectiveOperatorUserId, 99);
     expect(service.lastEndProductionAssistAuthorizationId, 99);
     expect(service.lastEndProductionQuantity, 3);
+  });
+
+  testWidgets('结束生产弹窗按手工送修量展示生产上限和预计流转数', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionEndProductionDialog(
+            order: _buildDialogOrderItem(currentCycleManualRepairQuantity: 2),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('生产中已手工送修：2'), findsOneWidget);
+    expect(find.textContaining('本次最多可填生产数量：10'), findsOneWidget);
+    expect(find.textContaining('预计流转至下一工序：8 件'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '新增'));
+    await tester.pumpAndSettle();
+    final fields = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(fields.at(1), '3');
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('预计流转至下一工序：5 件'), findsOneWidget);
+  });
+
+  testWidgets('代班视角手工送修时传递帮助者ID和授权ID', (tester) async {
+    final service = _FakeProductionOrderQueryPageService()
+      ..returnAssistViewItems = true;
+    await _setWideViewport(tester);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProductionOrderQueryPage(
+            session: AppSession(baseUrl: '', accessToken: ''),
+            onLogout: () {},
+            canFirstArticle: true,
+            canEndProduction: true,
+            canCreateManualRepairOrder: true,
+            canCreateAssistAuthorization: true,
+            canProxyView: false,
+            canExportCsv: false,
+            service: service,
+            pollInterval: Duration.zero,
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(PopupMenuButton<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('送修').last);
+    await tester.pumpAndSettle();
+
+    final fields = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(fields.at(0), '4');
+    await tester.tap(find.widgetWithText(FilledButton, '提交建单'));
+    await tester.pumpAndSettle();
+
+    expect(service.manualRepairCallCount, 1);
+    expect(service.lastManualRepairEffectiveOperatorUserId, 99);
+    expect(service.lastManualRepairAssistAuthorizationId, 99);
   });
 
   testWidgets('代班视角结束生产弹窗展示必需字段', (tester) async {

@@ -211,6 +211,9 @@ class _QualityPageState extends State<QualityPage>
           canComplete: widget.permissionCodes.contains(
             'quality.repair_orders.complete',
           ),
+          canReturnToProduction: widget.permissionCodes.contains(
+            'quality.repair_orders.return_to_production',
+          ),
           canExport: widget.permissionCodes.contains(
             'quality.repair_orders.export',
           ),

@@ -16,6 +16,9 @@ void main() {
     expect(productionSubOrderStatusLabel('in_progress'), '执行中');
     expect(productionSubOrderStatusLabel('done'), isNot('done'));
     expect(productionSubOrderStatusLabel('y'), 'y');
+    expect(myOrderRuntimeStatusLabel('pending'), '待生产');
+    expect(myOrderRuntimeStatusLabel('in_progress'), '生产中');
+    expect(myOrderRuntimeStatusLabel('done'), '已完成');
     expect(repairOrderStatusLabel('in_repair'), isNot('in_repair'));
     expect(repairOrderStatusLabel('completed'), isNot('completed'));
     expect(scrapProgressLabel('pending_apply'), isNot('pending_apply'));
@@ -169,6 +172,7 @@ void main() {
       'supplier_name': '供应商甲',
       'quantity': 300,
       'order_status': 'in_progress',
+      'sub_order_status': 'pending',
       'current_process_id': 8,
       'current_stage_id': 1,
       'current_stage_code': '01',
@@ -188,12 +192,14 @@ void main() {
       'pipeline_start_allowed': true,
       'pipeline_end_allowed': false,
       'max_producible_quantity': 30,
+      'current_cycle_manual_repair_quantity': 4,
       'can_first_article': true,
       'can_end_production': false,
       'due_date': '2026-03-20',
       'remark': '订单备注',
       'updated_at': '2026-03-01T00:00:00Z',
     });
+    expect(myOrder.currentCycleManualRepairQuantity, 4);
     final action = ProductionActionResult.fromJson({
       'order_id': 9,
       'status': 'ok',
@@ -257,6 +263,7 @@ void main() {
     expect(myOrder.pipelineInstanceNo, 'P9-10-2-ABCD1234');
     expect(myOrder.pipelineStartAllowed, isTrue);
     expect(myOrder.pipelineEndAllowed, isFalse);
+    expect(myOrder.subOrderStatus, 'pending');
     expect(myOrder.supplierName, '供应商甲');
     expect(myOrder.dueDate, isNotNull);
     expect(myOrder.remark, '订单备注');

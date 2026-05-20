@@ -11,7 +11,9 @@ void main() {
       final server = await TestHttpServer.start({
         'POST /quality/first-articles/export': (request) {
           final body = request.decodedBody as Map<String, dynamic>? ?? const {};
-          expect(body['query_date'], '2026-03-05');
+          expect(body['start_date'], '2026-03-05');
+          expect(body['end_date'], '2026-03-05');
+          expect(body.containsKey('query_date'), isFalse);
           expect(body['keyword'], '工单A');
           expect(body['result'], 'failed');
           expect(body.containsKey('result_filter'), isFalse);
@@ -118,10 +120,7 @@ void main() {
         AppSession(baseUrl: server.baseUrl, accessToken: 'quality-token'),
       );
 
-      await service.cancelFirstArticle(
-        recordId: 9,
-        password: 'Admin@123456',
-      );
+      await service.cancelFirstArticle(recordId: 9, password: 'Admin@123456');
     });
 
     test('deleteFirstArticle payload matches backend schema', () async {
@@ -138,10 +137,7 @@ void main() {
         AppSession(baseUrl: server.baseUrl, accessToken: 'quality-token'),
       );
 
-      await service.deleteFirstArticle(
-        recordId: 9,
-        password: 'Admin@123456',
-      );
+      await service.deleteFirstArticle(recordId: 9, password: 'Admin@123456');
     });
 
     test('detail and disposition detail use independent endpoints', () async {
@@ -475,6 +471,32 @@ void main() {
             },
           );
         },
+        'POST /quality/repair-orders/7/return-to-production': (request) {
+          final body = request.decodedBody as Map<String, dynamic>? ?? const {};
+          expect(body['password'], 'Pass123');
+          return TestResponse.json(
+            200,
+            body: {
+              'data': {
+                'id': 7,
+                'repair_order_code': 'RW-7',
+                'source_order_code': 'PO-21',
+                'product_name': '产品Q',
+                'source_process_code': 'QA-01',
+                'source_process_name': '检验',
+                'production_quantity': 10,
+                'repair_quantity': 3,
+                'repaired_quantity': 0,
+                'scrap_quantity': 0,
+                'scrap_replenished': false,
+                'repair_time': '2026-03-05T09:00:00Z',
+                'status': 'returned_to_production',
+                'created_at': '2026-03-05T09:00:00Z',
+                'updated_at': '2026-03-05T10:00:00Z',
+              },
+            },
+          );
+        },
         'POST /quality/repair-orders/export': (_) {
           return TestResponse.json(
             200,
@@ -530,6 +552,10 @@ void main() {
           ),
         ],
       );
+      final returned = await service.returnRepairOrderToProduction(
+        repairOrderId: 7,
+        password: 'Pass123',
+      );
       final repairExport = await service.exportRepairOrders(keyword: 'RW-7');
 
       expect(scrapList.total, 1);
@@ -539,6 +565,7 @@ void main() {
       expect(phenomena.items.single.quantity, 3);
       expect(scrapExport.fileName, 'quality_scrap.csv');
       expect(completed.status, 'completed');
+      expect(returned.status, 'returned_to_production');
       expect(repairExport.fileName, 'quality_repair.csv');
     });
 

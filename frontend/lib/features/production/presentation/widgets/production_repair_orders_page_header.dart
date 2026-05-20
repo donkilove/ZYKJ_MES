@@ -71,6 +71,10 @@ class ProductionRepairOrdersPageHeader extends StatelessWidget {
                   DropdownMenuItem(value: 'all', child: Text('全部')),
                   DropdownMenuItem(value: 'in_repair', child: Text('维修中')),
                   DropdownMenuItem(value: 'completed', child: Text('已完成')),
+                  DropdownMenuItem(
+                    value: 'returned_to_production',
+                    child: Text('已退回生产'),
+                  ),
                 ],
                 onChanged: loading
                     ? null

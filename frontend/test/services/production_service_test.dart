@@ -46,6 +46,7 @@ Map<String, dynamic> _myOrderJson({
     'product_name': 'Product-A',
     'quantity': 100,
     'order_status': 'pending',
+    'sub_order_status': 'pending',
     'current_process_id': 11,
     'current_stage_id': 1,
     'current_stage_code': '01',
@@ -66,6 +67,7 @@ Map<String, dynamic> _myOrderJson({
     'pipeline_instance_id': 301,
     'pipeline_instance_no': 'P1-12-1-PIPE0001',
     'max_producible_quantity': 10,
+    'current_cycle_manual_repair_quantity': 0,
     'can_first_article': canFirstArticle,
     'can_end_production': canEndProduction,
     'updated_at': '2026-03-01T00:00:00Z',
@@ -380,6 +382,7 @@ void main() {
                 request.uri.queryParameters['proxy_operator_user_id'],
                 '8',
               );
+              expect(request.uri.queryParameters['sub_order_status'], 'in_progress');
               return TestResponse.json(
                 200,
                 body: {
@@ -454,7 +457,12 @@ void main() {
               },
             );
           },
-          'GET /production/orders/1/first-article/participant-users': (_) {
+          'GET /production/orders/1/first-article/participant-users': (request) {
+            expect(request.uri.queryParameters['order_process_id'], '11');
+            expect(
+              request.uri.queryParameters['effective_operator_user_id'],
+              '8',
+            );
             return TestResponse.json(
               200,
               body: {
@@ -763,7 +771,7 @@ void main() {
             expect(body['keyword'], 'mine');
             expect(body['view_mode'], 'proxy');
             expect(body['proxy_operator_user_id'], 8);
-            expect(body['order_status'], 'in_progress');
+            expect(body['sub_order_status'], 'in_progress');
             expect(body['current_process_id'], 11);
             return TestResponse.json(
               200,
@@ -934,7 +942,9 @@ void main() {
           'POST /production/orders/1/repair-orders': (request) {
             final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
             expect(body['order_process_id'], 11);
-            expect(body['production_quantity'], 6);
+            expect(body.containsKey('production_quantity'), isFalse);
+            expect(body['effective_operator_user_id'], 8);
+            expect(body['assist_authorization_id'], 99);
             expect((body['defect_items'] as List).length, 1);
             return TestResponse.json(
               201,
@@ -972,6 +982,20 @@ void main() {
                   id: 1,
                   code: 'RW-1',
                   status: 'completed',
+                ),
+              },
+            );
+          },
+          'POST /production/repair-orders/1/return-to-production': (request) {
+            final body = jsonDecode(request.bodyText) as Map<String, dynamic>;
+            expect(body['password'], 'Pass123');
+            return TestResponse.json(
+              200,
+              body: {
+                'data': _repairOrderJson(
+                  id: 1,
+                  code: 'RW-1',
+                  status: 'returned_to_production',
                 ),
               },
             );
@@ -1064,6 +1088,7 @@ void main() {
           pageSize: 20,
           viewMode: 'proxy',
           proxyOperatorUserId: 8,
+          subOrderStatus: 'in_progress',
         );
         final myOrderContext = await service.getMyOrderContext(
           orderId: 1,
@@ -1076,7 +1101,11 @@ void main() {
           orderProcessId: 11,
         );
         final firstArticleParticipants = await service
-            .listFirstArticleParticipantOptions(orderId: 1);
+            .listFirstArticleParticipantOptions(
+              orderId: 1,
+              orderProcessId: 11,
+              effectiveOperatorUserId: 8,
+            );
         final firstArticleParameters = await service.getFirstArticleParameters(
           orderId: 1,
           orderProcessId: 11,
@@ -1173,7 +1202,7 @@ void main() {
           keyword: ' mine ',
           viewMode: 'proxy',
           proxyOperatorUserId: 8,
-          orderStatus: 'in_progress',
+          subOrderStatus: 'in_progress',
           currentProcessId: 11,
         );
         final productOptions = await service.listProductOptions();
@@ -1210,7 +1239,8 @@ void main() {
         final manualRepair = await service.createManualRepairOrder(
           orderId: 1,
           orderProcessId: 11,
-          productionQuantity: 6,
+          effectiveOperatorUserId: 8,
+          assistAuthorizationId: 99,
           defectItems: const [
             ProductionDefectItemInput(phenomenon: '划伤', quantity: 1),
           ],
@@ -1233,6 +1263,10 @@ void main() {
             RepairReturnAllocationInput(targetOrderProcessId: 11, quantity: 1),
             RepairReturnAllocationInput(targetOrderProcessId: 12, quantity: 1),
           ],
+        );
+        final returnedRepair = await service.returnRepairOrderToProduction(
+          repairOrderId: 1,
+          password: 'Pass123',
         );
         final repairExport = await service.exportRepairOrders(
           status: 'in_repair',
@@ -1287,8 +1321,9 @@ void main() {
         expect(manualRepair.id, 2);
         expect(repairSummary.items.single.phenomenon, '毛刺');
         expect(completedRepair.status, 'completed');
+        expect(returnedRepair.status, 'returned_to_production');
         expect(repairExport.fileName, 'repair.csv');
-        expect(server.requests.length, 42);
+        expect(server.requests.length, 43);
       },
     );
 

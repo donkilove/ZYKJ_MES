@@ -16,6 +16,7 @@ class _FakeProductionFirstArticleService extends ProductionService {
     : super(AppSession(baseUrl: '', accessToken: ''));
 
   _ReviewDraft? lastReviewDraft;
+  int? lastParticipantOptionsEffectiveOperatorUserId;
   FirstArticleReviewSessionResult reviewSessionResult =
       FirstArticleReviewSessionResult(
         sessionId: 88,
@@ -61,9 +62,14 @@ class _FakeProductionFirstArticleService extends ProductionService {
 
   @override
   Future<FirstArticleParticipantOptionListResult>
-  listFirstArticleParticipantOptions({required int orderId}) async {
+  listFirstArticleParticipantOptions({
+    required int orderId,
+    required int orderProcessId,
+    int? effectiveOperatorUserId,
+  }) async {
+    lastParticipantOptionsEffectiveOperatorUserId = effectiveOperatorUserId;
     return FirstArticleParticipantOptionListResult(
-      total: 2,
+      total: 3,
       items: [
         FirstArticleParticipantOptionItem(
           id: 8,
@@ -74,6 +80,11 @@ class _FakeProductionFirstArticleService extends ProductionService {
           id: 9,
           username: 'helper',
           fullName: '李四',
+        ),
+        FirstArticleParticipantOptionItem(
+          id: 10,
+          username: 'assistant',
+          fullName: '王五',
         ),
       ],
     );
@@ -161,7 +172,15 @@ class _ReviewDraft {
   final int? assistAuthorizationId;
 }
 
-MyOrderItem _buildOrder() {
+MyOrderItem _buildOrder({
+  int? operatorUserId = 8,
+  String? operatorUsername = 'worker',
+  String workView = 'own',
+  int? assistAuthorizationId = 99,
+  bool canEndProduction = true,
+  bool canApplyAssist = true,
+  bool canCreateManualRepair = true,
+}) {
   return MyOrderItem(
     orderId: 1,
     orderCode: 'PO-1',
@@ -176,6 +195,8 @@ MyOrderItem _buildOrder() {
     currentStageName: '切割段',
     currentProcessCode: '01-01',
     currentProcessName: '切割',
+    currentProcessFirstArticleCheckContent: '',
+    currentProcessFirstArticleTestValue: '',
     currentProcessOrder: 1,
     processStatus: 'in_progress',
     visibleQuantity: 10,
@@ -183,10 +204,10 @@ MyOrderItem _buildOrder() {
     userSubOrderId: 21,
     userAssignedQuantity: 10,
     userCompletedQuantity: 5,
-    operatorUserId: 8,
-    operatorUsername: 'worker',
-    workView: 'own',
-    assistAuthorizationId: 99,
+    operatorUserId: operatorUserId,
+    operatorUsername: operatorUsername,
+    workView: workView,
+    assistAuthorizationId: assistAuthorizationId,
     pipelineInstanceId: 501,
     pipelineInstanceNo: 'PIPE-501',
     pipelineModeEnabled: true,
@@ -194,9 +215,9 @@ MyOrderItem _buildOrder() {
     pipelineEndAllowed: true,
     maxProducibleQuantity: 5,
     canFirstArticle: true,
-    canEndProduction: true,
-    canApplyAssist: true,
-    canCreateManualRepair: true,
+    canEndProduction: canEndProduction,
+    canApplyAssist: canApplyAssist,
+    canCreateManualRepair: canCreateManualRepair,
     dueDate: DateTime.parse('2026-03-10T00:00:00Z'),
     remark: '备注',
     updatedAt: DateTime.parse('2026-03-01T00:00:00Z'),
@@ -204,7 +225,7 @@ MyOrderItem _buildOrder() {
 }
 
 void main() {
-  testWidgets('独立首件录入页发起扫码复核并显示等待状态', (tester) async {
+  testWidgets('首件录入页发起扫码复核时排除当前主操作员', (tester) async {
     final service = _FakeProductionFirstArticleService();
     const expectedReviewUrl =
         'http://192.168.1.20:8000/first-article-review?token=abc';
@@ -228,6 +249,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
+    expect(service.lastParticipantOptionsEffectiveOperatorUserId, 8);
     expect(find.textContaining('首件录入'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('production-first-article-page-header')),
@@ -237,14 +259,6 @@ void main() {
     expect(find.text('产品A'), findsOneWidget);
     expect(find.text('切割'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(OutlinedButton, '首件模板'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('默认模板'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('模板检验内容'), findsOneWidget);
-    expect(find.text('9.86'), findsOneWidget);
-
     await tester.tap(find.widgetWithText(OutlinedButton, '查看参数'));
     await tester.pumpAndSettle();
     expect(find.text('长度'), findsOneWidget);
@@ -253,17 +267,20 @@ void main() {
 
     await tester.tap(find.widgetWithText(OutlinedButton, '添加操作员'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('worker (张三)'));
+    expect(find.text('worker (张三)'), findsNothing);
     await tester.tap(find.text('helper (李四)'));
+    await tester.tap(find.text('assistant (王五)'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '确定'));
     await tester.pumpAndSettle();
 
-    expect(find.text('worker (张三)'), findsOneWidget);
     expect(find.text('helper (李四)'), findsOneWidget);
+    expect(find.text('assistant (王五)'), findsOneWidget);
+    expect(find.text('worker (张三)'), findsNothing);
 
-    expect(find.text('首件检验码'), findsNothing);
-    expect(find.text('不合格'), findsNothing);
+    await tester.enterText(find.byType(TextField).at(0), '首件检查内容');
+    await tester.enterText(find.byType(TextField).at(1), '10.01');
+    await tester.pump();
 
     await tester.ensureVisible(find.widgetWithText(FilledButton, '发起扫码复核'));
     await tester.tap(find.widgetWithText(FilledButton, '发起扫码复核'));
@@ -271,21 +288,12 @@ void main() {
 
     expect(find.text('等待质检扫码复核'), findsOneWidget);
     expect(find.byType(QrImageView), findsOneWidget);
-    expect(find.text('刷新二维码'), findsOneWidget);
     expect(find.text(expectedReviewUrl), findsOneWidget);
     expect(service.lastReviewDraft, isNotNull);
-    expect(service.lastReviewDraft?.templateId, 7);
-    expect(service.lastReviewDraft?.checkContent, '模板检验内容');
-    expect(service.lastReviewDraft?.testValue, '9.86');
-    expect(service.lastReviewDraft?.participantUserIds, [8, 9]);
+    expect(service.lastReviewDraft?.templateId, isNull);
+    expect(service.lastReviewDraft?.participantUserIds, [9, 10]);
     expect(service.lastReviewDraft?.pipelineInstanceId, 501);
     expect(service.lastReviewDraft?.assistAuthorizationId, 99);
-
-    await tester.pump(const Duration(seconds: 4));
-    await tester.pump();
-
-    expect(find.byType(QrImageView), findsOneWidget);
-    expect(find.text(expectedReviewUrl), findsOneWidget);
 
     service.statusResult = FirstArticleReviewSessionResult(
       sessionId: 88,
@@ -301,6 +309,43 @@ void main() {
     await tester.pump();
 
     expect(find.text('首件扫码复核已通过'), findsOneWidget);
+  });
+
+  testWidgets('代班视角按目标主操作员过滤参与操作员候选', (tester) async {
+    final service = _FakeProductionFirstArticleService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProductionFirstArticlePage(
+          session: AppSession(
+            baseUrl: 'http://127.0.0.1:8000/api/v1',
+            accessToken: '',
+          ),
+          onLogout: () {},
+          order: _buildOrder(
+            operatorUserId: 9,
+            operatorUsername: 'helper',
+            workView: 'assist',
+            canEndProduction: false,
+            canApplyAssist: false,
+            canCreateManualRepair: false,
+          ),
+          service: service,
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(service.lastParticipantOptionsEffectiveOperatorUserId, 9);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '添加操作员'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('helper (李四)'), findsNothing);
+    expect(find.text('worker (张三)'), findsOneWidget);
+    expect(find.text('assistant (王五)'), findsOneWidget);
   });
 
   testWidgets('首件模板选择弹窗展示统一骨架', (tester) async {
