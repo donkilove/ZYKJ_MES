@@ -716,10 +716,7 @@ void main() {
     );
     expect(find.text('一级原因'), findsOneWidget);
     expect(find.text('二级原因'), findsOneWidget);
-    expect(
-      find.text('回流分配（合计需等于送修数量-未补充报废数量）'),
-      findsOneWidget,
-    );
+    expect(find.text('回流分配（合计需等于送修数量-未补充报废数量）'), findsOneWidget);
     expect(find.text('报废已补充'), findsOneWidget);
 
     final scrapReplenishedFinder = find.byKey(
@@ -800,7 +797,7 @@ void main() {
                       'created_at': '2026-03-01T00:00:00Z',
                       'updated_at': '2026-03-01T00:00:00Z',
                     }),
-                    phenomena: const [
+                    phenomena: [
                       RepairOrderPhenomenonSummaryItem(
                         phenomenon: '毛刺',
                         quantity: 2,
