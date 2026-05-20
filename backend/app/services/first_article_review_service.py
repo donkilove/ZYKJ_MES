@@ -10,10 +10,13 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models.first_article_record import FirstArticleRecord
 from app.models.first_article_review_session import FirstArticleReviewSession
-from app.models.production_assist_authorization import ProductionAssistAuthorization
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
 from app.models.user import User
+from app.services.assist_authorization_service import (
+    ASSIST_OP_FIRST_ARTICLE,
+    get_usable_assist_authorization_for_operation,
+)
 from app.services.production_event_log_service import add_order_event_log
 from app.services.production_execution_service import (
     _get_first_article_template,
@@ -24,6 +27,7 @@ from app.services.production_execution_service import (
     _lock_sub_order,
     _normalize_optional_text,
     _normalize_participant_user_ids,
+    _validate_participant_users_exclude_effective_operator,
     submit_first_article,
 )
 
@@ -149,29 +153,21 @@ def _prepare_first_article_draft(
         order_process_id=order_process_id,
     )
     effective_operator_user_id = operator.id
+    assist_row = None
     if assist_authorization_id is not None:
-        assist_row = (
-            db.execute(
-                select(ProductionAssistAuthorization)
-                .where(ProductionAssistAuthorization.id == assist_authorization_id)
-                .with_for_update()
-            )
-            .scalars()
-            .first()
+        assist_row = get_usable_assist_authorization_for_operation(
+            db,
+            authorization_id=assist_authorization_id,
+            order_id=order_id,
+            order_process_id=order_process_id,
+            helper_user_id=operator.id,
+            operation=ASSIST_OP_FIRST_ARTICLE,
         )
-        if assist_row is None:
-            raise ValueError("Assist authorization not found")
-        if assist_row.order_id != order_id or assist_row.order_process_id != order_process_id:
-            raise ValueError("Assist authorization does not match order process")
-        if assist_row.helper_user_id != operator.id:
-            raise PermissionError("Current user cannot use this assist authorization")
-        if assist_row.status != "approved":
-            raise ValueError("Assist authorization is not approved")
-        effective_operator_user_id = int(assist_row.target_operator_user_id)
     _ensure_effective_operator_can_operate_process(
         db,
         effective_operator_user_id=effective_operator_user_id,
         process_row=process_row,
+        assist_authorization_row=assist_row,
     )
     sub_order = _lock_sub_order(
         db,
@@ -209,6 +205,10 @@ def _prepare_first_article_draft(
     normalized_participant_user_ids = _normalize_participant_user_ids(
         db,
         participant_user_ids=participant_user_ids,
+    )
+    _validate_participant_users_exclude_effective_operator(
+        participant_user_ids=normalized_participant_user_ids,
+        effective_operator_user_id=effective_operator_user_id,
     )
     return (
         order,

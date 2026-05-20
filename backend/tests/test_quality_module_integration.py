@@ -850,6 +850,99 @@ class QualityModuleIntegrationTest(unittest.TestCase):
         self.assertIn("虚焊", csv_lines[1])
         self.assertIn(record.order.product.name, csv_lines[1])
 
+    def test_quality_return_to_production_excludes_stats_but_keeps_repair_trace(
+        self,
+    ) -> None:
+        record = self._create_first_article_record(result="failed")
+        repair_order = self._create_repair_order(record=record, repair_quantity=4)
+        self._create_repair_defect(
+            repair_order=repair_order,
+            phenomenon="退回虚焊",
+            quantity=4,
+        )
+        product_name = record.order.product.name
+        product_id = record.order.product_id
+
+        response = self.client.post(
+            f"/api/v1/quality/repair-orders/{repair_order.id}/return-to-production",
+            headers=self._headers(),
+            json={"password": "Admin@123456"},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["data"]["status"], "returned_to_production")
+
+        list_response = self.client.get(
+            "/api/v1/quality/repair-orders",
+            headers=self._headers(),
+            params={
+                "status": "returned_to_production",
+                "keyword": repair_order.repair_order_code,
+            },
+        )
+        self.assertEqual(list_response.status_code, 200, list_response.text)
+        self.assertEqual(list_response.json()["data"]["total"], 1)
+
+        detail_response = self.client.get(
+            f"/api/v1/quality/repair-orders/{repair_order.id}/detail",
+            headers=self._headers(),
+        )
+        self.assertEqual(detail_response.status_code, 200, detail_response.text)
+        detail_payload = detail_response.json()["data"]
+        self.assertEqual(detail_payload["status"], "returned_to_production")
+        self.assertEqual(detail_payload["defect_rows"][0]["quantity"], 4)
+        self.assertTrue(
+            any(
+                item["event_type"] == "repair_order_returned_to_production"
+                for item in detail_payload["event_logs"]
+            )
+        )
+
+        overview_response = self.client.get(
+            "/api/v1/quality/stats/overview",
+            headers=self._headers(),
+            params={
+                "start_date": "2026-03-01",
+                "end_date": "2026-03-03",
+                "product_name": product_name,
+            },
+        )
+        self.assertEqual(overview_response.status_code, 200, overview_response.text)
+        overview_payload = overview_response.json()["data"]
+        self.assertEqual(overview_payload["defect_total"], 0)
+        self.assertEqual(overview_payload["repair_total"], 0)
+
+        analysis_response = self.client.get(
+            "/api/v1/quality/defect-analysis",
+            headers=self._headers(),
+            params={
+                "start_date": "2026-03-01",
+                "end_date": "2026-03-03",
+                "product_id": product_id,
+            },
+        )
+        self.assertEqual(analysis_response.status_code, 200, analysis_response.text)
+        self.assertEqual(
+            analysis_response.json()["data"]["total_defect_quantity"],
+            0,
+        )
+
+        export_response = self.client.post(
+            "/api/v1/quality/defect-analysis/export",
+            headers=self._headers(),
+            params={
+                "start_date": "2026-03-01",
+                "end_date": "2026-03-03",
+                "product_id": product_id,
+            },
+        )
+        self.assertEqual(export_response.status_code, 200, export_response.text)
+        export_payload = export_response.json()["data"]
+        csv_text = base64.b64decode(export_payload["content_base64"]).decode(
+            "utf-8-sig"
+        )
+        self.assertEqual(export_payload["total_rows"], 0)
+        self.assertNotIn("退回虚焊", csv_text)
+
     def test_disposition_requires_failed_record_and_preserves_history(self) -> None:
         failed_record = self._create_first_article_record(result="failed")
         passed_record = self._create_first_article_record(result="passed")
@@ -1954,6 +2047,45 @@ class QualityModuleIntegrationTest(unittest.TestCase):
         detail_payload = detail_response.json()["data"]
         self.assertEqual(detail_payload["progress"], "applied")
         self.assertIsNotNone(detail_payload["applied_at"])
+
+    def test_quality_repair_completion_requires_full_return_total_when_scrap_replenished(
+        self,
+    ) -> None:
+        record = self._create_first_article_record(result="failed")
+        repair_order = self._create_repair_order(record=record, repair_quantity=2)
+
+        response = self.client.post(
+            f"/api/v1/quality/repair-orders/{repair_order.id}/complete",
+            headers=self._headers(),
+            json={
+                "cause_items": [
+                    {
+                        "phenomenon": "虚焊",
+                        "reason": "报废补回",
+                        "quantity": 1,
+                        "is_scrap": True,
+                    },
+                    {
+                        "phenomenon": "虚焊",
+                        "reason": "复判回流",
+                        "quantity": 1,
+                        "is_scrap": False,
+                    },
+                ],
+                "scrap_replenished": True,
+                "return_allocations": [
+                    {
+                        "target_order_process_id": record.order_process_id,
+                        "quantity": 1,
+                    }
+                ],
+            },
+        )
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertIn(
+            "回流数量合计必须等于送修数量 2 - 未补充报废数量 0 = 2",
+            response.text,
+        )
 
 
 if __name__ == "__main__":

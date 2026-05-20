@@ -12,7 +12,10 @@ class RepairOrder(Base, TimestampMixin):
         CheckConstraint("repair_quantity > 0", name="repair_quantity_positive"),
         CheckConstraint("repaired_quantity >= 0", name="repaired_quantity_non_negative"),
         CheckConstraint("scrap_quantity >= 0", name="scrap_quantity_non_negative"),
-        CheckConstraint("status IN ('in_repair', 'completed')", name="status_allowed"),
+        CheckConstraint(
+            "status IN ('in_repair', 'completed', 'returned_to_production')",
+            name="status_allowed",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)

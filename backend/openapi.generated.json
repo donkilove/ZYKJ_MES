@@ -9433,6 +9433,22 @@
             }
           },
           {
+            "name": "sub_order_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sub Order Status"
+            }
+          },
+          {
             "name": "current_process_id",
             "in": "query",
             "required": false,
@@ -10025,6 +10041,23 @@
               "type": "integer",
               "exclusiveMinimum": 0,
               "title": "Order Process Id"
+            }
+          },
+          {
+            "name": "effective_operator_user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Effective Operator User Id"
             }
           }
         ],
@@ -11167,6 +11200,63 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/RepairOrderCompleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RepairOrderItem_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/production/repair-orders/{repair_order_id}/return-to-production": {
+      "post": {
+        "tags": [
+          "Production"
+        ],
+        "summary": "Return Repair Order To Production Api",
+        "operationId": "return_repair_order_to_production_api_api_v1_production_repair_orders__repair_order_id__return_to_production_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "repair_order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Repair Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepairOrderReturnToProductionRequest"
               }
             }
           }
@@ -14056,6 +14146,63 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/RepairOrderCompleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_RepairOrderItem_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/quality/repair-orders/{repair_order_id}/return-to-production": {
+      "post": {
+        "tags": [
+          "Quality"
+        ],
+        "summary": "Return Quality Repair Order To Production Api",
+        "operationId": "return_quality_repair_order_to_production_api_api_v1_quality_repair_orders__repair_order_id__return_to_production_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "repair_order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Repair Order Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RepairOrderReturnToProductionRequest"
               }
             }
           }
@@ -29071,6 +29218,10 @@
             "type": "string",
             "title": "Process Status"
           },
+          "sub_order_status": {
+            "type": "string",
+            "title": "Sub Order Status"
+          },
           "visible_quantity": {
             "type": "integer",
             "title": "Visible Quantity"
@@ -29180,6 +29331,11 @@
             "type": "integer",
             "title": "Max Producible Quantity"
           },
+          "current_cycle_manual_repair_quantity": {
+            "type": "integer",
+            "title": "Current Cycle Manual Repair Quantity",
+            "default": 0
+          },
           "can_first_article": {
             "type": "boolean",
             "title": "Can First Article"
@@ -29240,6 +29396,7 @@
           "current_process_name",
           "current_process_order",
           "process_status",
+          "sub_order_status",
           "visible_quantity",
           "process_completed_quantity",
           "max_producible_quantity",
@@ -29313,6 +29470,18 @@
               }
             ],
             "title": "Order Status"
+          },
+          "sub_order_status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sub Order Status"
           },
           "current_process_id": {
             "anyOf": [
@@ -35376,6 +35545,34 @@
         ],
         "title": "RepairCauseItem"
       },
+      "RepairCauseSummaryItem": {
+        "properties": {
+          "phenomenon": {
+            "type": "string",
+            "title": "Phenomenon"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          },
+          "is_scrap": {
+            "type": "boolean",
+            "title": "Is Scrap"
+          }
+        },
+        "type": "object",
+        "required": [
+          "phenomenon",
+          "reason",
+          "quantity",
+          "is_scrap"
+        ],
+        "title": "RepairCauseSummaryItem"
+      },
       "RepairDefectPhenomenonItem": {
         "properties": {
           "id": {
@@ -35598,10 +35795,29 @@
             "exclusiveMinimum": 0.0,
             "title": "Order Process Id"
           },
-          "production_quantity": {
-            "type": "integer",
-            "exclusiveMinimum": 0.0,
-            "title": "Production Quantity"
+          "effective_operator_user_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Operator User Id"
+          },
+          "assist_authorization_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assist Authorization Id"
           },
           "defect_items": {
             "items": {
@@ -35613,8 +35829,7 @@
         },
         "type": "object",
         "required": [
-          "order_process_id",
-          "production_quantity"
+          "order_process_id"
         ],
         "title": "RepairOrderCreateRequest"
       },
@@ -35775,6 +35990,54 @@
               }
             ],
             "title": "Repair Operator Username"
+          },
+          "is_aggregated": {
+            "type": "boolean",
+            "title": "Is Aggregated",
+            "default": false
+          },
+          "aggregate_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aggregate Status"
+          },
+          "aggregate_anchor_repair_order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aggregate Anchor Repair Order Id"
+          },
+          "child_repair_orders": {
+            "items": {
+              "$ref": "#/components/schemas/RepairOrderItem"
+            },
+            "type": "array",
+            "title": "Child Repair Orders"
+          },
+          "phenomenon_summary": {
+            "items": {
+              "$ref": "#/components/schemas/RepairOrderPhenomenonSummaryItem"
+            },
+            "type": "array",
+            "title": "Phenomenon Summary"
+          },
+          "cause_summary": {
+            "items": {
+              "$ref": "#/components/schemas/RepairCauseSummaryItem"
+            },
+            "type": "array",
+            "title": "Cause Summary"
           },
           "defect_rows": {
             "items": {
@@ -35991,6 +36254,52 @@
             ],
             "title": "Repair Operator Username"
           },
+          "is_aggregated": {
+            "type": "boolean",
+            "title": "Is Aggregated",
+            "default": false
+          },
+          "aggregate_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aggregate Status"
+          },
+          "aggregate_anchor_repair_order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aggregate Anchor Repair Order Id"
+          },
+          "child_repair_order_count": {
+            "type": "integer",
+            "title": "Child Repair Order Count",
+            "default": 0
+          },
+          "child_repair_order_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Child Repair Order Ids"
+          },
+          "child_repair_order_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Child Repair Order Codes"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -36079,6 +36388,21 @@
           "quantity"
         ],
         "title": "RepairOrderPhenomenonSummaryItem"
+      },
+      "RepairOrderReturnToProductionRequest": {
+        "properties": {
+          "password": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "title": "RepairOrderReturnToProductionRequest"
       },
       "RepairOrdersExportRequest": {
         "properties": {
@@ -36931,6 +37255,45 @@
               }
             ],
             "title": "Completed At"
+          },
+          "is_aggregated": {
+            "type": "boolean",
+            "title": "Is Aggregated",
+            "default": false
+          },
+          "aggregate_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aggregate Status"
+          },
+          "aggregate_anchor_repair_order_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aggregate Anchor Repair Order Id"
+          },
+          "child_repair_order_count": {
+            "type": "integer",
+            "title": "Child Repair Order Count",
+            "default": 0
+          },
+          "child_repair_order_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Child Repair Order Ids"
           }
         },
         "type": "object",

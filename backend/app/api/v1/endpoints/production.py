@@ -38,6 +38,7 @@ from app.core.authz_catalog import (
     PERM_PROD_REPAIR_ORDERS_EXPORT,
     PERM_PROD_REPAIR_ORDERS_LIST,
     PERM_PROD_REPAIR_ORDERS_PHENOMENA_SUMMARY,
+    PERM_PROD_REPAIR_ORDERS_RETURN_TO_PRODUCTION,
     PERM_PROD_SCRAP_STATISTICS_DETAIL,
     PERM_PROD_SCRAP_STATISTICS_EXPORT,
     PERM_PROD_SCRAP_STATISTICS_LIST,
@@ -48,6 +49,7 @@ from app.core.authz_catalog import (
 )
 from app.core.production_constants import (
     ORDER_STATUS_ALL,
+    SUB_ORDER_STATUS_ALL,
 )
 from app.core.security import verify_password
 from app.core.rbac import (
@@ -121,6 +123,7 @@ from app.schemas.production import (
     RepairOrderListResult,
     RepairOrderPhenomenaSummaryResult,
     RepairOrderPhenomenonSummaryItem,
+    RepairOrderReturnToProductionRequest,
     RepairOrdersExportRequest,
     ScrapStatisticsDetailItem,
     ScrapStatisticsExportRequest,
@@ -186,15 +189,18 @@ from app.services.production_data_query_service import (
 )
 from app.services.production_repair_service import (
     RepairListFilters,
+    RepairAggregateSnapshot,
     ScrapStatisticsFilters,
     complete_repair_order,
     create_manual_repair_order,
     export_repair_orders_csv,
+    get_repair_order_aggregate_by_anchor_id,
     export_scrap_statistics_csv,
     get_repair_order_by_id,
     get_repair_order_phenomena_summary,
     list_repair_orders,
     list_scrap_statistics,
+    return_repair_order_to_production,
 )
 from app.services.production_statistics_service import (
     get_operator_stats,
@@ -423,7 +429,7 @@ def _to_order_pipeline_mode_item(payload: dict[str, object]) -> OrderPipelineMod
     )
 
 
-def _to_repair_order_item(row: RepairOrder) -> RepairOrderItem:
+def _to_repair_order_item(row: RepairAggregateSnapshot | RepairOrder) -> RepairOrderItem:
     return RepairOrderItem(
         id=row.id,
         repair_order_code=row.repair_order_code,
@@ -446,6 +452,14 @@ def _to_repair_order_item(row: RepairOrder) -> RepairOrderItem:
         completed_at=row.completed_at,
         repair_operator_user_id=row.repair_operator_user_id,
         repair_operator_username=row.repair_operator_username,
+        is_aggregated=getattr(row, "is_aggregated", False),
+        aggregate_status=getattr(row, "aggregate_status", None),
+        aggregate_anchor_repair_order_id=getattr(
+            row, "aggregate_anchor_repair_order_id", None
+        ),
+        child_repair_order_count=getattr(row, "child_repair_order_count", 0),
+        child_repair_order_ids=list(getattr(row, "child_repair_order_ids", [])),
+        child_repair_order_codes=list(getattr(row, "child_repair_order_codes", [])),
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -801,11 +815,13 @@ def get_my_orders_api(
     view_mode: str = "own",
     proxy_operator_user_id: int | None = None,
     order_status: str | None = Query(default=None),
+    sub_order_status: str | None = Query(default=None),
     current_process_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission(PERM_PROD_MY_ORDERS_LIST)),
 ) -> ApiResponse[MyOrderListResult]:
     normalized_status: str | None = None
+    normalized_sub_order_status: str | None = None
     if proxy_operator_user_id is not None and proxy_operator_user_id <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -825,6 +841,15 @@ def get_my_orders_api(
                     detail=f"Invalid order status: {order_status}",
                 )
             normalized_status = token
+    if sub_order_status is not None:
+        token = sub_order_status.strip().lower()
+        if token and token != "all":
+            if token not in SUB_ORDER_STATUS_ALL:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid sub-order status: {sub_order_status}",
+                )
+            normalized_sub_order_status = token
     try:
         total, items = list_my_orders(
             db,
@@ -835,6 +860,7 @@ def get_my_orders_api(
             view_mode=view_mode,
             proxy_operator_user_id=proxy_operator_user_id,
             order_status=normalized_status,
+            sub_order_status=normalized_sub_order_status,
             current_process_id=current_process_id,
         )
     except Exception as error:
@@ -857,6 +883,7 @@ def export_my_orders_api(
     current_user: User = Depends(require_permission(PERM_PROD_MY_ORDERS_EXPORT)),
 ) -> ApiResponse[ProductionExportResult]:
     normalized_status: str | None = None
+    normalized_sub_order_status: str | None = None
     if payload.order_status is not None:
         token = payload.order_status.strip().lower()
         if token and token != "all":
@@ -866,6 +893,15 @@ def export_my_orders_api(
                     detail=f"Invalid order status: {payload.order_status}",
                 )
             normalized_status = token
+    if payload.sub_order_status is not None:
+        token = payload.sub_order_status.strip().lower()
+        if token and token != "all":
+            if token not in SUB_ORDER_STATUS_ALL:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid sub-order status: {payload.sub_order_status}",
+                )
+            normalized_sub_order_status = token
     try:
         result = export_my_orders_csv(
             db,
@@ -874,6 +910,7 @@ def export_my_orders_api(
             view_mode=payload.view_mode,
             proxy_operator_user_id=payload.proxy_operator_user_id,
             order_status=normalized_status,
+            sub_order_status=normalized_sub_order_status,
             current_process_id=payload.current_process_id,
         )
     except Exception as error:
@@ -1192,6 +1229,7 @@ def list_first_article_templates_api(
 def list_first_article_participant_users_api(
     order_id: int,
     order_process_id: int = Query(gt=0),
+    effective_operator_user_id: int | None = Query(default=None, gt=0),
     db: Session = Depends(get_db),
     _: None = Depends(require_permission_fast(PERM_PROD_EXECUTION_FIRST_ARTICLE)),
 ) -> ApiResponse[FirstArticleParticipantOptionListResult]:
@@ -1210,6 +1248,8 @@ def list_first_article_participant_users_api(
         .scalars()
         .all()
     )
+    if effective_operator_user_id is not None:
+        rows = [row for row in rows if int(row.id) != int(effective_operator_user_id)]
     blocked_reason_by_user_id = list_user_parallel_block_reasons_for_process(
         db,
         user_ids=[int(row.id) for row in rows],
@@ -1627,7 +1667,8 @@ def create_manual_repair_order_api(
             db,
             order_id=order_id,
             order_process_id=payload.order_process_id,
-            production_quantity=payload.production_quantity,
+            effective_operator_user_id=payload.effective_operator_user_id,
+            assist_authorization_id=payload.assist_authorization_id,
             defect_items=[item.model_dump() for item in payload.defect_items],
             sender=current_user,
         )
@@ -1690,6 +1731,37 @@ def complete_repair_order_api(
     except Exception as error:
         _raise_service_error(error)
     return success_response(_to_repair_order_item(row), message="completed")
+
+
+@router.post(
+    "/repair-orders/{repair_order_id}/return-to-production",
+    response_model=ApiResponse[RepairOrderItem],
+)
+def return_repair_order_to_production_api(
+    repair_order_id: int,
+    payload: RepairOrderReturnToProductionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_permission(PERM_PROD_REPAIR_ORDERS_RETURN_TO_PRODUCTION)
+    ),
+) -> ApiResponse[RepairOrderItem]:
+    if not verify_password(payload.password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="当前登录密码错误，无法退回生产",
+        )
+    try:
+        row = return_repair_order_to_production(
+            db,
+            repair_order_id=repair_order_id,
+            operator=current_user,
+        )
+    except Exception as error:
+        _raise_service_error(error)
+    return success_response(
+        _to_repair_order_item(row),
+        message="returned_to_production",
+    )
 
 
 @router.post(
@@ -1956,11 +2028,15 @@ def _to_repair_order_detail_item(
 ) -> RepairOrderDetailItem:
     from app.schemas.production import (
         RepairCauseDetailItem,
+        RepairCauseSummaryItem,
         RepairDefectPhenomenonItem,
         RepairEventLogItem,
         RepairReturnRouteItem,
     )
 
+    defect_rows = list(getattr(row, "defect_rows", []) or [])
+    cause_rows = list(getattr(row, "cause_rows", []) or [])
+    return_routes = list(getattr(row, "return_routes", []) or [])
     return RepairOrderDetailItem(
         id=row.id,
         repair_order_code=row.repair_order_code,
@@ -1983,8 +2059,25 @@ def _to_repair_order_detail_item(
         completed_at=row.completed_at,
         repair_operator_user_id=row.repair_operator_user_id,
         repair_operator_username=row.repair_operator_username,
-        defect_rows=[
-            RepairDefectPhenomenonItem(
+        is_aggregated=bool(getattr(row, "is_aggregated", False)),
+        aggregate_status=getattr(row, "aggregate_status", None),
+        aggregate_anchor_repair_order_id=getattr(
+            row, "aggregate_anchor_repair_order_id", None
+        ),
+        child_repair_orders=[
+            _to_repair_order_item(child)
+            for child in getattr(row, "child_rows", [])
+        ],
+        phenomenon_summary=[
+            RepairOrderPhenomenonSummaryItem(**item)
+            for item in getattr(row, "phenomenon_summary", [])
+        ],
+        cause_summary=[
+            RepairCauseSummaryItem(**item)
+            for item in getattr(row, "cause_summary", [])
+            ],
+            defect_rows=[
+                RepairDefectPhenomenonItem(
                 id=d.id,
                 phenomenon=d.phenomenon,
                 quantity=d.quantity,
@@ -2004,29 +2097,29 @@ def _to_repair_order_detail_item(
                 production_record_operator_user_id=d.production_record.operator_user_id
                 if d.production_record is not None
                 else None,
-            )
-            for d in (row.defect_rows or [])
-        ],
-        cause_rows=[
-            RepairCauseDetailItem(
+                )
+                for d in defect_rows
+            ],
+            cause_rows=[
+                RepairCauseDetailItem(
                 id=c.id,
                 phenomenon=c.phenomenon,
                 reason=c.reason,
                 quantity=c.quantity,
                 is_scrap=c.is_scrap,
-            )
-            for c in (row.cause_rows or [])
-        ],
-        return_routes=[
-            RepairReturnRouteItem(
+                )
+                for c in cause_rows
+            ],
+            return_routes=[
+                RepairReturnRouteItem(
                 id=r.id,
                 target_process_id=r.target_process_id,
                 target_process_code=r.target_process_code,
                 target_process_name=r.target_process_name,
                 return_quantity=r.return_quantity,
-            )
-            for r in (row.return_routes or [])
-        ],
+                )
+                for r in return_routes
+            ],
         event_logs=[
             RepairEventLogItem(
                 id=e.id,
@@ -2138,20 +2231,18 @@ def get_scrap_statistics_detail_api(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Scrap statistics not found"
         )
-    # Query related repair orders by order/process.
     related_repairs: list[ScrapRelatedRepairItem] = []
     if row.order_id is not None:
-        repair_filters = [RepairOrder.source_order_id == row.order_id]
-        if row.process_id is not None:
-            repair_filters.append(RepairOrder.source_order_process_id == row.process_id)
-        repair_rows = (
-            db.execute(
-                sa_select(RepairOrder)
-                .where(*repair_filters)
-                .order_by(RepairOrder.repair_time.desc())
-            )
-            .scalars()
-            .all()
+        _, repair_rows = list_repair_orders(
+            db,
+            page=1,
+            page_size=200000,
+            filters=RepairListFilters(
+                keyword=row.order_code,
+                status="all",
+                start_date=None,
+                end_date=None,
+            ),
         )
         related_repairs = [
             ScrapRelatedRepairItem(
@@ -2163,8 +2254,15 @@ def get_scrap_statistics_detail_api(
                 scrap_quantity=r.scrap_quantity,
                 repair_time=r.repair_time,
                 completed_at=r.completed_at,
+                is_aggregated=r.is_aggregated,
+                aggregate_status=r.aggregate_status,
+                aggregate_anchor_repair_order_id=r.aggregate_anchor_repair_order_id,
+                child_repair_order_count=r.child_repair_order_count,
+                child_repair_order_ids=r.child_repair_order_ids,
             )
             for r in repair_rows
+            if r.source_order_id == row.order_id
+            and (row.process_id is None or r.source_order_process_id == row.process_id)
         ]
     related_logs: list[ScrapEventLogItem] = []
     if row.order_id is not None:
@@ -2233,7 +2331,7 @@ def get_repair_order_detail_api(
 ) -> ApiResponse[RepairOrderDetailItem]:
     from app.models.order_event_log import OrderEventLog
 
-    row = get_repair_order_by_id(db, repair_order_id=repair_order_id)
+    row = get_repair_order_aggregate_by_anchor_id(db, repair_order_id=repair_order_id)
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Repair order not found"
@@ -2255,7 +2353,13 @@ def get_repair_order_detail_api(
                 event.process_code_snapshot == row.source_process_code
                 or (
                     event.payload_json
-                    and f'"repair_order_id":{row.id}' in event.payload_json
+                    and (
+                        f'"repair_order_id":{row.id}' in event.payload_json
+                        or any(
+                            f'"repair_order_id":{child_id}' in event.payload_json
+                            for child_id in getattr(row, "child_repair_order_ids", [])
+                        )
+                    )
                 )
             )
         ]

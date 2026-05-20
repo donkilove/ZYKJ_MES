@@ -74,6 +74,7 @@ PERM_PROD_REPAIR_ORDERS_LIST = "production.repair_orders.list"
 PERM_PROD_REPAIR_ORDERS_CREATE_MANUAL = "production.repair_orders.create_manual"
 PERM_PROD_REPAIR_ORDERS_PHENOMENA_SUMMARY = "production.repair_orders.phenomena_summary"
 PERM_PROD_REPAIR_ORDERS_COMPLETE = "production.repair_orders.complete"
+PERM_PROD_REPAIR_ORDERS_RETURN_TO_PRODUCTION = "production.repair_orders.return_to_production"
 PERM_PROD_REPAIR_ORDERS_EXPORT = "production.repair_orders.export"
 PERM_PROD_ASSIST_AUTHORIZATIONS_LIST = "production.assist_authorizations.list"
 PERM_PROD_ASSIST_AUTHORIZATIONS_CREATE = "production.assist_authorizations.create"
@@ -95,6 +96,7 @@ PERM_QUALITY_REPAIR_ORDERS_LIST = "quality.repair_orders.list"
 PERM_QUALITY_REPAIR_ORDERS_DETAIL = "quality.repair_orders.detail"
 PERM_QUALITY_REPAIR_ORDERS_PHENOMENA_SUMMARY = "quality.repair_orders.phenomena_summary"
 PERM_QUALITY_REPAIR_ORDERS_COMPLETE = "quality.repair_orders.complete"
+PERM_QUALITY_REPAIR_ORDERS_RETURN_TO_PRODUCTION = "quality.repair_orders.return_to_production"
 PERM_QUALITY_REPAIR_ORDERS_EXPORT = "quality.repair_orders.export"
 PERM_QUALITY_FIRST_ARTICLES_SCAN_REVIEW = "quality.first_articles.scan_review"
 PERM_QUALITY_FIRST_ARTICLES_CANCEL = "quality.first_articles.cancel"
@@ -854,6 +856,12 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
         "quality_repair_orders",
     ),
     (
+        PERM_QUALITY_REPAIR_ORDERS_RETURN_TO_PRODUCTION,
+        "退回品质维修订单到生产",
+        AUTHZ_MODULE_QUALITY,
+        "quality_repair_orders",
+    ),
+    (
         PERM_QUALITY_REPAIR_ORDERS_EXPORT,
         "导出品质维修订单",
         AUTHZ_MODULE_QUALITY,
@@ -1036,6 +1044,12 @@ ACTION_DEFINITIONS: list[tuple[str, str, str, str | None]] = [
     (
         PERM_PROD_REPAIR_ORDERS_COMPLETE,
         "完成维修单",
+        AUTHZ_MODULE_PRODUCTION,
+        "production_repair_orders",
+    ),
+    (
+        PERM_PROD_REPAIR_ORDERS_RETURN_TO_PRODUCTION,
+        "退回维修单到生产",
         AUTHZ_MODULE_PRODUCTION,
         "production_repair_orders",
     ),

@@ -62,6 +62,7 @@ _FULL_TEXT_REPLACEMENTS = {
     "Account is pending approval": "账号正在审批中",
     "Deleted user cannot be enabled": "已删除用户不能启用",
     "Active assist authorization already exists": "已存在生效中的代班授权",
+    "Current stage operator does not require assist authorization": "本工段操作员无需发起代班",
     "Current process pipeline instance already exists for requested sequence": "请求的工序序号已存在对应的流水线实例",
     "Current session not found": "当前会话不存在",
     "Excel export not available (openpyxl not installed)": "Excel 导出不可用：未安装 openpyxl",

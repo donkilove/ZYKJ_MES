@@ -16,9 +16,11 @@ RECORD_TYPE_PRODUCTION = "production"
 
 REPAIR_STATUS_IN_REPAIR = "in_repair"
 REPAIR_STATUS_COMPLETED = "completed"
+REPAIR_STATUS_RETURNED_TO_PRODUCTION = "returned_to_production"
 REPAIR_STATUS_ALL = {
     REPAIR_STATUS_IN_REPAIR,
     REPAIR_STATUS_COMPLETED,
+    REPAIR_STATUS_RETURNED_TO_PRODUCTION,
 }
 
 SCRAP_PROGRESS_PENDING_APPLY = "pending_apply"
@@ -67,6 +69,14 @@ def sub_order_status_label(status: str) -> str:
     return {
         SUB_ORDER_STATUS_PENDING: "待执行",
         SUB_ORDER_STATUS_IN_PROGRESS: "执行中",
+        SUB_ORDER_STATUS_DONE: "已完成",
+    }.get(status, status)
+
+
+def my_order_sub_order_status_label(status: str) -> str:
+    return {
+        SUB_ORDER_STATUS_PENDING: "待生产",
+        SUB_ORDER_STATUS_IN_PROGRESS: "生产中",
         SUB_ORDER_STATUS_DONE: "已完成",
     }.get(status, status)
 

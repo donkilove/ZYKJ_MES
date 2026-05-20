@@ -232,6 +232,7 @@ class MyOrderItem(BaseModel):
     current_process_first_article_test_value: str = ""
     current_process_order: int
     process_status: str
+    sub_order_status: str
     visible_quantity: int
     process_completed_quantity: int
     user_sub_order_id: int | None = None
@@ -246,6 +247,7 @@ class MyOrderItem(BaseModel):
     pipeline_start_allowed: bool = False
     pipeline_end_allowed: bool = False
     max_producible_quantity: int
+    current_cycle_manual_repair_quantity: int = 0
     can_first_article: bool
     can_end_production: bool
     can_apply_assist: bool = False
@@ -674,7 +676,8 @@ class ProductionDataManualExportResult(BaseModel):
 
 class RepairOrderCreateRequest(BaseModel):
     order_process_id: int = Field(gt=0)
-    production_quantity: int = Field(gt=0)
+    effective_operator_user_id: int | None = Field(default=None, gt=0)
+    assist_authorization_id: int | None = Field(default=None, gt=0)
     defect_items: list[ProductionDefectItem] = Field(default_factory=list)
 
 
@@ -694,6 +697,10 @@ class RepairOrderCompleteRequest(BaseModel):
     cause_items: list[RepairCauseItem] = Field(min_length=1)
     scrap_replenished: bool = False
     return_allocations: list[RepairReturnAllocationItem] = Field(default_factory=list)
+
+
+class RepairOrderReturnToProductionRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=128)
 
 
 class RepairOrderItem(BaseModel):
@@ -718,6 +725,12 @@ class RepairOrderItem(BaseModel):
     completed_at: datetime | None = None
     repair_operator_user_id: int | None = None
     repair_operator_username: str | None = None
+    is_aggregated: bool = False
+    aggregate_status: str | None = None
+    aggregate_anchor_repair_order_id: int | None = None
+    child_repair_order_count: int = 0
+    child_repair_order_ids: list[int] = Field(default_factory=list)
+    child_repair_order_codes: list[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 
@@ -781,6 +794,7 @@ class MyOrdersExportRequest(BaseModel):
     view_mode: str = Field(default="own", max_length=32)
     proxy_operator_user_id: int | None = Field(default=None, gt=0)
     order_status: str | None = Field(default=None, max_length=32)
+    sub_order_status: str | None = Field(default=None, max_length=32)
     current_process_id: int | None = Field(default=None, gt=0)
 
 
@@ -877,6 +891,11 @@ class ScrapRelatedRepairItem(BaseModel):
     scrap_quantity: int
     repair_time: datetime
     completed_at: datetime | None = None
+    is_aggregated: bool = False
+    aggregate_status: str | None = None
+    aggregate_anchor_repair_order_id: int | None = None
+    child_repair_order_count: int = 0
+    child_repair_order_ids: list[int] = Field(default_factory=list)
 
 
 class ScrapEventLogItem(BaseModel):
@@ -932,6 +951,13 @@ class RepairCauseDetailItem(BaseModel):
     is_scrap: bool
 
 
+class RepairCauseSummaryItem(BaseModel):
+    phenomenon: str
+    reason: str
+    quantity: int
+    is_scrap: bool
+
+
 class RepairReturnRouteItem(BaseModel):
     id: int
     target_process_id: int | None = None
@@ -977,6 +1003,14 @@ class RepairOrderDetailItem(BaseModel):
     completed_at: datetime | None = None
     repair_operator_user_id: int | None = None
     repair_operator_username: str | None = None
+    is_aggregated: bool = False
+    aggregate_status: str | None = None
+    aggregate_anchor_repair_order_id: int | None = None
+    child_repair_orders: list[RepairOrderItem] = Field(default_factory=list)
+    phenomenon_summary: list[RepairOrderPhenomenonSummaryItem] = Field(
+        default_factory=list
+    )
+    cause_summary: list[RepairCauseSummaryItem] = Field(default_factory=list)
     defect_rows: list[RepairDefectPhenomenonItem] = Field(default_factory=list)
     cause_rows: list[RepairCauseDetailItem] = Field(default_factory=list)
     return_routes: list[RepairReturnRouteItem] = Field(default_factory=list)

@@ -16,6 +16,7 @@ from app.core.authz_catalog import (
     PERM_QUALITY_REPAIR_ORDERS_EXPORT,
     PERM_QUALITY_REPAIR_ORDERS_LIST,
     PERM_QUALITY_REPAIR_ORDERS_PHENOMENA_SUMMARY,
+    PERM_QUALITY_REPAIR_ORDERS_RETURN_TO_PRODUCTION,
     PERM_QUALITY_SCRAP_STATISTICS_DETAIL,
     PERM_QUALITY_SCRAP_STATISTICS_EXPORT,
     PERM_QUALITY_SCRAP_STATISTICS_LIST,
@@ -35,9 +36,11 @@ from app.schemas.production import (
     RepairOrderListResult,
     RepairOrderPhenomenaSummaryResult,
     RepairOrderPhenomenonSummaryItem,
+    RepairOrderReturnToProductionRequest,
     RepairOrdersExportRequest,
     RepairEventLogItem,
     RepairCauseDetailItem,
+    RepairCauseSummaryItem,
     RepairDefectPhenomenonItem,
     RepairReturnRouteItem,
     ScrapEventLogItem,
@@ -99,13 +102,16 @@ from app.services.quality_service import (
 from app.services.production_repair_service import (
     RepairListFilters,
     ScrapStatisticsFilters,
+    RepairAggregateSnapshot,
     complete_repair_order,
     export_repair_orders_csv,
     export_scrap_statistics_csv,
+    get_repair_order_aggregate_by_anchor_id,
     get_repair_order_by_id,
     get_repair_order_phenomena_summary,
     list_repair_orders,
     list_scrap_statistics,
+    return_repair_order_to_production,
 )
 from app.services.quality_supplier_service import (
     create_supplier,
@@ -136,7 +142,7 @@ def _to_supplier_item(row) -> SupplierItem:
     )
 
 
-def _to_quality_repair_order_item(row: RepairOrder) -> RepairOrderItem:
+def _to_quality_repair_order_item(row: RepairAggregateSnapshot | RepairOrder) -> RepairOrderItem:
     return RepairOrderItem(
         id=row.id,
         repair_order_code=row.repair_order_code,
@@ -159,6 +165,14 @@ def _to_quality_repair_order_item(row: RepairOrder) -> RepairOrderItem:
         completed_at=row.completed_at,
         repair_operator_user_id=row.repair_operator_user_id,
         repair_operator_username=row.repair_operator_username,
+        is_aggregated=getattr(row, "is_aggregated", False),
+        aggregate_status=getattr(row, "aggregate_status", None),
+        aggregate_anchor_repair_order_id=getattr(
+            row, "aggregate_anchor_repair_order_id", None
+        ),
+        child_repair_order_count=getattr(row, "child_repair_order_count", 0),
+        child_repair_order_ids=list(getattr(row, "child_repair_order_ids", [])),
+        child_repair_order_codes=list(getattr(row, "child_repair_order_codes", [])),
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -187,11 +201,14 @@ def _to_quality_scrap_statistics_item(
 
 
 def _to_quality_repair_order_detail_item(
-    row: RepairOrder,
+    row: RepairAggregateSnapshot | RepairOrder,
     *,
     event_logs: list[OrderEventLog] | None = None,
     defect_record_map: dict[int, ProductionRecord] | None = None,
 ) -> RepairOrderDetailItem:
+    defect_rows = list(getattr(row, "defect_rows", []) or [])
+    cause_rows = list(getattr(row, "cause_rows", []) or [])
+    return_routes = list(getattr(row, "return_routes", []) or [])
     return RepairOrderDetailItem(
         id=row.id,
         repair_order_code=row.repair_order_code,
@@ -214,6 +231,23 @@ def _to_quality_repair_order_detail_item(
         completed_at=row.completed_at,
         repair_operator_user_id=row.repair_operator_user_id,
         repair_operator_username=row.repair_operator_username,
+        is_aggregated=bool(getattr(row, "is_aggregated", False)),
+        aggregate_status=getattr(row, "aggregate_status", None),
+        aggregate_anchor_repair_order_id=getattr(
+            row, "aggregate_anchor_repair_order_id", None
+        ),
+        child_repair_orders=[
+            _to_quality_repair_order_item(child)
+            for child in getattr(row, "child_rows", [])
+        ],
+        phenomenon_summary=[
+            RepairOrderPhenomenonSummaryItem(**item)
+            for item in getattr(row, "phenomenon_summary", [])
+        ],
+        cause_summary=[
+            RepairCauseSummaryItem(**item)
+            for item in getattr(row, "cause_summary", [])
+        ],
         defect_rows=[
             RepairDefectPhenomenonItem(
                 id=item.id,
@@ -242,7 +276,7 @@ def _to_quality_repair_order_detail_item(
                 if defect_record_map and defect_record_map.get(item.id)
                 else None,
             )
-            for item in (row.defect_rows or [])
+            for item in defect_rows
         ],
         cause_rows=[
             RepairCauseDetailItem(
@@ -252,7 +286,7 @@ def _to_quality_repair_order_detail_item(
                 quantity=item.quantity,
                 is_scrap=item.is_scrap,
             )
-            for item in (row.cause_rows or [])
+            for item in cause_rows
         ],
         return_routes=[
             RepairReturnRouteItem(
@@ -262,7 +296,7 @@ def _to_quality_repair_order_detail_item(
                 target_process_name=item.target_process_name,
                 return_quantity=item.return_quantity,
             )
-            for item in (row.return_routes or [])
+            for item in return_routes
         ],
         event_logs=[
             RepairEventLogItem(
@@ -1101,17 +1135,16 @@ def get_quality_scrap_statistics_detail_api(
 
     related_repairs: list[ScrapRelatedRepairItem] = []
     if row.order_id is not None:
-        repair_filters = [RepairOrder.source_order_id == row.order_id]
-        if row.process_id is not None:
-            repair_filters.append(RepairOrder.source_order_process_id == row.process_id)
-        repair_rows = (
-            db.execute(
-                select(RepairOrder)
-                .where(*repair_filters)
-                .order_by(RepairOrder.repair_time.desc())
-            )
-            .scalars()
-            .all()
+        _, repair_rows = list_repair_orders(
+            db,
+            page=1,
+            page_size=200000,
+            filters=RepairListFilters(
+                keyword=row.order_code,
+                status="all",
+                start_date=None,
+                end_date=None,
+            ),
         )
         related_repairs = [
             ScrapRelatedRepairItem(
@@ -1123,8 +1156,15 @@ def get_quality_scrap_statistics_detail_api(
                 scrap_quantity=item.scrap_quantity,
                 repair_time=item.repair_time,
                 completed_at=item.completed_at,
+                is_aggregated=item.is_aggregated,
+                aggregate_status=item.aggregate_status,
+                aggregate_anchor_repair_order_id=item.aggregate_anchor_repair_order_id,
+                child_repair_order_count=item.child_repair_order_count,
+                child_repair_order_ids=item.child_repair_order_ids,
             )
             for item in repair_rows
+            if item.source_order_id == row.order_id
+            and (row.process_id is None or item.source_order_process_id == row.process_id)
         ]
 
     related_logs: list[ScrapEventLogItem] = []
@@ -1247,7 +1287,7 @@ def get_quality_repair_order_detail_api(
     db: Session = Depends(get_db),
     _: User = Depends(require_permission(PERM_QUALITY_REPAIR_ORDERS_DETAIL)),
 ) -> ApiResponse[RepairOrderDetailItem]:
-    row = get_repair_order_by_id(db, repair_order_id=repair_order_id)
+    row = get_repair_order_aggregate_by_anchor_id(db, repair_order_id=repair_order_id)
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -1271,7 +1311,13 @@ def get_quality_repair_order_detail_api(
                 item.process_code_snapshot == row.source_process_code
                 or (
                     item.payload_json
-                    and f'"repair_order_id":{row.id}' in item.payload_json
+                    and (
+                        f'"repair_order_id":{row.id}' in item.payload_json
+                        or any(
+                            f'"repair_order_id":{child_id}' in item.payload_json
+                            for child_id in getattr(row, "child_repair_order_ids", [])
+                        )
+                    )
                 )
             )
         ]
@@ -1370,6 +1416,44 @@ def complete_quality_repair_order_api(
             detail=str(exc),
         ) from exc
     return success_response(_to_quality_repair_order_item(row), message="completed")
+
+
+@router.post(
+    "/repair-orders/{repair_order_id}/return-to-production",
+    response_model=ApiResponse[RepairOrderItem],
+)
+def return_quality_repair_order_to_production_api(
+    repair_order_id: int,
+    payload: RepairOrderReturnToProductionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_permission(PERM_QUALITY_REPAIR_ORDERS_RETURN_TO_PRODUCTION)
+    ),
+) -> ApiResponse[RepairOrderItem]:
+    if not verify_password(payload.password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="当前登录密码错误，无法退回生产",
+        )
+    try:
+        row = return_repair_order_to_production(
+            db,
+            repair_order_id=repair_order_id,
+            operator=current_user,
+        )
+    except Exception as exc:
+        message = str(exc)
+        if isinstance(exc, RuntimeError):
+            status_code = status.HTTP_409_CONFLICT
+        elif "not found" in message.lower():
+            status_code = status.HTTP_404_NOT_FOUND
+        else:
+            status_code = status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=status_code, detail=message) from exc
+    return success_response(
+        _to_quality_repair_order_item(row),
+        message="returned_to_production",
+    )
 
 
 @router.post(

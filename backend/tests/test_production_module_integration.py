@@ -5,7 +5,7 @@ import json
 import sys
 import time
 import unittest
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -17,7 +17,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from app.db.session import SessionLocal  # noqa: E402
+from app.db import session as db_session  # noqa: E402
 from app.core.config import settings  # noqa: E402
 from app.main import app  # noqa: E402
 from app.core.security import get_password_hash  # noqa: E402
@@ -41,9 +41,11 @@ from app.models.production_scrap_statistics import (  # noqa: E402
     ProductionScrapStatistics,
 )
 from app.models.production_sub_order import ProductionSubOrder  # noqa: E402
+from app.models.repair_cause import RepairCause  # noqa: E402
 from app.models.product import Product  # noqa: E402
 from app.models.repair_defect_phenomenon import RepairDefectPhenomenon  # noqa: E402
 from app.models.repair_order import RepairOrder  # noqa: E402
+from app.models.repair_return_route import RepairReturnRoute  # noqa: E402
 from app.models.supplier import Supplier  # noqa: E402
 from app.models.user import User  # noqa: E402
 from app.schemas.user import UserUpdate  # noqa: E402
@@ -54,6 +56,10 @@ from app.services.user_service import update_user  # noqa: E402
 
 
 PERF_CONTEXT_PATH = BACKEND_DIR.parent / ".tmp_runtime" / "production_craft_samples.json"
+
+
+def SessionLocal():
+    return db_session.SessionLocal()
 
 
 def load_perf_sample_context() -> dict[str, int | str]:
@@ -465,14 +471,17 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         finally:
             db.close()
 
-    def test_end_production_blocks_when_report_plus_defect_exceeds_visible_quantity(
+    def _create_return_to_production_fixture(
         self,
-    ) -> None:
-        stage = self._create_stage("A")
+        *,
+        suffix: str,
+        repair_status: str = "in_repair",
+    ) -> dict[str, int | str]:
+        stage = self._create_stage(suffix)
         process = self._create_process(
-            stage_id=stage["id"], stage_code=stage["code"], suffix="A"
+            stage_id=stage["id"], stage_code=stage["code"], suffix=suffix
         )
-        product = self._create_product("数量口径")
+        product = self._create_product(f"退回生产-{suffix}")
         self._activate_product(product)
         order = self._create_order(
             product_id=product["id"],
@@ -490,11 +499,395 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
                 .filter(ProductionOrderProcess.order_id == order_row.id)
                 .first()
             )
-            assert process_row is not None
             admin = db.query(User).filter(User.username == "admin").first()
-            assert admin is not None
+            assert process_row is not None and admin is not None
+            process_row.visible_quantity = 5
+            process_row.completed_quantity = 5
+            process_row.status = "completed"
+            order_row.status = "completed"
+            order_row.current_process_code = None
+            repair_row = RepairOrder(
+                repair_order_code=f"RW-RETURN-{suffix}-{int(time.time() * 1000)}",
+                source_order_id=order_row.id,
+                source_order_code=order_row.order_code,
+                product_id=order_row.product_id,
+                product_name=order_row.product.name if order_row.product else None,
+                source_order_process_id=process_row.id,
+                source_process_code=process_row.process_code,
+                source_process_name=process_row.process_name,
+                sender_user_id=admin.id,
+                sender_username=admin.username,
+                production_quantity=5,
+                repair_quantity=2,
+                repaired_quantity=2 if repair_status == "completed" else 0,
+                scrap_quantity=0,
+                scrap_replenished=False,
+                repair_time=datetime(2026, 3, 6, 9, 0, tzinfo=UTC),
+                status=repair_status,
+                completed_at=datetime(2026, 3, 6, 10, 0, tzinfo=UTC)
+                if repair_status == "completed"
+                else None,
+            )
+            db.add(repair_row)
+            db.flush()
+            defect_row = RepairDefectPhenomenon(
+                repair_order_id=repair_row.id,
+                order_id=order_row.id,
+                order_code=order_row.order_code,
+                product_id=order_row.product_id,
+                product_name=order_row.product.name if order_row.product else "",
+                process_id=process_row.id,
+                process_code=process_row.process_code,
+                process_name=process_row.process_name,
+                phenomenon="毛刺",
+                quantity=2,
+                operator_user_id=admin.id,
+                operator_username=admin.username,
+                production_time=datetime(2026, 3, 6, 9, 0, tzinfo=UTC),
+            )
+            db.add(defect_row)
+            db.commit()
+            db.refresh(repair_row)
+            self.repair_order_ids.append(int(repair_row.id))
+            return {
+                "order_id": int(order_row.id),
+                "process_id": int(process_row.id),
+                "repair_order_id": int(repair_row.id),
+                "repair_order_code": repair_row.repair_order_code,
+                "previous_visible_quantity": 5,
+            }
+        finally:
+            db.close()
+
+    def test_end_production_uses_transfer_quantity_after_report_defects(
+        self,
+    ) -> None:
+        stage_a = self._create_stage("A")
+        process_a = self._create_process(
+            stage_id=stage_a["id"], stage_code=stage_a["code"], suffix="A"
+        )
+        stage_b = self._create_stage("B")
+        process_b = self._create_process(
+            stage_id=stage_b["id"], stage_code=stage_b["code"], suffix="B"
+        )
+        product = self._create_product("数量口径")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {
+                    "step_order": 1,
+                    "stage_id": stage_a["id"],
+                    "process_id": process_a["id"],
+                },
+                {
+                    "step_order": 2,
+                    "stage_id": stage_b["id"],
+                    "process_id": process_b["id"],
+                },
+            ],
+        )
+
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            process_rows = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .order_by(ProductionOrderProcess.process_order.asc())
+                .all()
+            )
+            admin = db.query(User).filter(User.username == "admin").first()
+            assert order_row is not None and len(process_rows) == 2 and admin is not None
+            first_process, second_process = process_rows
+            order_row.status = "in_progress"
+            first_process.status = "in_progress"
+            first_process.visible_quantity = 6
+            first_process.completed_quantity = 0
+            second_process.status = "pending"
+            second_process.visible_quantity = 0
+            second_process.completed_quantity = 0
+            db.add(
+                ProductionSubOrder(
+                    order_process_id=first_process.id,
+                    operator_user_id=admin.id,
+                    completed_quantity=0,
+                    status="in_progress",
+                )
+            )
+            db.commit()
+            first_process_id = int(first_process.id)
+        finally:
+            db.close()
+
+        response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/end-production",
+            headers=self._headers(),
+            json={
+                "order_process_id": first_process_id,
+                "quantity": 5,
+                "defect_items": [{"phenomenon": "毛刺", "quantity": 2}],
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+
+        db = SessionLocal()
+        try:
+            process_rows = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .order_by(ProductionOrderProcess.process_order.asc())
+                .all()
+            )
+            self.assertEqual(len(process_rows), 2)
+            first_process, second_process = process_rows
+            sub_order = (
+                db.query(ProductionSubOrder)
+                .filter(ProductionSubOrder.order_process_id == first_process.id)
+                .first()
+            )
+            production_record = (
+                db.query(ProductionRecord)
+                .filter(ProductionRecord.order_process_id == first_process.id)
+                .order_by(ProductionRecord.id.desc())
+                .first()
+            )
+            repair_row = (
+                db.query(RepairOrder)
+                .filter(RepairOrder.source_order_process_id == first_process.id)
+                .order_by(RepairOrder.id.desc())
+                .first()
+            )
+            event_row = (
+                db.query(OrderEventLog)
+                .filter(
+                    OrderEventLog.order_id == int(order["id"]),
+                    OrderEventLog.event_type == "production_reported",
+                )
+                .order_by(OrderEventLog.id.desc())
+                .first()
+            )
+            self.assertIsNotNone(sub_order)
+            self.assertIsNotNone(production_record)
+            self.assertIsNotNone(repair_row)
+            self.assertIsNotNone(event_row)
+            assert sub_order is not None
+            assert production_record is not None
+            assert repair_row is not None
+            assert event_row is not None
+            self.repair_order_ids.append(int(repair_row.id))
+            self.assertEqual(first_process.completed_quantity, 3)
+            self.assertEqual(sub_order.completed_quantity, 3)
+            self.assertEqual(second_process.visible_quantity, 3)
+            self.assertEqual(production_record.production_quantity, 5)
+            self.assertEqual(repair_row.production_quantity, 5)
+            self.assertEqual(repair_row.repair_quantity, 2)
+            payload = json.loads(event_row.payload_json or "{}")
+            self.assertEqual(payload["quantity"], 5)
+            self.assertEqual(payload["transfer_quantity"], 3)
+            self.assertEqual(payload["defect_quantity"], 2)
+            self.assertEqual(payload["total_production_quantity"], 5)
+            self.assertEqual(payload["total_consumed_quantity"], 5)
+        finally:
+            db.close()
+
+    def test_end_production_subtracts_current_cycle_manual_repairs_from_transfer(
+        self,
+    ) -> None:
+        stage_a = self._create_stage("MQ1")
+        process_a = self._create_process(
+            stage_id=stage_a["id"], stage_code=stage_a["code"], suffix="MQ1"
+        )
+        stage_b = self._create_stage("MQ2")
+        process_b = self._create_process(
+            stage_id=stage_b["id"], stage_code=stage_b["code"], suffix="MQ2"
+        )
+        product = self._create_product("手工送修流转扣减")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {
+                    "step_order": 1,
+                    "stage_id": stage_a["id"],
+                    "process_id": process_a["id"],
+                },
+                {
+                    "step_order": 2,
+                    "stage_id": stage_b["id"],
+                    "process_id": process_b["id"],
+                },
+            ],
+        )
+
+        base_time = datetime.now(UTC).replace(microsecond=0) - timedelta(minutes=5)
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            process_rows = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .order_by(ProductionOrderProcess.process_order.asc())
+                .all()
+            )
+            admin = db.query(User).filter(User.username == "admin").first()
+            assert order_row is not None and len(process_rows) == 2 and admin is not None
+            first_process, second_process = process_rows
+            order_row.status = "in_progress"
+            first_process.status = "in_progress"
+            first_process.visible_quantity = 10
+            first_process.completed_quantity = 0
+            second_process.status = "pending"
+            second_process.visible_quantity = 0
+            second_process.completed_quantity = 0
+            sub_order = ProductionSubOrder(
+                order_process_id=first_process.id,
+                operator_user_id=admin.id,
+                completed_quantity=0,
+                status="in_progress",
+            )
+            db.add(sub_order)
+            db.flush()
+            db.add(
+                FirstArticleRecord(
+                    order_id=order_row.id,
+                    order_process_id=first_process.id,
+                    operator_user_id=admin.id,
+                    sub_order_id=sub_order.id,
+                    verification_date=date.today(),
+                    verification_code="manual-cycle",
+                    result="passed",
+                    check_content="生产中送修周期",
+                    test_value="ok",
+                    created_at=base_time,
+                )
+            )
+            db.commit()
+            first_process_id = int(first_process.id)
+            admin_id = int(admin.id)
+        finally:
+            db.close()
+
+        manual_response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/repair-orders",
+            headers=self._headers(),
+            json={
+                "order_process_id": first_process_id,
+                "defect_items": [{"phenomenon": "划伤", "quantity": 2}],
+            },
+        )
+        self.assertEqual(manual_response.status_code, 201, manual_response.text)
+        manual_repair_id = int(manual_response.json()["data"]["id"])
+        self.repair_order_ids.append(manual_repair_id)
+
+        context_response = self.client.get(
+            f"/api/v1/production/my-orders/{order['id']}/context",
+            headers=self._headers(),
+            params={
+                "view_mode": "proxy",
+                "proxy_operator_user_id": admin_id,
+                "order_process_id": first_process_id,
+            },
+        )
+        self.assertEqual(context_response.status_code, 200, context_response.text)
+        context_item = context_response.json()["data"]["item"]
+        self.assertEqual(context_item["current_cycle_manual_repair_quantity"], 2)
+        self.assertEqual(context_item["max_producible_quantity"], 8)
+
+        report_response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/end-production",
+            headers=self._headers(),
+            json={
+                "order_process_id": first_process_id,
+                "quantity": 10,
+                "defect_items": [{"phenomenon": "毛刺", "quantity": 1}],
+            },
+        )
+        self.assertEqual(report_response.status_code, 200, report_response.text)
+
+        db = SessionLocal()
+        try:
+            process_rows = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .order_by(ProductionOrderProcess.process_order.asc())
+                .all()
+            )
+            first_process, second_process = process_rows
+            production_record = (
+                db.query(ProductionRecord)
+                .filter(ProductionRecord.order_process_id == first_process.id)
+                .order_by(ProductionRecord.id.desc())
+                .first()
+            )
+            auto_repair = (
+                db.query(RepairOrder)
+                .filter(
+                    RepairOrder.source_order_process_id == first_process.id,
+                    RepairOrder.id != manual_repair_id,
+                )
+                .order_by(RepairOrder.id.desc())
+                .first()
+            )
+            event_row = (
+                db.query(OrderEventLog)
+                .filter(
+                    OrderEventLog.order_id == int(order["id"]),
+                    OrderEventLog.event_type == "production_reported",
+                )
+                .order_by(OrderEventLog.id.desc())
+                .first()
+            )
+            self.assertIsNotNone(production_record)
+            self.assertIsNotNone(auto_repair)
+            self.assertIsNotNone(event_row)
+            assert production_record is not None
+            assert auto_repair is not None
+            assert event_row is not None
+            self.repair_order_ids.append(int(auto_repair.id))
+            self.assertEqual(first_process.completed_quantity, 7)
+            self.assertEqual(second_process.visible_quantity, 7)
+            self.assertEqual(production_record.production_quantity, 10)
+            self.assertEqual(auto_repair.production_quantity, 10)
+            payload = json.loads(event_row.payload_json or "{}")
+            self.assertEqual(payload["quantity"], 10)
+            self.assertEqual(payload["manual_repair_quantity_before_end"], 2)
+            self.assertEqual(payload["defect_quantity"], 1)
+            self.assertEqual(payload["transfer_quantity"], 7)
+            self.assertEqual(payload["total_consumed_quantity"], 8)
+        finally:
+            db.close()
+
+    def test_current_cycle_manual_repair_quantity_ignores_completed_repairs(
+        self,
+    ) -> None:
+        stage = self._create_stage("MCR1")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="MCR1"
+        )
+        product = self._create_product("已完成手工送修不再占用周期数量")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+            ],
+        )
+
+        base_time = datetime.now(UTC).replace(microsecond=0) - timedelta(minutes=5)
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .first()
+            )
+            admin = db.query(User).filter(User.username == "admin").first()
+            assert order_row is not None and process_row is not None and admin is not None
+            order_row.status = "in_progress"
             process_row.status = "in_progress"
-            process_row.visible_quantity = 6
+            process_row.visible_quantity = 10
             process_row.completed_quantity = 0
             sub_order = ProductionSubOrder(
                 order_process_id=process_row.id,
@@ -503,23 +896,718 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
                 status="in_progress",
             )
             db.add(sub_order)
+            db.flush()
+            db.add(
+                FirstArticleRecord(
+                    order_id=order_row.id,
+                    order_process_id=process_row.id,
+                    operator_user_id=admin.id,
+                    sub_order_id=sub_order.id,
+                    verification_date=date.today(),
+                    verification_code="manual-repair-complete-cycle",
+                    result="passed",
+                    check_content="手工送修周期",
+                    test_value="ok",
+                    created_at=base_time,
+                )
+            )
             db.commit()
+            process_row_id = int(process_row.id)
+            admin_id = int(admin.id)
         finally:
             db.close()
+
+        manual_response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/repair-orders",
+            headers=self._headers(),
+            json={
+                "order_process_id": process_row_id,
+                "defect_items": [{"phenomenon": "划伤", "quantity": 2}],
+            },
+        )
+        self.assertEqual(manual_response.status_code, 201, manual_response.text)
+        manual_repair_id = int(manual_response.json()["data"]["id"])
+        self.repair_order_ids.append(manual_repair_id)
+
+        before_response = self.client.get(
+            f"/api/v1/production/my-orders/{order['id']}/context",
+            headers=self._headers(),
+            params={
+                "view_mode": "proxy",
+                "proxy_operator_user_id": admin_id,
+                "order_process_id": process_row_id,
+            },
+        )
+        self.assertEqual(before_response.status_code, 200, before_response.text)
+        self.assertEqual(
+            before_response.json()["data"]["item"]["current_cycle_manual_repair_quantity"],
+            2,
+        )
+
+        complete_response = self.client.post(
+            f"/api/v1/production/repair-orders/{manual_repair_id}/complete",
+            headers=self._headers(),
+            json={
+                "cause_items": [
+                    {
+                        "phenomenon": "划伤",
+                        "reason": "复判回流",
+                        "quantity": 2,
+                        "is_scrap": False,
+                    }
+                ],
+                "scrap_replenished": False,
+                "return_allocations": [
+                    {
+                        "target_order_process_id": process_row_id,
+                        "quantity": 2,
+                    }
+                ],
+            },
+        )
+        self.assertEqual(complete_response.status_code, 200, complete_response.text)
+
+        after_response = self.client.get(
+            f"/api/v1/production/my-orders/{order['id']}/context",
+            headers=self._headers(),
+            params={
+                "view_mode": "proxy",
+                "proxy_operator_user_id": admin_id,
+                "order_process_id": process_row_id,
+            },
+        )
+        self.assertEqual(after_response.status_code, 200, after_response.text)
+        self.assertEqual(
+            after_response.json()["data"]["item"]["current_cycle_manual_repair_quantity"],
+            0,
+        )
+
+    def test_end_production_rejects_negative_transfer_quantity(self) -> None:
+        stage = self._create_stage("NEG")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="NEG"
+        )
+        product = self._create_product("负流转拦截")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+            ],
+        )
+
+        base_time = datetime.now(UTC).replace(microsecond=0) - timedelta(minutes=5)
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .first()
+            )
+            admin = db.query(User).filter(User.username == "admin").first()
+            assert order_row is not None and process_row is not None and admin is not None
+            order_row.status = "in_progress"
+            process_row.status = "in_progress"
+            process_row.visible_quantity = 5
+            sub_order = ProductionSubOrder(
+                order_process_id=process_row.id,
+                operator_user_id=admin.id,
+                completed_quantity=0,
+                status="in_progress",
+            )
+            db.add(sub_order)
+            db.flush()
+            db.add(
+                FirstArticleRecord(
+                    order_id=order_row.id,
+                    order_process_id=process_row.id,
+                    operator_user_id=admin.id,
+                    sub_order_id=sub_order.id,
+                    verification_date=date.today(),
+                    verification_code="negative-transfer",
+                    result="passed",
+                    check_content="负流转首件",
+                    test_value="ok",
+                    created_at=base_time,
+                )
+            )
+            db.commit()
+            process_row_id = int(process_row.id)
+        finally:
+            db.close()
+
+        manual_response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/repair-orders",
+            headers=self._headers(),
+            json={
+                "order_process_id": process_row_id,
+                "defect_items": [{"phenomenon": "划伤", "quantity": 2}],
+            },
+        )
+        self.assertEqual(manual_response.status_code, 201, manual_response.text)
+        self.repair_order_ids.append(int(manual_response.json()["data"]["id"]))
 
         response = self.client.post(
             f"/api/v1/production/orders/{order['id']}/end-production",
             headers=self._headers(),
             json={
-                "order_process_id": process_row.id,
-                "quantity": 5,
-                "defect_items": [
-                    {"phenomenon": "毛刺", "quantity": 2},
-                ],
+                "order_process_id": process_row_id,
+                "quantity": 2,
+                "defect_items": [{"phenomenon": "毛刺", "quantity": 1}],
             },
         )
-        self.assertEqual(response.status_code, 409, response.text)
-        self.assertIn("Max producible quantity is 6", response.text)
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertIn("本次生产数量不能小于", response.text)
+
+    def test_end_production_allows_zero_transfer_without_releasing_next_process(
+        self,
+    ) -> None:
+        stage_a = self._create_stage("ZT1")
+        process_a = self._create_process(
+            stage_id=stage_a["id"], stage_code=stage_a["code"], suffix="ZT1"
+        )
+        stage_b = self._create_stage("ZT2")
+        process_b = self._create_process(
+            stage_id=stage_b["id"], stage_code=stage_b["code"], suffix="ZT2"
+        )
+        product = self._create_product("零流转报工")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {
+                    "step_order": 1,
+                    "stage_id": stage_a["id"],
+                    "process_id": process_a["id"],
+                },
+                {
+                    "step_order": 2,
+                    "stage_id": stage_b["id"],
+                    "process_id": process_b["id"],
+                },
+            ],
+        )
+
+        base_time = datetime.now(UTC).replace(microsecond=0) - timedelta(minutes=5)
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            process_rows = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .order_by(ProductionOrderProcess.process_order.asc())
+                .all()
+            )
+            admin = db.query(User).filter(User.username == "admin").first()
+            assert order_row is not None and len(process_rows) == 2 and admin is not None
+            first_process, second_process = process_rows
+            order_row.status = "in_progress"
+            first_process.status = "in_progress"
+            first_process.visible_quantity = 3
+            first_process.completed_quantity = 0
+            second_process.status = "pending"
+            second_process.visible_quantity = 0
+            sub_order = ProductionSubOrder(
+                order_process_id=first_process.id,
+                operator_user_id=admin.id,
+                completed_quantity=0,
+                status="in_progress",
+            )
+            db.add(sub_order)
+            db.flush()
+            db.add(
+                FirstArticleRecord(
+                    order_id=order_row.id,
+                    order_process_id=first_process.id,
+                    operator_user_id=admin.id,
+                    sub_order_id=sub_order.id,
+                    verification_date=date.today(),
+                    verification_code="zero-transfer",
+                    result="passed",
+                    check_content="零流转首件",
+                    test_value="ok",
+                    created_at=base_time,
+                )
+            )
+            db.commit()
+            first_process_id = int(first_process.id)
+        finally:
+            db.close()
+
+        manual_response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/repair-orders",
+            headers=self._headers(),
+            json={
+                "order_process_id": first_process_id,
+                "defect_items": [{"phenomenon": "划伤", "quantity": 2}],
+            },
+        )
+        self.assertEqual(manual_response.status_code, 201, manual_response.text)
+        self.repair_order_ids.append(int(manual_response.json()["data"]["id"]))
+
+        response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/end-production",
+            headers=self._headers(),
+            json={
+                "order_process_id": first_process_id,
+                "quantity": 2,
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+
+        db = SessionLocal()
+        try:
+            process_rows = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .order_by(ProductionOrderProcess.process_order.asc())
+                .all()
+            )
+            first_process, second_process = process_rows
+            production_record = (
+                db.query(ProductionRecord)
+                .filter(ProductionRecord.order_process_id == first_process.id)
+                .order_by(ProductionRecord.id.desc())
+                .first()
+            )
+            event_row = (
+                db.query(OrderEventLog)
+                .filter(
+                    OrderEventLog.order_id == int(order["id"]),
+                    OrderEventLog.event_type == "production_reported",
+                )
+                .order_by(OrderEventLog.id.desc())
+                .first()
+            )
+            self.assertIsNotNone(production_record)
+            self.assertIsNotNone(event_row)
+            assert production_record is not None
+            assert event_row is not None
+            self.assertEqual(first_process.completed_quantity, 0)
+            self.assertEqual(second_process.visible_quantity, 0)
+            self.assertEqual(production_record.production_quantity, 2)
+            payload = json.loads(event_row.payload_json or "{}")
+            self.assertEqual(payload["transfer_quantity"], 0)
+            self.assertEqual(payload["total_consumed_quantity"], 0)
+        finally:
+            db.close()
+
+    def test_manual_repair_order_api_accepts_missing_production_quantity_and_defaults_to_zero(
+        self,
+    ) -> None:
+        stage = self._create_stage("MR0")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="MR0"
+        )
+        product = self._create_product("手工送修必填生产量")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+            ],
+        )
+
+        db = SessionLocal()
+        try:
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .first()
+            )
+            admin = db.query(User).filter(User.username == "admin").first()
+            assert process_row is not None and admin is not None
+            process_row.status = "in_progress"
+            process_row.visible_quantity = 6
+            db.add(
+                ProductionSubOrder(
+                    order_process_id=process_row.id,
+                    operator_user_id=admin.id,
+                    completed_quantity=0,
+                    status="in_progress",
+                )
+            )
+            db.commit()
+            process_row_id = int(process_row.id)
+        finally:
+            db.close()
+
+        missing_quantity_response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/repair-orders",
+            headers=self._headers(),
+            json={
+                "order_process_id": process_row_id,
+                "defect_items": [{"phenomenon": "划伤", "quantity": 1}],
+            },
+        )
+        self.assertEqual(
+            missing_quantity_response.status_code,
+            201,
+            missing_quantity_response.text,
+        )
+        missing_quantity_payload = missing_quantity_response.json()["data"]
+        self.assertEqual(missing_quantity_payload["production_quantity"], 0)
+        self.assertEqual(missing_quantity_payload["repair_quantity"], 1)
+        self.assertEqual(missing_quantity_payload["status"], "in_repair")
+
+        response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/repair-orders",
+            headers=self._headers(),
+            json={
+                "order_process_id": process_row_id,
+                "defect_items": [{"phenomenon": "划伤", "quantity": 1}],
+            },
+        )
+        self.assertEqual(response.status_code, 201, response.text)
+        payload = response.json()["data"]
+        self.assertEqual(payload["production_quantity"], 0)
+        self.assertEqual(payload["repair_quantity"], 1)
+        self.assertEqual(payload["status"], "in_repair")
+
+    def test_repair_orders_aggregate_after_cycle_report_and_all_children_closed(
+        self,
+    ) -> None:
+        stage = self._create_stage("RAGG")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="RAGG"
+        )
+        product = self._create_product("维修周期聚合")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+            ],
+        )
+
+        base_time = datetime.now(UTC).replace(microsecond=0) - timedelta(minutes=20)
+        repair_ids: list[int] = []
+        repair_codes: list[str] = []
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .first()
+            )
+            admin = db.query(User).filter(User.username == "admin").first()
+            assert order_row is not None and process_row is not None and admin is not None
+            process_row.status = "in_progress"
+            process_row.visible_quantity = 10
+            sub_order = ProductionSubOrder(
+                order_process_id=process_row.id,
+                operator_user_id=admin.id,
+                completed_quantity=0,
+                status="in_progress",
+            )
+            db.add(sub_order)
+            db.flush()
+            first_article = FirstArticleRecord(
+                order_id=order_row.id,
+                order_process_id=process_row.id,
+                operator_user_id=admin.id,
+                sub_order_id=sub_order.id,
+                verification_date=date.today(),
+                verification_code="agg-cycle",
+                result="passed",
+                check_content="周期聚合首件",
+                test_value="ok",
+                created_at=base_time,
+            )
+            db.add(first_article)
+            db.flush()
+
+            def add_repair(
+                *,
+                code_suffix: str,
+                phenomenon: str,
+                quantity: int,
+                repair_time: datetime,
+                production_record: ProductionRecord | None = None,
+                production_quantity: int = 0,
+            ) -> RepairOrder:
+                repair = RepairOrder(
+                    repair_order_code=f"RW-RAGG-{code_suffix}-{int(time.time() * 1000)}",
+                    source_order_id=order_row.id,
+                    source_order_code=order_row.order_code,
+                    product_id=order_row.product_id,
+                    product_name=order_row.product.name if order_row.product else "",
+                    source_order_process_id=process_row.id,
+                    source_process_code=process_row.process_code,
+                    source_process_name=process_row.process_name,
+                    sender_user_id=admin.id,
+                    sender_username=admin.username,
+                    production_quantity=production_quantity,
+                    repair_quantity=quantity,
+                    repaired_quantity=0,
+                    scrap_quantity=0,
+                    scrap_replenished=False,
+                    repair_time=repair_time,
+                    status="in_repair",
+                )
+                db.add(repair)
+                db.flush()
+                db.add(
+                    RepairDefectPhenomenon(
+                        repair_order_id=repair.id,
+                        production_record_id=production_record.id
+                        if production_record
+                        else None,
+                        order_id=order_row.id,
+                        order_code=order_row.order_code,
+                        product_id=order_row.product_id,
+                        product_name=order_row.product.name if order_row.product else "",
+                        process_id=process_row.id,
+                        process_code=process_row.process_code,
+                        process_name=process_row.process_name,
+                        phenomenon=phenomenon,
+                        quantity=quantity,
+                        operator_user_id=admin.id,
+                        operator_username=admin.username,
+                        production_time=production_record.created_at
+                        if production_record
+                        else repair_time,
+                    )
+                )
+                repair_ids.append(int(repair.id))
+                repair_codes.append(str(repair.repair_order_code))
+                return repair
+
+            add_repair(
+                code_suffix="M1",
+                phenomenon="划伤",
+                quantity=1,
+                repair_time=base_time + timedelta(minutes=1),
+            )
+            add_repair(
+                code_suffix="M2",
+                phenomenon="划伤",
+                quantity=2,
+                repair_time=base_time + timedelta(minutes=2),
+            )
+            db.commit()
+            process_row_id = int(process_row.id)
+        finally:
+            db.close()
+        self.repair_order_ids.extend(repair_ids)
+
+        before_report_response = self.client.get(
+            "/api/v1/production/repair-orders",
+            headers=self._headers(),
+            params={"keyword": order["order_code"], "page_size": 20},
+        )
+        self.assertEqual(
+            before_report_response.status_code,
+            200,
+            before_report_response.text,
+        )
+        before_report_items = before_report_response.json()["data"]["items"]
+        self.assertEqual(len(before_report_items), 2)
+        self.assertTrue(all(not item["is_aggregated"] for item in before_report_items))
+
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            process_row = db.get(ProductionOrderProcess, process_row_id)
+            admin = db.query(User).filter(User.username == "admin").first()
+            assert order_row is not None and process_row is not None and admin is not None
+            production_record = ProductionRecord(
+                order_id=order_row.id,
+                order_process_id=process_row.id,
+                sub_order_id=None,
+                operator_user_id=admin.id,
+                production_quantity=5,
+                record_type="production",
+                created_at=base_time + timedelta(minutes=5),
+            )
+            db.add(production_record)
+            db.flush()
+            auto_repair = RepairOrder(
+                repair_order_code=f"RW-RAGG-AUTO-{int(time.time() * 1000)}",
+                source_order_id=order_row.id,
+                source_order_code=order_row.order_code,
+                product_id=order_row.product_id,
+                product_name=order_row.product.name if order_row.product else "",
+                source_order_process_id=process_row.id,
+                source_process_code=process_row.process_code,
+                source_process_name=process_row.process_name,
+                sender_user_id=admin.id,
+                sender_username=admin.username,
+                production_quantity=6,
+                repair_quantity=1,
+                repaired_quantity=0,
+                scrap_quantity=0,
+                scrap_replenished=False,
+                repair_time=base_time + timedelta(minutes=6),
+                status="in_repair",
+            )
+            db.add(auto_repair)
+            db.flush()
+            db.add(
+                RepairDefectPhenomenon(
+                    repair_order_id=auto_repair.id,
+                    production_record_id=production_record.id,
+                    order_id=order_row.id,
+                    order_code=order_row.order_code,
+                    product_id=order_row.product_id,
+                    product_name=order_row.product.name if order_row.product else "",
+                    process_id=process_row.id,
+                    process_code=process_row.process_code,
+                    process_name=process_row.process_name,
+                    phenomenon="毛刺",
+                    quantity=1,
+                    operator_user_id=admin.id,
+                    operator_username=admin.username,
+                    production_time=production_record.created_at,
+                )
+            )
+            repair_ids.append(int(auto_repair.id))
+            repair_codes.append(str(auto_repair.repair_order_code))
+            db.commit()
+        finally:
+            db.close()
+        self.repair_order_ids.append(repair_ids[-1])
+
+        not_closed_response = self.client.get(
+            "/api/v1/production/repair-orders",
+            headers=self._headers(),
+            params={"keyword": order["order_code"], "page_size": 20},
+        )
+        self.assertEqual(not_closed_response.status_code, 200, not_closed_response.text)
+        not_closed_items = not_closed_response.json()["data"]["items"]
+        self.assertEqual(len(not_closed_items), 3)
+        self.assertTrue(all(not item["is_aggregated"] for item in not_closed_items))
+
+        db = SessionLocal()
+        try:
+            admin = db.query(User).filter(User.username == "admin").first()
+            assert admin is not None
+            close_time = base_time + timedelta(minutes=7)
+            cause_payload = {
+                repair_ids[0]: ("划伤", "打磨", 1),
+                repair_ids[1]: ("划伤", "打磨", 2),
+                repair_ids[2]: ("毛刺", "校正", 1),
+            }
+            rows = db.query(RepairOrder).filter(RepairOrder.id.in_(repair_ids)).all()
+            for row in rows:
+                row.status = "completed"
+                row.repaired_quantity = int(row.repair_quantity or 0)
+                row.completed_at = close_time
+                row.repair_operator_user_id = admin.id
+                row.repair_operator_username = admin.username
+                phenomenon, reason, quantity = cause_payload[int(row.id)]
+                db.add(
+                    RepairCause(
+                        repair_order_id=row.id,
+                        order_id=row.source_order_id,
+                        order_code=row.source_order_code,
+                        product_id=row.product_id,
+                        product_name=row.product_name,
+                        process_id=row.source_order_process_id,
+                        process_code=row.source_process_code,
+                        process_name=row.source_process_name,
+                        phenomenon=phenomenon,
+                        reason=reason,
+                        is_scrap=False,
+                        quantity=quantity,
+                        cause_time=close_time,
+                        operator_user_id=admin.id,
+                        operator_username=admin.username,
+                    )
+                )
+            db.commit()
+        finally:
+            db.close()
+
+        aggregated_response = self.client.get(
+            "/api/v1/production/repair-orders",
+            headers=self._headers(),
+            params={"keyword": order["order_code"], "page_size": 20},
+        )
+        self.assertEqual(
+            aggregated_response.status_code,
+            200,
+            aggregated_response.text,
+        )
+        aggregated_items = aggregated_response.json()["data"]["items"]
+        self.assertEqual(len(aggregated_items), 1)
+        aggregate_item = aggregated_items[0]
+        self.assertTrue(aggregate_item["is_aggregated"])
+        self.assertEqual(aggregate_item["child_repair_order_count"], 3)
+        self.assertEqual(set(aggregate_item["child_repair_order_ids"]), set(repair_ids))
+        self.assertEqual(aggregate_item["repair_quantity"], 4)
+        self.assertEqual(aggregate_item["production_quantity"], 5)
+
+        detail_response = self.client.get(
+            f"/api/v1/production/repair-orders/{repair_ids[0]}/detail",
+            headers=self._headers(),
+        )
+        self.assertEqual(detail_response.status_code, 200, detail_response.text)
+        detail = detail_response.json()["data"]
+        self.assertTrue(detail["is_aggregated"])
+        self.assertEqual(len(detail["child_repair_orders"]), 3)
+        phenomenon_summary = {
+            item["phenomenon"]: item["quantity"]
+            for item in detail["phenomenon_summary"]
+        }
+        self.assertEqual(phenomenon_summary["划伤"], 3)
+        self.assertEqual(phenomenon_summary["毛刺"], 1)
+        cause_summary = {
+            (item["phenomenon"], item["reason"], item["is_scrap"]): item["quantity"]
+            for item in detail["cause_summary"]
+        }
+        self.assertEqual(cause_summary[("划伤", "打磨", False)], 3)
+        self.assertEqual(cause_summary[("毛刺", "校正", False)], 1)
+
+        export_response = self.client.post(
+            "/api/v1/production/repair-orders/export",
+            headers=self._headers(),
+            json={"keyword": order["order_code"], "status": "all"},
+        )
+        self.assertEqual(export_response.status_code, 200, export_response.text)
+        csv_text = base64.b64decode(
+            export_response.json()["data"]["content_base64"]
+        ).decode("utf-8-sig")
+        csv_rows = list(csv.reader(io.StringIO(csv_text)))
+        self.assertEqual(len(csv_rows), 2)
+        self.assertIn("-AGG", csv_rows[1][0])
+        self.assertTrue(all(code not in csv_rows[1][0] for code in repair_codes[1:]))
+
+        quality_params = {
+            "start_date": date.today().isoformat(),
+            "end_date": date.today().isoformat(),
+            "product_name": product["name"],
+        }
+        overview_response = self.client.get(
+            "/api/v1/quality/stats/overview",
+            headers=self._headers(),
+            params=quality_params,
+        )
+        self.assertEqual(overview_response.status_code, 200, overview_response.text)
+        self.assertEqual(overview_response.json()["data"]["repair_total"], 1)
+
+        products_response = self.client.get(
+            "/api/v1/quality/stats/products",
+            headers=self._headers(),
+            params=quality_params,
+        )
+        self.assertEqual(products_response.status_code, 200, products_response.text)
+        product_items = products_response.json()["data"]["items"]
+        matched_product = next(
+            item for item in product_items if item["product_id"] == product["id"]
+        )
+        self.assertEqual(matched_product["repair_total"], 1)
+
+        trend_response = self.client.get(
+            "/api/v1/quality/trend",
+            headers=self._headers(),
+            params=quality_params,
+        )
+        self.assertEqual(trend_response.status_code, 200, trend_response.text)
+        trend_items = trend_response.json()["data"]["items"]
+        self.assertEqual(sum(item["repair_total"] for item in trend_items), 1)
 
     def test_end_production_releases_partial_completed_quantity_to_next_process(
         self,
@@ -782,6 +1870,84 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(response.status_code, 400, response.text)
         self.assertIn("当前登录密码错误", response.text)
 
+    def test_complete_order_rejects_in_progress_repair_orders(self) -> None:
+        stage = self._create_stage("CMP3")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="CMP3"
+        )
+        product = self._create_product("结束订单维修阻塞")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+            ],
+        )
+        repair_code = f"RW-IT-BLOCK-{int(time.time() * 1000)}"
+
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            assert order_row is not None
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == order_row.id)
+                .first()
+            )
+            assert process_row is not None
+            order_row.status = "in_progress"
+            db.add(
+                RepairOrder(
+                    repair_order_code=repair_code,
+                    source_order_id=order_row.id,
+                    source_order_code=order_row.order_code,
+                    product_id=order_row.product_id,
+                    product_name=order_row.product.name if order_row.product else None,
+                    source_order_process_id=process_row.id,
+                    source_process_code=process_row.process_code,
+                    source_process_name=process_row.process_name,
+                    sender_user_id=None,
+                    sender_username="admin",
+                    production_quantity=2,
+                    repair_quantity=2,
+                    repaired_quantity=0,
+                    scrap_quantity=0,
+                    repair_time=datetime(2026, 3, 6, 9, 0, tzinfo=UTC),
+                    status="in_repair",
+                )
+            )
+            db.commit()
+            repair_row = (
+                db.query(RepairOrder)
+                .filter(RepairOrder.repair_order_code == repair_code)
+                .first()
+            )
+            assert repair_row is not None
+            self.repair_order_ids.append(int(repair_row.id))
+        finally:
+            db.close()
+
+        response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/complete",
+            headers=self._headers(),
+            json={"password": "Admin@123456"},
+        )
+
+        self.assertEqual(response.status_code, 409, response.text)
+        detail = response.json()["detail"]
+        self.assertIn("该订单仍有维修中的维修单", detail)
+        self.assertIn(repair_code, detail)
+        self.assertNotIn("Order has in-progress repair orders", detail)
+
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            self.assertIsNotNone(order_row)
+            assert order_row is not None
+            self.assertEqual(order_row.status, "in_progress")
+        finally:
+            db.close()
+
     def test_complete_order_succeeds_with_current_user_password(self) -> None:
         stage = self._create_stage("CMP2")
         process = self._create_process(
@@ -921,6 +2087,181 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             self.assertIsNone(row.reviewer_user_id)
         finally:
             db.close()
+
+    def test_create_assist_authorization_allows_multiple_distinct_helpers_only_once_each(
+        self,
+    ) -> None:
+        stage = self._create_stage("ASTM")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="ASTM"
+        )
+        product = self._create_product("代班多人授权")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+            ],
+        )
+        helper_a = self._create_active_user("assist_multi_a")
+        helper_b = self._create_active_user("assist_multi_b")
+
+        db = SessionLocal()
+        try:
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .first()
+            )
+            admin = db.query(User).filter(User.username == "admin").first()
+            helper_a_row = db.get(User, int(helper_a.id))
+            helper_b_row = db.get(User, int(helper_b.id))
+            assert (
+                process_row is not None
+                and admin is not None
+                and helper_a_row is not None
+                and helper_b_row is not None
+            )
+            sub_order = ProductionSubOrder(
+                order_process_id=process_row.id,
+                operator_user_id=admin.id,
+                completed_quantity=0,
+                status="in_progress",
+            )
+            db.add(sub_order)
+            db.commit()
+            process_id = int(process_row.id)
+            target_operator_user_id = int(admin.id)
+            helper_a_row.full_name = "代班人A"
+            helper_b_row.full_name = "代班人B"
+            db.commit()
+        finally:
+            db.close()
+
+        first_response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/assist-authorizations",
+            headers=self._headers(),
+            json={
+                "order_process_id": process_id,
+                "target_operator_user_id": target_operator_user_id,
+                "helper_user_id": int(helper_a.id),
+                "reason": "白班代班",
+            },
+        )
+        self.assertEqual(first_response.status_code, 201, first_response.text)
+        self.assertEqual(
+            first_response.json()["data"]["helper_user_id"],
+            int(helper_a.id),
+        )
+
+        second_response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/assist-authorizations",
+            headers=self._headers(),
+            json={
+                "order_process_id": process_id,
+                "target_operator_user_id": target_operator_user_id,
+                "helper_user_id": int(helper_b.id),
+                "reason": "夜班代班",
+            },
+        )
+        self.assertEqual(second_response.status_code, 201, second_response.text)
+        self.assertEqual(
+            second_response.json()["data"]["helper_user_id"],
+            int(helper_b.id),
+        )
+
+        duplicate_response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/assist-authorizations",
+            headers=self._headers(),
+            json={
+                "order_process_id": process_id,
+                "target_operator_user_id": target_operator_user_id,
+                "helper_user_id": int(helper_a.id),
+                "reason": "重复代班",
+            },
+        )
+        self.assertEqual(duplicate_response.status_code, 409, duplicate_response.text)
+        self.assertEqual(
+            duplicate_response.json()["detail"],
+            "已存在生效中的代班授权",
+        )
+
+        self.assertEqual(
+            first_response.json()["data"]["target_operator_user_id"],
+            target_operator_user_id,
+        )
+        self.assertEqual(
+            second_response.json()["data"]["target_operator_user_id"],
+            target_operator_user_id,
+        )
+
+    def test_create_assist_authorization_rejects_operator_from_current_stage(
+        self,
+    ) -> None:
+        stage = self._create_stage("ASTS")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="ASTS"
+        )
+        product = self._create_product("代班同工段限制")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+            ],
+        )
+        db = SessionLocal()
+        try:
+            operator_role = db.query(Role).filter(Role.code == "operator").first()
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .first()
+            )
+            admin = db.query(User).filter(User.username == "admin").first()
+            helper_row = User(
+                username=f"production_stage_helper_{int(time.time() * 1000)}",
+                full_name="同工段代班人",
+                password_hash=get_password_hash("Admin@123456"),
+                is_active=True,
+                is_superuser=False,
+                stage_id=int(stage["id"]),
+                remark="生产集成测试",
+            )
+            if operator_role is not None:
+                helper_row.roles.append(operator_role)
+            assert process_row is not None and admin is not None
+            db.add(helper_row)
+            db.flush()
+            db.add(
+                ProductionSubOrder(
+                    order_process_id=process_row.id,
+                    operator_user_id=admin.id,
+                    completed_quantity=0,
+                    status="in_progress",
+                )
+            )
+            db.commit()
+            helper_user_id = int(helper_row.id)
+            self.user_ids.append(helper_user_id)
+            process_id = int(process_row.id)
+            target_operator_user_id = int(admin.id)
+        finally:
+            db.close()
+
+        response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/assist-authorizations",
+            headers=self._headers(),
+            json={
+                "order_process_id": process_id,
+                "target_operator_user_id": target_operator_user_id,
+                "helper_user_id": helper_user_id,
+                "reason": "本工段协助",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertEqual(response.json()["detail"], "本工段操作员无需发起代班")
 
     def test_production_stats_and_today_realtime_cover_core_aggregations(self) -> None:
         baseline_overview = self.client.get(
@@ -1714,7 +3055,10 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self._activate_product(product)
         helper_user = self._create_user_with_permissions(
             suffix="assistconsume",
-            permission_codes=["production.execution.end_production"],
+            permission_codes=[
+                "production.execution.first_article",
+                "production.execution.end_production",
+            ],
         )
         helper_token = self._login_as(username=helper_user.username)
         order = self._create_order(
@@ -1735,9 +3079,7 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
                 .first()
             )
             assert admin is not None and helper_row is not None and process_def is not None and process_row is not None
-            if all(row.id != process_def.id for row in helper_row.processes):
-                helper_row.processes.append(process_def)
-            process_row.status = "in_progress"
+            process_row.status = "pending"
             process_row.visible_quantity = 10
             process_row.completed_quantity = 0
             target_sub_order = (
@@ -1753,12 +3095,28 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
                     order_process_id=process_row.id,
                     operator_user_id=admin.id,
                     completed_quantity=0,
-                    status="in_progress",
+                    status="pending",
                 )
                 db.add(target_sub_order)
             else:
-                target_sub_order.status = "in_progress"
+                target_sub_order.status = "pending"
+            today_code = (
+                db.query(DailyVerificationCode)
+                .filter(DailyVerificationCode.verify_date == date.today())
+                .first()
+            )
+            if today_code is None:
+                db.add(
+                    DailyVerificationCode(
+                        verify_date=date.today(),
+                        code="assist-end-code",
+                        created_by_user_id=admin.id,
+                    )
+                )
+            else:
+                today_code.code = "assist-end-code"
             db.commit()
+            process_row_id = int(process_row.id)
         finally:
             db.close()
 
@@ -1766,7 +3124,7 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             f"/api/v1/production/orders/{order['id']}/assist-authorizations",
             headers=self._headers(),
             json={
-                "order_process_id": process_row.id,
+                "order_process_id": process_row_id,
                 "target_operator_user_id": admin.id,
                 "helper_user_id": int(helper_user.id),
                 "reason": "代班报工",
@@ -1775,12 +3133,46 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         self.assertEqual(auth_response.status_code, 201, auth_response.text)
         auth_id = int(auth_response.json()["data"]["id"])
 
+        first_article_response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/first-article",
+            headers={"Authorization": f"Bearer {helper_token}"},
+            json={
+                "order_process_id": process_row_id,
+                "assist_authorization_id": auth_id,
+                "verification_code": "assist-end-code",
+            },
+        )
+        self.assertEqual(
+            first_article_response.status_code,
+            200,
+            first_article_response.text,
+        )
+
+        db = SessionLocal()
+        try:
+            auth_row = db.get(ProductionAssistAuthorization, auth_id)
+            helper_sub_order = (
+                db.query(ProductionSubOrder)
+                .filter(
+                    ProductionSubOrder.order_process_id == process_row_id,
+                    ProductionSubOrder.operator_user_id == int(helper_user.id),
+                )
+                .first()
+            )
+            assert auth_row is not None
+            assert helper_sub_order is not None
+            self.assertEqual(auth_row.status, "approved")
+            self.assertIsNotNone(auth_row.first_article_used_at)
+            self.assertIsNone(auth_row.end_production_used_at)
+            self.assertEqual(helper_sub_order.status, "in_progress")
+        finally:
+            db.close()
+
         report_response = self.client.post(
             f"/api/v1/production/orders/{order['id']}/end-production",
             headers={"Authorization": f"Bearer {helper_token}"},
             json={
-                "order_process_id": process_row.id,
-                "effective_operator_user_id": admin.id,
+                "order_process_id": process_row_id,
                 "assist_authorization_id": auth_id,
                 "quantity": 1,
             },
@@ -1802,6 +3194,154 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
                 .first()
             )
             self.assertIsNotNone(event_row)
+        finally:
+            db.close()
+
+    def test_my_orders_assist_view_uses_helper_runtime_and_manual_repair_stays_authorized(
+        self,
+    ) -> None:
+        stage = self._create_stage("ASTMY")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="ASTMY"
+        )
+        product = self._create_product("代班视角运行态")
+        self._activate_product(product)
+        helper_user = self._create_user_with_permissions(
+            suffix="assistview",
+            permission_codes=[
+                "production.my_orders.list",
+                "production.execution.first_article",
+                "production.repair_orders.create_manual",
+            ],
+        )
+        helper_token = self._login_as(username=helper_user.username)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+            ],
+        )
+
+        db = SessionLocal()
+        try:
+            admin = db.query(User).filter(User.username == "admin").first()
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .first()
+            )
+            assert admin is not None and process_row is not None
+            process_row.status = "pending"
+            process_row.visible_quantity = 10
+            process_row.completed_quantity = 0
+            today_code = (
+                db.query(DailyVerificationCode)
+                .filter(DailyVerificationCode.verify_date == date.today())
+                .first()
+            )
+            if today_code is None:
+                db.add(
+                    DailyVerificationCode(
+                        verify_date=date.today(),
+                        code="assist-view-code",
+                        created_by_user_id=admin.id,
+                    )
+                )
+            else:
+                today_code.code = "assist-view-code"
+            db.commit()
+            process_row_id = int(process_row.id)
+            admin_id = int(admin.id)
+        finally:
+            db.close()
+
+        auth_response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/assist-authorizations",
+            headers=self._headers(),
+            json={
+                "order_process_id": process_row_id,
+                "target_operator_user_id": admin_id,
+                "helper_user_id": int(helper_user.id),
+                "reason": "代班首件与送修",
+            },
+        )
+        self.assertEqual(auth_response.status_code, 201, auth_response.text)
+        auth_id = int(auth_response.json()["data"]["id"])
+
+        assist_list_response = self.client.get(
+            "/api/v1/production/my-orders",
+            headers={"Authorization": f"Bearer {helper_token}"},
+            params={
+                "view_mode": "assist",
+                "keyword": order["order_code"],
+                "sub_order_status": "pending",
+            },
+        )
+        self.assertEqual(assist_list_response.status_code, 200, assist_list_response.text)
+        assist_items = assist_list_response.json()["data"]["items"]
+        self.assertEqual(len(assist_items), 1)
+        self.assertEqual(assist_items[0]["work_view"], "assist")
+        self.assertEqual(assist_items[0]["operator_user_id"], int(helper_user.id))
+        self.assertEqual(assist_items[0]["operator_username"], helper_user.username)
+        self.assertEqual(assist_items[0]["sub_order_status"], "pending")
+        self.assertEqual(assist_items[0]["assist_authorization_id"], auth_id)
+        self.assertTrue(assist_items[0]["can_first_article"])
+
+        first_article_response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/first-article",
+            headers={"Authorization": f"Bearer {helper_token}"},
+            json={
+                "order_process_id": process_row_id,
+                "assist_authorization_id": auth_id,
+                "verification_code": "assist-view-code",
+            },
+        )
+        self.assertEqual(
+            first_article_response.status_code,
+            200,
+            first_article_response.text,
+        )
+
+        in_progress_response = self.client.get(
+            "/api/v1/production/my-orders",
+            headers={"Authorization": f"Bearer {helper_token}"},
+            params={"view_mode": "assist", "keyword": order["order_code"]},
+        )
+        self.assertEqual(in_progress_response.status_code, 200, in_progress_response.text)
+        in_progress_items = in_progress_response.json()["data"]["items"]
+        self.assertEqual(len(in_progress_items), 1)
+        self.assertEqual(in_progress_items[0]["sub_order_status"], "in_progress")
+        self.assertTrue(in_progress_items[0]["can_create_manual_repair"])
+
+        repair_response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/repair-orders",
+            headers={"Authorization": f"Bearer {helper_token}"},
+            json={
+                "order_process_id": process_row_id,
+                "effective_operator_user_id": int(helper_user.id),
+                "assist_authorization_id": auth_id,
+                "defect_items": [{"phenomenon": "划伤", "quantity": 1}],
+            },
+        )
+        self.assertEqual(repair_response.status_code, 201, repair_response.text)
+        repair_row = repair_response.json()["data"]
+        self.assertEqual(repair_row["sender_user_id"], int(helper_user.id))
+        self.assertEqual(repair_row["production_quantity"], 0)
+
+        db = SessionLocal()
+        try:
+            auth_row = db.get(ProductionAssistAuthorization, auth_id)
+            repair_db_row = (
+                db.query(RepairOrder)
+                .filter(RepairOrder.id == int(repair_row["id"]))
+                .first()
+            )
+            assert auth_row is not None
+            assert repair_db_row is not None
+            self.assertEqual(auth_row.status, "approved")
+            self.assertIsNotNone(auth_row.first_article_used_at)
+            self.assertIsNone(auth_row.end_production_used_at)
+            self.assertEqual(repair_db_row.sender_user_id, int(helper_user.id))
         finally:
             db.close()
 
@@ -2082,6 +3622,193 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         context_payload = context_response.json()["data"]
         self.assertFalse(context_payload["found"])
         self.assertIsNone(context_payload["item"])
+
+    def test_my_orders_runtime_sub_order_status_controls_visibility(self) -> None:
+        stage = self._create_stage("MYSTAT")
+        process = self._create_process(
+            stage_id=stage["id"], stage_code=stage["code"], suffix="MYSTAT"
+        )
+        operator_user = self._create_user_with_permissions(
+            suffix="mystat",
+            permission_codes=[
+                "production.my_orders.list",
+                "production.my_orders.context",
+            ],
+        )
+        operator_token = self._login_as(username=operator_user.username)
+        blocker_user = self._create_active_user("mystat_blocker")
+
+        product = self._create_product("我的工单运行态状态")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+            ],
+        )
+
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .first()
+            )
+            operator_row = db.get(User, int(operator_user.id))
+            blocker_row = db.get(User, int(blocker_user.id))
+            process_def = db.get(Process, int(process["id"]))
+            assert (
+                order_row is not None
+                and process_row is not None
+                and operator_row is not None
+                and blocker_row is not None
+                and process_def is not None
+            )
+            if all(row.id != process_def.id for row in operator_row.processes):
+                operator_row.processes.append(process_def)
+            order_row.status = "in_progress"
+            order_row.current_process_code = process_row.process_code
+            process_row.status = "in_progress"
+            process_row.visible_quantity = 1
+            process_row.completed_quantity = 0
+
+            operator_sub_order = (
+                db.query(ProductionSubOrder)
+                .filter(
+                    ProductionSubOrder.order_process_id == process_row.id,
+                    ProductionSubOrder.operator_user_id == int(operator_user.id),
+                )
+                .first()
+            )
+            if operator_sub_order is None:
+                operator_sub_order = ProductionSubOrder(
+                    order_process_id=process_row.id,
+                    operator_user_id=int(operator_user.id),
+                    completed_quantity=0,
+                    status="pending",
+                )
+                db.add(operator_sub_order)
+            else:
+                operator_sub_order.completed_quantity = 0
+                operator_sub_order.status = "pending"
+
+            blocker_sub_order = (
+                db.query(ProductionSubOrder)
+                .filter(
+                    ProductionSubOrder.order_process_id == process_row.id,
+                    ProductionSubOrder.operator_user_id == int(blocker_user.id),
+                )
+                .first()
+            )
+            if blocker_sub_order is None:
+                blocker_sub_order = ProductionSubOrder(
+                    order_process_id=process_row.id,
+                    operator_user_id=int(blocker_user.id),
+                    completed_quantity=0,
+                    status="in_progress",
+                )
+                db.add(blocker_sub_order)
+            else:
+                blocker_sub_order.completed_quantity = 0
+                blocker_sub_order.status = "in_progress"
+            db.commit()
+        finally:
+            db.close()
+
+        hidden_list_response = self.client.get(
+            "/api/v1/production/my-orders",
+            headers={"Authorization": f"Bearer {operator_token}"},
+            params={"keyword": order["order_code"]},
+        )
+        self.assertEqual(hidden_list_response.status_code, 200, hidden_list_response.text)
+        self.assertEqual(hidden_list_response.json()["data"]["items"], [])
+
+        hidden_context_response = self.client.get(
+            f"/api/v1/production/my-orders/{order['id']}/context",
+            headers={"Authorization": f"Bearer {operator_token}"},
+        )
+        self.assertEqual(
+            hidden_context_response.status_code,
+            200,
+            hidden_context_response.text,
+        )
+        self.assertFalse(hidden_context_response.json()["data"]["found"])
+
+        db = SessionLocal()
+        try:
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .first()
+            )
+            blocker_sub_order = (
+                db.query(ProductionSubOrder)
+                .filter(
+                    ProductionSubOrder.order_process_id == process_row.id,
+                    ProductionSubOrder.operator_user_id == int(blocker_user.id),
+                )
+                .first()
+            )
+            assert process_row is not None and blocker_sub_order is not None
+            blocker_sub_order.status = "pending"
+            db.commit()
+        finally:
+            db.close()
+
+        pending_list_response = self.client.get(
+            "/api/v1/production/my-orders",
+            headers={"Authorization": f"Bearer {operator_token}"},
+            params={"keyword": order["order_code"], "sub_order_status": "pending"},
+        )
+        self.assertEqual(
+            pending_list_response.status_code,
+            200,
+            pending_list_response.text,
+        )
+        pending_items = pending_list_response.json()["data"]["items"]
+        self.assertEqual(len(pending_items), 1)
+        self.assertEqual(pending_items[0]["order_id"], order["id"])
+        self.assertEqual(pending_items[0]["order_status"], "in_progress")
+        self.assertEqual(pending_items[0]["sub_order_status"], "pending")
+
+        db = SessionLocal()
+        try:
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .first()
+            )
+            operator_sub_order = (
+                db.query(ProductionSubOrder)
+                .filter(
+                    ProductionSubOrder.order_process_id == process_row.id,
+                    ProductionSubOrder.operator_user_id == int(operator_user.id),
+                )
+                .first()
+            )
+            assert process_row is not None and operator_sub_order is not None
+            operator_sub_order.status = "in_progress"
+            db.commit()
+        finally:
+            db.close()
+
+        in_progress_context_response = self.client.get(
+            f"/api/v1/production/my-orders/{order['id']}/context",
+            headers={"Authorization": f"Bearer {operator_token}"},
+        )
+        self.assertEqual(
+            in_progress_context_response.status_code,
+            200,
+            in_progress_context_response.text,
+        )
+        in_progress_payload = in_progress_context_response.json()["data"]
+        self.assertTrue(in_progress_payload["found"])
+        self.assertEqual(
+            in_progress_payload["item"]["sub_order_status"],
+            "in_progress",
+        )
+        self.assertTrue(in_progress_payload["item"]["can_end_production"])
 
     def test_first_article_rejects_operator_without_process_binding(self) -> None:
         stage = self._create_stage("FANOPROC")
@@ -2516,6 +4243,493 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["data"]["status"], "completed")
+
+    def test_complete_repair_order_accepts_multiple_causes_for_same_phenomenon(
+        self,
+    ) -> None:
+        fixture = self._create_return_to_production_fixture(suffix="MC1")
+
+        response = self.client.post(
+            "/api/v1/production/repair-orders/"
+            f"{fixture['repair_order_id']}/complete",
+            headers=self._headers(),
+            json={
+                "cause_items": [
+                    {
+                        "phenomenon": "毛刺",
+                        "reason": "虚焊",
+                        "quantity": 1,
+                        "is_scrap": False,
+                    },
+                    {
+                        "phenomenon": "毛刺",
+                        "reason": "连锡",
+                        "quantity": 1,
+                        "is_scrap": False,
+                    },
+                ],
+                "scrap_replenished": False,
+                "return_allocations": [
+                    {
+                        "target_order_process_id": fixture["process_id"],
+                        "quantity": 2,
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["data"]["status"], "completed")
+        db = SessionLocal()
+        try:
+            cause_rows = (
+                db.query(RepairCause)
+                .filter(
+                    RepairCause.repair_order_id
+                    == int(fixture["repair_order_id"])
+                )
+                .order_by(RepairCause.id.asc())
+                .all()
+            )
+            self.assertEqual(len(cause_rows), 2)
+            self.assertEqual([row.phenomenon for row in cause_rows], ["毛刺", "毛刺"])
+            self.assertEqual([row.reason for row in cause_rows], ["虚焊", "连锡"])
+        finally:
+            db.close()
+
+    def test_complete_repair_order_rejects_cause_phenomenon_quantity_mismatch(
+        self,
+    ) -> None:
+        fixture = self._create_return_to_production_fixture(suffix="MC2")
+        db = SessionLocal()
+        try:
+            repair_row = db.get(RepairOrder, int(fixture["repair_order_id"]))
+            defect_row = (
+                db.query(RepairDefectPhenomenon)
+                .filter(
+                    RepairDefectPhenomenon.repair_order_id
+                    == int(fixture["repair_order_id"])
+                )
+                .first()
+            )
+            assert repair_row is not None and defect_row is not None
+            defect_row.quantity = 1
+            db.add(
+                RepairDefectPhenomenon(
+                    repair_order_id=repair_row.id,
+                    order_id=repair_row.source_order_id,
+                    order_code=repair_row.source_order_code,
+                    product_id=repair_row.product_id,
+                    product_name=repair_row.product_name or "",
+                    process_id=repair_row.source_order_process_id,
+                    process_code=repair_row.source_process_code,
+                    process_name=repair_row.source_process_name,
+                    phenomenon="外观不良",
+                    quantity=1,
+                    operator_username=repair_row.sender_username,
+                    production_time=repair_row.repair_time,
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        response = self.client.post(
+            "/api/v1/production/repair-orders/"
+            f"{fixture['repair_order_id']}/complete",
+            headers=self._headers(),
+            json={
+                "cause_items": [
+                    {
+                        "phenomenon": "毛刺",
+                        "reason": "虚焊",
+                        "quantity": 2,
+                        "is_scrap": False,
+                    }
+                ],
+                "scrap_replenished": False,
+                "return_allocations": [
+                    {
+                        "target_order_process_id": fixture["process_id"],
+                        "quantity": 2,
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertIn("维修原因的不良现象数量必须与送修明细一致", response.text)
+
+    def test_complete_repair_order_rejects_scrap_replenished_without_scrap(
+        self,
+    ) -> None:
+        fixture = self._create_return_to_production_fixture(suffix="MC3")
+
+        response = self.client.post(
+            "/api/v1/production/repair-orders/"
+            f"{fixture['repair_order_id']}/complete",
+            headers=self._headers(),
+            json={
+                "cause_items": [
+                    {
+                        "phenomenon": "毛刺",
+                        "reason": "虚焊",
+                        "quantity": 2,
+                        "is_scrap": False,
+                    }
+                ],
+                "scrap_replenished": True,
+                "return_allocations": [
+                    {
+                        "target_order_process_id": fixture["process_id"],
+                        "quantity": 2,
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertIn("报废已补充只能在存在报废原因时勾选", response.text)
+
+    def test_complete_repair_order_rejects_unreplenished_scrap_return_mismatch(
+        self,
+    ) -> None:
+        fixture = self._create_return_to_production_fixture(suffix="MC4")
+
+        response = self.client.post(
+            "/api/v1/production/repair-orders/"
+            f"{fixture['repair_order_id']}/complete",
+            headers=self._headers(),
+            json={
+                "cause_items": [
+                    {
+                        "phenomenon": "毛刺",
+                        "reason": "报废判定",
+                        "quantity": 1,
+                        "is_scrap": True,
+                    },
+                    {
+                        "phenomenon": "毛刺",
+                        "reason": "复判回流",
+                        "quantity": 1,
+                        "is_scrap": False,
+                    },
+                ],
+                "scrap_replenished": False,
+                "return_allocations": [
+                    {
+                        "target_order_process_id": fixture["process_id"],
+                        "quantity": 2,
+                    }
+                ],
+            },
+        )
+
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertIn(
+            "回流数量合计必须等于送修数量 2 - 未补充报废数量 1 = 1",
+            response.text,
+        )
+
+    def test_complete_repair_order_uses_only_explicit_return_allocations(
+        self,
+    ) -> None:
+        stage_a = self._create_stage("RC1")
+        process_a = self._create_process(
+            stage_id=stage_a["id"], stage_code=stage_a["code"], suffix="RC1"
+        )
+        stage_b = self._create_stage("RC2")
+        process_b = self._create_process(
+            stage_id=stage_b["id"], stage_code=stage_b["code"], suffix="RC2"
+        )
+        product = self._create_product("显式回流口径")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {
+                    "step_order": 1,
+                    "stage_id": stage_a["id"],
+                    "process_id": process_a["id"],
+                },
+                {
+                    "step_order": 2,
+                    "stage_id": stage_b["id"],
+                    "process_id": process_b["id"],
+                },
+            ],
+        )
+
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            process_rows = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == int(order["id"]))
+                .order_by(ProductionOrderProcess.process_order.asc())
+                .all()
+            )
+            admin = db.query(User).filter(User.username == "admin").first()
+            assert order_row is not None and len(process_rows) == 2 and admin is not None
+            first_process, source_process = process_rows
+            order_row.status = "in_progress"
+            order_row.current_process_code = source_process.process_code
+            first_process.visible_quantity = 4
+            first_process.completed_quantity = 4
+            first_process.status = "completed"
+            source_process.visible_quantity = 6
+            source_process.completed_quantity = 4
+            source_process.status = "partial"
+
+            repair_row = RepairOrder(
+                repair_order_code=f"RW-EXPLICIT-{int(time.time() * 1000)}",
+                source_order_id=order_row.id,
+                source_order_code=order_row.order_code,
+                product_id=order_row.product_id,
+                product_name=order_row.product.name if order_row.product else None,
+                source_order_process_id=source_process.id,
+                source_process_code=source_process.process_code,
+                source_process_name=source_process.process_name,
+                sender_user_id=admin.id,
+                sender_username=admin.username,
+                production_quantity=6,
+                repair_quantity=2,
+                repaired_quantity=0,
+                scrap_quantity=0,
+                scrap_replenished=False,
+                repair_time=datetime(2026, 3, 7, 9, 0, tzinfo=UTC),
+                status="in_repair",
+            )
+            db.add(repair_row)
+            db.flush()
+            db.add(
+                RepairDefectPhenomenon(
+                    repair_order_id=repair_row.id,
+                    order_id=order_row.id,
+                    order_code=order_row.order_code,
+                    product_id=order_row.product_id,
+                    product_name=order_row.product.name if order_row.product else "",
+                    process_id=source_process.id,
+                    process_code=source_process.process_code,
+                    process_name=source_process.process_name,
+                    phenomenon="毛刺",
+                    quantity=2,
+                    operator_user_id=admin.id,
+                    operator_username=admin.username,
+                    production_time=datetime(2026, 3, 7, 9, 0, tzinfo=UTC),
+                )
+            )
+            db.commit()
+            db.refresh(repair_row)
+            self.repair_order_ids.append(int(repair_row.id))
+            repair_order_id = int(repair_row.id)
+            first_process_id = int(first_process.id)
+            source_process_id = int(source_process.id)
+        finally:
+            db.close()
+
+        response = self.client.post(
+            f"/api/v1/production/repair-orders/{repair_order_id}/complete",
+            headers=self._headers(),
+            json={
+                "cause_items": [
+                    {
+                        "phenomenon": "毛刺",
+                        "reason": "报废补料",
+                        "quantity": 1,
+                        "is_scrap": True,
+                    },
+                    {
+                        "phenomenon": "毛刺",
+                        "reason": "复判回流",
+                        "quantity": 1,
+                        "is_scrap": False,
+                    },
+                ],
+                "scrap_replenished": True,
+                "return_allocations": [
+                    {
+                        "target_order_process_id": first_process_id,
+                        "quantity": 1,
+                    },
+                    {
+                        "target_order_process_id": source_process_id,
+                        "quantity": 1,
+                    },
+                ],
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["data"]["status"], "completed")
+
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            first_process = db.get(ProductionOrderProcess, first_process_id)
+            source_process = db.get(ProductionOrderProcess, source_process_id)
+            repair_row = db.get(RepairOrder, repair_order_id)
+            assert (
+                order_row is not None
+                and first_process is not None
+                and source_process is not None
+                and repair_row is not None
+            )
+            self.assertEqual(first_process.visible_quantity, 5)
+            self.assertEqual(first_process.completed_quantity, 4)
+            self.assertEqual(first_process.status, "partial")
+            self.assertEqual(source_process.visible_quantity, 5)
+            self.assertEqual(source_process.completed_quantity, 4)
+            self.assertEqual(source_process.status, "partial")
+            self.assertEqual(repair_row.repaired_quantity, 2)
+            self.assertEqual(repair_row.scrap_quantity, 1)
+            self.assertTrue(repair_row.scrap_replenished)
+            self.assertEqual(order_row.status, "in_progress")
+        finally:
+            db.close()
+
+    def test_return_repair_order_to_production_restores_process_and_records_event(
+        self,
+    ) -> None:
+        fixture = self._create_return_to_production_fixture(suffix="RTN1")
+
+        response = self.client.post(
+            "/api/v1/production/repair-orders/"
+            f"{fixture['repair_order_id']}/return-to-production",
+            headers=self._headers(),
+            json={"password": "Admin@123456"},
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        payload = response.json()["data"]
+        self.assertEqual(payload["status"], "returned_to_production")
+        self.assertEqual(payload["repaired_quantity"], 0)
+        self.assertEqual(payload["scrap_quantity"], 0)
+        self.assertFalse(payload["scrap_replenished"])
+        self.assertEqual(payload["repair_operator_username"], "admin")
+
+        db = SessionLocal()
+        try:
+            process_row = db.get(ProductionOrderProcess, int(fixture["process_id"]))
+            order_row = db.get(ProductionOrder, int(fixture["order_id"]))
+            assert process_row is not None and order_row is not None
+            self.assertEqual(
+                process_row.visible_quantity,
+                int(fixture["previous_visible_quantity"]) + 2,
+            )
+            self.assertEqual(process_row.status, "partial")
+            self.assertEqual(order_row.status, "in_progress")
+            self.assertEqual(
+                db.query(RepairCause)
+                .filter(
+                    RepairCause.repair_order_id == int(fixture["repair_order_id"])
+                )
+                .count(),
+                0,
+            )
+            self.assertEqual(
+                db.query(RepairReturnRoute)
+                .filter(
+                    RepairReturnRoute.repair_order_id
+                    == int(fixture["repair_order_id"])
+                )
+                .count(),
+                0,
+            )
+            self.assertEqual(
+                db.query(ProductionScrapStatistics)
+                .filter(
+                    ProductionScrapStatistics.order_id == int(fixture["order_id"])
+                )
+                .count(),
+                0,
+            )
+            event_row = (
+                db.query(OrderEventLog)
+                .filter(
+                    OrderEventLog.order_id == int(fixture["order_id"]),
+                    OrderEventLog.event_type
+                    == "repair_order_returned_to_production",
+                )
+                .first()
+            )
+            self.assertIsNotNone(event_row)
+            assert event_row is not None
+            self.assertIn("退回生产", event_row.event_title)
+        finally:
+            db.close()
+
+        detail_response = self.client.get(
+            "/api/v1/production/repair-orders/"
+            f"{fixture['repair_order_id']}/detail",
+            headers=self._headers(),
+        )
+        self.assertEqual(detail_response.status_code, 200, detail_response.text)
+        detail_payload = detail_response.json()["data"]
+        self.assertEqual(detail_payload["status"], "returned_to_production")
+        self.assertTrue(
+            any(
+                item["event_type"] == "repair_order_returned_to_production"
+                for item in detail_payload["event_logs"]
+            )
+        )
+
+    def test_return_repair_order_to_production_requires_current_password(
+        self,
+    ) -> None:
+        fixture = self._create_return_to_production_fixture(suffix="RTN2")
+
+        response = self.client.post(
+            "/api/v1/production/repair-orders/"
+            f"{fixture['repair_order_id']}/return-to-production",
+            headers=self._headers(),
+            json={"password": "wrong-password"},
+        )
+
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertIn("当前登录密码错误，无法退回生产", response.text)
+        db = SessionLocal()
+        try:
+            repair_row = db.get(RepairOrder, int(fixture["repair_order_id"]))
+            process_row = db.get(ProductionOrderProcess, int(fixture["process_id"]))
+            assert repair_row is not None and process_row is not None
+            self.assertEqual(repair_row.status, "in_repair")
+            self.assertEqual(
+                process_row.visible_quantity,
+                int(fixture["previous_visible_quantity"]),
+            )
+        finally:
+            db.close()
+
+    def test_return_repair_order_to_production_rejects_completed_and_requires_permission(
+        self,
+    ) -> None:
+        completed_fixture = self._create_return_to_production_fixture(
+            suffix="RTN3",
+            repair_status="completed",
+        )
+        conflict_response = self.client.post(
+            "/api/v1/production/repair-orders/"
+            f"{completed_fixture['repair_order_id']}/return-to-production",
+            headers=self._headers(),
+            json={"password": "Admin@123456"},
+        )
+        self.assertEqual(conflict_response.status_code, 409, conflict_response.text)
+        self.assertIn("仅维修中的维修单可退回生产", conflict_response.text)
+
+        denied_fixture = self._create_return_to_production_fixture(suffix="RTN4")
+        limited_user = self._create_user_with_permissions(
+            suffix="repair_return_denied",
+            permission_codes=["production.repair_orders.list"],
+        )
+        denied_response = self.client.post(
+            "/api/v1/production/repair-orders/"
+            f"{denied_fixture['repair_order_id']}/return-to-production",
+            headers={
+                "Authorization": f"Bearer {self._login_as(username=limited_user.username)}"
+            },
+            json={"password": "Admin@123456"},
+        )
+        self.assertEqual(denied_response.status_code, 403, denied_response.text)
 
     def test_complete_repair_order_closes_pending_scrap_and_keeps_production_detail_trace(
         self,
@@ -3272,6 +5486,10 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         participant_response = self.client.get(
             f"/api/v1/production/orders/{order['id']}/first-article/participant-users",
             headers=self._headers(),
+            params={
+                "order_process_id": process_id,
+                "effective_operator_user_id": 1,
+            },
         )
         self.assertEqual(
             participant_response.status_code, 200, participant_response.text
@@ -3279,6 +5497,7 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
         participant_ids = {
             int(item["id"]) for item in participant_response.json()["data"]["items"]
         }
+        self.assertNotIn(1, participant_ids)
         self.assertIn(participant_a.id, participant_ids)
         self.assertIn(participant_b.id, participant_ids)
 
@@ -3323,6 +5542,76 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             self.assertEqual(participant_ids, {participant_a.id, participant_b.id})
         finally:
             db.close()
+
+    def test_first_article_rejects_effective_operator_in_participants(self) -> None:
+        stage = self._create_stage("FASELF")
+        process = self._create_process(
+            stage_id=stage["id"],
+            stage_code=stage["code"],
+            suffix="FASELF",
+        )
+        product = self._create_product("首件排除本人")
+        self._activate_product(product)
+        order = self._create_order(
+            product_id=product["id"],
+            steps=[
+                {"step_order": 1, "stage_id": stage["id"], "process_id": process["id"]}
+            ],
+        )
+
+        db = SessionLocal()
+        try:
+            order_row = db.get(ProductionOrder, int(order["id"]))
+            assert order_row is not None
+            process_row = (
+                db.query(ProductionOrderProcess)
+                .filter(ProductionOrderProcess.order_id == order_row.id)
+                .first()
+            )
+            admin = db.query(User).filter(User.username == "admin").first()
+            assert process_row is not None and admin is not None
+            process_row.visible_quantity = order_row.quantity
+            order_row.current_process_code = process_row.process_code
+            today_code = (
+                db.query(DailyVerificationCode)
+                .filter(DailyVerificationCode.verify_date == date.today())
+                .first()
+            )
+            if today_code is None:
+                db.add(
+                    DailyVerificationCode(
+                        verify_date=date.today(),
+                        code="code-self",
+                        created_by_user_id=admin.id,
+                    )
+                )
+            else:
+                today_code.code = "code-self"
+            db.add(
+                ProductionSubOrder(
+                    order_process_id=process_row.id,
+                    operator_user_id=admin.id,
+                    completed_quantity=0,
+                    status="pending",
+                )
+            )
+            db.commit()
+            process_id = int(process_row.id)
+            admin_id = int(admin.id)
+        finally:
+            db.close()
+
+        response = self.client.post(
+            f"/api/v1/production/orders/{order['id']}/first-article",
+            headers=self._headers(),
+            json={
+                "order_process_id": process_id,
+                "participant_user_ids": [admin_id],
+                "verification_code": "code-self",
+            },
+        )
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertIn("参与操作员不能包含当前主操作员本人", response.text)
 
     def test_scrap_and_repair_detail_include_applied_and_report_trace(self) -> None:
         stage = self._create_stage("R1")
@@ -3608,7 +5897,7 @@ class ProductionModuleIntegrationTest(unittest.TestCase):
             json={
                 "keyword": "PO-IT-",
                 "view_mode": "own",
-                "order_status": "in_progress",
+                "sub_order_status": "pending",
                 "current_process_id": matched_process_id,
             },
         )

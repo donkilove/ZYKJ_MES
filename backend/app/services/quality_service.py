@@ -12,7 +12,7 @@ from time import monotonic
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import (
@@ -29,6 +29,7 @@ from app.core.production_constants import (
     PROCESS_STATUS_PENDING,
     RECORD_TYPE_FIRST_ARTICLE,
     RECORD_TYPE_PRODUCTION,
+    REPAIR_STATUS_RETURNED_TO_PRODUCTION,
     SUB_ORDER_STATUS_IN_PROGRESS,
     SUB_ORDER_STATUS_PENDING,
 )
@@ -51,6 +52,12 @@ from app.models.repair_order import RepairOrder
 from app.models.repair_defect_phenomenon import RepairDefectPhenomenon
 from app.models.user import User
 from app.services.production_event_log_service import add_order_event_log
+from app.services.production_repair_service import (
+    RepairAggregateSnapshot,
+    RepairListFilters,
+    _build_repair_aggregate_rows,
+    _list_repair_order_rows,
+)
 
 _QUALITY_ROWS_LOCAL_CACHE: dict[
     tuple[object, ...], tuple[float, list[dict[str, object]]]
@@ -701,36 +708,17 @@ def _aggregate_quality_related_totals(
     repair_by_process: dict[str, int] = {}
     repair_by_operator: dict[str, int] = {}
     repair_total = 0
-    for row in db.execute(
-        select(
-            RepairOrder.source_order_id,
-            RepairOrder.product_id,
-            RepairOrder.source_process_code,
-            RepairOrder.source_process_name,
-            RepairOrder.sender_user_id,
-            RepairOrder.sender_username,
-            func.count(RepairOrder.id).label("total"),
-        )
-        .where(
-            *_build_repair_filters(
-                start_date=start_date,
-                end_date=end_date,
-                keyword=keyword,
-                product_name=product_name,
-                process_code=process_code,
-                operator_username=operator_username,
-            )
-        )
-        .group_by(
-            RepairOrder.source_order_id,
-            RepairOrder.product_id,
-            RepairOrder.source_process_code,
-            RepairOrder.source_process_name,
-            RepairOrder.sender_user_id,
-            RepairOrder.sender_username,
-        )
-    ).all():
-        quantity = int(row.total or 0)
+    aggregate_repair_rows = _load_quality_repair_aggregate_rows(
+        db,
+        start_date=start_date,
+        end_date=end_date,
+        keyword=keyword,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+    )
+    for row in aggregate_repair_rows:
+        quantity = 1
         repair_total += quantity
         if row.source_order_id is not None:
             covered_order_ids.add(int(row.source_order_id))
@@ -916,6 +904,7 @@ def _build_repair_filters(
         start_date=start_date,
         end_date=end_date,
     )
+    filters.append(RepairOrder.status != REPAIR_STATUS_RETURNED_TO_PRODUCTION)
     normalized_keyword = (keyword or "").strip()
     if normalized_keyword:
         like_pattern = f"%{normalized_keyword}%"
@@ -942,6 +931,96 @@ def _build_repair_filters(
     return filters
 
 
+def _matches_repair_aggregate_quality_filters(
+    row: RepairAggregateSnapshot,
+    *,
+    keyword: str | None = None,
+    product_name: str | None = None,
+    process_code: str | None = None,
+    operator_username: str | None = None,
+) -> bool:
+    normalized_keyword = (keyword or "").strip().lower()
+    if normalized_keyword:
+        child_codes = " ".join(row.child_repair_order_codes or [])
+        keyword_fields = [
+            row.repair_order_code,
+            row.source_order_code,
+            row.product_name,
+            row.source_process_code,
+            row.source_process_name,
+            row.sender_username,
+            child_codes,
+        ]
+        if not any(
+            normalized_keyword in str(value or "").lower()
+            for value in keyword_fields
+        ):
+            return False
+
+    normalized_product_name = (product_name or "").strip().lower()
+    if normalized_product_name and normalized_product_name not in str(
+        row.product_name or ""
+    ).lower():
+        return False
+
+    normalized_process_code = _normalize_process_key(process_code)
+    if normalized_process_code and _normalize_process_key(
+        row.source_process_code
+    ) != normalized_process_code:
+        return False
+
+    normalized_operator = (operator_username or "").strip().lower()
+    if normalized_operator and normalized_operator not in str(
+        row.sender_username or ""
+    ).lower():
+        return False
+
+    return True
+
+
+def _load_quality_repair_aggregate_rows(
+    db: Session,
+    *,
+    start_date: date | None,
+    end_date: date | None,
+    keyword: str | None = None,
+    product_name: str | None = None,
+    process_code: str | None = None,
+    operator_username: str | None = None,
+) -> list[RepairAggregateSnapshot]:
+    _, raw_rows = _list_repair_order_rows(
+        db,
+        page=1,
+        page_size=200000,
+        filters=RepairListFilters(
+            keyword=None,
+            status="all",
+            start_date=start_date,
+            end_date=end_date,
+        ),
+    )
+    aggregate_rows = _build_repair_aggregate_rows(db, rows=raw_rows)
+    return [
+        row
+        for row in aggregate_rows
+        if row.status != REPAIR_STATUS_RETURNED_TO_PRODUCTION
+        and _matches_repair_aggregate_quality_filters(
+            row,
+            keyword=keyword,
+            product_name=product_name,
+            process_code=process_code,
+            operator_username=operator_username,
+        )
+    ]
+
+
+def _exclude_returned_repair_defects_filter():
+    return ~exists().where(
+        RepairOrder.id == RepairDefectPhenomenon.repair_order_id,
+        RepairOrder.status == REPAIR_STATUS_RETURNED_TO_PRODUCTION,
+    )
+
+
 def _build_defect_filters(
     *,
     start_date: date | None,
@@ -956,6 +1035,7 @@ def _build_defect_filters(
         start_date=start_date,
         end_date=end_date,
     )
+    filters.append(_exclude_returned_repair_defects_filter())
     normalized_keyword = (keyword or "").strip()
     if normalized_keyword:
         like_pattern = f"%{normalized_keyword}%"
@@ -1975,32 +2055,25 @@ def get_quality_product_stats(
         )
         item["scrap_total"] = int(sr.total or 0)
 
-    repair_rows = db.execute(
-        select(
-            RepairOrder.product_id,
-            RepairOrder.product_name,
-            func.count(RepairOrder.id).label("cnt"),
-        )
-        .where(
-            RepairOrder.product_id.is_not(None),
-            *_build_repair_filters(
-                start_date=start_date,
-                end_date=end_date,
-                keyword=keyword,
-                product_name=product_name,
-                process_code=process_code,
-                operator_username=operator_username,
-            ),
-        )
-        .group_by(RepairOrder.product_id, RepairOrder.product_name)
-    ).all()
-    for rr in repair_rows:
-        product_id = int(rr.product_id)
+    repair_by_product_name: dict[int, str] = {}
+    for repair_row in _load_quality_repair_aggregate_rows(
+        db,
+        start_date=start_date,
+        end_date=end_date,
+        keyword=keyword,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+    ):
+        if repair_row.product_id is None:
+            continue
+        product_id = int(repair_row.product_id)
+        repair_by_product_name.setdefault(product_id, repair_row.product_name or "")
         item = grouped.setdefault(
             product_id,
             {
                 "product_id": product_id,
-                "product_name": rr.product_name or "",
+                "product_name": repair_by_product_name[product_id],
                 "first_article_total": 0,
                 "passed_total": 0,
                 "failed_total": 0,
@@ -2010,7 +2083,7 @@ def get_quality_product_stats(
                 "repair_total": 0,
             },
         )
-        item["repair_total"] = int(rr.cnt or 0)
+        item["repair_total"] = int(item["repair_total"]) + 1
 
     result = list(grouped.values())
     for item in result:
@@ -2163,28 +2236,21 @@ def get_quality_trend(
         if stat_date is not None and stat_date in grouped:
             grouped[stat_date]["scrap_total"] = int(sr.total or 0)
 
-    # 补充维修数量（按维修单创建日期聚合）
-    repair_rows = db.execute(
-        select(
-            func.date(RepairOrder.repair_time).label("d"),
-            func.count(RepairOrder.id).label("total"),
-        )
-        .where(
-            *_build_repair_filters(
-                start_date=resolved_start,
-                end_date=resolved_end,
-                keyword=keyword,
-                product_name=product_name,
-                process_code=process_code,
-                operator_username=operator_username,
-            )
-        )
-        .group_by(func.date(RepairOrder.repair_time))
-    ).all()
-    for rr in repair_rows:
-        stat_date = _normalize_stat_date(rr.d)
+    # 补充维修数量（与维修单列表一致，按聚合后的维修行创建日期统计）
+    for repair_row in _load_quality_repair_aggregate_rows(
+        db,
+        start_date=resolved_start,
+        end_date=resolved_end,
+        keyword=keyword,
+        product_name=product_name,
+        process_code=process_code,
+        operator_username=operator_username,
+    ):
+        stat_date = _normalize_stat_date(repair_row.repair_time.date())
         if stat_date is not None and stat_date in grouped:
-            grouped[stat_date]["repair_total"] = int(rr.total or 0)
+            grouped[stat_date]["repair_total"] = (
+                int(grouped[stat_date]["repair_total"]) + 1
+            )
 
     result = list(grouped.values())
     for item in result:
@@ -2534,7 +2600,9 @@ def get_defect_analysis(
         DefectTopItem,
     )
 
-    stmt = select(RepairDefectPhenomenon)
+    stmt = select(RepairDefectPhenomenon).where(
+        _exclude_returned_repair_defects_filter()
+    )
     if start_date is not None:
         stmt = stmt.where(
             RepairDefectPhenomenon.production_time
@@ -2716,7 +2784,9 @@ def export_defect_analysis_csv(
 ) -> dict:
     from app.schemas.quality import DefectAnalysisExportResult
 
-    stmt = select(RepairDefectPhenomenon)
+    stmt = select(RepairDefectPhenomenon).where(
+        _exclude_returned_repair_defects_filter()
+    )
     if start_date is not None:
         stmt = stmt.where(
             RepairDefectPhenomenon.production_time

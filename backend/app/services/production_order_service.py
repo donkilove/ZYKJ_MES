@@ -23,6 +23,7 @@ from app.core.production_constants import (
     SUB_ORDER_STATUS_DONE,
     SUB_ORDER_STATUS_IN_PROGRESS,
     SUB_ORDER_STATUS_PENDING,
+    my_order_sub_order_status_label,
     order_status_label,
     pipeline_mode_label,
 )
@@ -43,6 +44,7 @@ from app.models.production_assist_authorization import ProductionAssistAuthoriza
 from app.models.process_stage import ProcessStage
 from app.models.product import Product
 from app.models.repair_order import RepairOrder
+from app.models.repair_defect_phenomenon import RepairDefectPhenomenon
 from app.models.role import Role
 from app.models.supplier import Supplier
 from app.models.product_process_template import ProductProcessTemplate
@@ -925,6 +927,102 @@ def get_runtime_max_producible_quantity(
         other_in_progress_count = max(normalized_in_progress_count - 1, 0)
         return max(normalized_process_remaining - other_in_progress_count, 0)
     return max(normalized_process_remaining - normalized_in_progress_count, 0)
+
+
+def get_current_cycle_started_at(
+    db: Session,
+    *,
+    order_id: int,
+    order_process_id: int,
+    operator_user_id: int,
+) -> datetime | None:
+    return (
+        db.execute(
+            select(FirstArticleRecord.created_at)
+            .where(
+                FirstArticleRecord.order_id == order_id,
+                FirstArticleRecord.order_process_id == order_process_id,
+                FirstArticleRecord.operator_user_id == operator_user_id,
+                FirstArticleRecord.result == "passed",
+                FirstArticleRecord.is_cancelled.is_(False),
+            )
+            .order_by(FirstArticleRecord.created_at.desc(), FirstArticleRecord.id.desc())
+        )
+        .scalars()
+        .first()
+    )
+
+
+def get_current_cycle_manual_repair_quantity(
+    db: Session,
+    *,
+    order_id: int,
+    order_process_id: int,
+    operator_user_id: int,
+) -> int:
+    cycle_started_at = get_current_cycle_started_at(
+        db,
+        order_id=order_id,
+        order_process_id=order_process_id,
+        operator_user_id=operator_user_id,
+    )
+    if cycle_started_at is None:
+        return 0
+    auto_report_repair_exists = (
+        select(RepairDefectPhenomenon.id).where(
+            RepairDefectPhenomenon.repair_order_id == RepairOrder.id,
+            RepairDefectPhenomenon.production_record_id.is_not(None),
+        )
+    ).exists()
+    quantity = (
+        db.execute(
+            select(func.coalesce(func.sum(RepairOrder.repair_quantity), 0)).where(
+                RepairOrder.source_order_id == order_id,
+                RepairOrder.source_order_process_id == order_process_id,
+                RepairOrder.sender_user_id == operator_user_id,
+                RepairOrder.status == REPAIR_STATUS_IN_REPAIR,
+                RepairOrder.repair_time >= cycle_started_at,
+                ~auto_report_repair_exists,
+            )
+        ).scalar()
+        or 0
+    )
+    return max(int(quantity), 0)
+
+
+def _normalize_my_order_sub_order_visibility(
+    db: Session,
+    *,
+    process_row: ProductionOrderProcess,
+    sub_order: ProductionSubOrder | None,
+) -> bool:
+    if sub_order is not None and sub_order.status == SUB_ORDER_STATUS_IN_PROGRESS:
+        return True
+    process_remaining = get_process_remaining_quantity(
+        db,
+        process_row=process_row,
+    )
+    in_progress_count = get_in_progress_sub_order_count(
+        db,
+        order_process_id=process_row.id,
+    )
+    current_sub_order_status = (
+        sub_order.status if sub_order is not None else SUB_ORDER_STATUS_PENDING
+    )
+    max_producible = get_runtime_max_producible_quantity(
+        process_remaining_quantity=process_remaining,
+        in_progress_count=in_progress_count,
+        current_sub_order_status=current_sub_order_status,
+    )
+    if max_producible > 0:
+        if sub_order is not None and sub_order.status == SUB_ORDER_STATUS_DONE:
+            sub_order.status = SUB_ORDER_STATUS_PENDING
+            db.flush()
+        return True
+    if sub_order is not None and sub_order.status != SUB_ORDER_STATUS_DONE:
+        sub_order.status = SUB_ORDER_STATUS_DONE
+        db.flush()
+    return False
 
 
 def get_order_by_id(
@@ -1950,7 +2048,7 @@ def complete_order_manually(
     )
     if pending_repairs:
         raise RuntimeError(
-            "Order has in-progress repair orders that must be completed first: "
+            "该订单仍有维修中的维修单，请先完成维修单后再手工完工："
             + ", ".join(pending_repairs)
         )
 
@@ -2135,6 +2233,18 @@ def _build_my_order_item(
         if sub_order is not None and sub_order.operator is not None
         else runtime_operator_username
     )
+    current_cycle_manual_repair_quantity = 0
+    if (
+        sub_order is not None
+        and sub_order.status == SUB_ORDER_STATUS_IN_PROGRESS
+        and effective_operator_user_id is not None
+    ):
+        current_cycle_manual_repair_quantity = get_current_cycle_manual_repair_quantity(
+            db,
+            order_id=order.id,
+            order_process_id=process_row.id,
+            operator_user_id=effective_operator_user_id,
+        )
     if is_operator_context:
         sub_order_pending = sub_order is None or sub_order.status == SUB_ORDER_STATUS_PENDING
         sub_order_in_progress = sub_order is not None and sub_order.status == SUB_ORDER_STATUS_IN_PROGRESS
@@ -2171,7 +2281,7 @@ def _build_my_order_item(
         end_production_base = (
             process_row.status in {PROCESS_STATUS_IN_PROGRESS, PROCESS_STATUS_PARTIAL}
             and sub_order_in_progress
-            and max_producible > 0
+            and (max_producible + current_cycle_manual_repair_quantity) > 0
             and (not pipeline_process_selected or pipeline_instance is not None)
         )
         pipeline_start_allowed = (
@@ -2197,7 +2307,7 @@ def _build_my_order_item(
     if can_end_production_override is not None:
         can_end_production = can_end_production_override
         pipeline_end_allowed = can_end_production_override
-    if work_view != "own":
+    if work_view == "proxy":
         can_end_production = False
         pipeline_end_allowed = False
 
@@ -2205,7 +2315,7 @@ def _build_my_order_item(
     can_create_manual_repair = False
     if is_operator_context and sub_order is not None:
         can_create_manual_repair = (
-            work_view == "own"
+            work_view in {"own", "assist"}
             and effective_operator_user_id == sub_order.operator_user_id
             and
             sub_order.status == SUB_ORDER_STATUS_IN_PROGRESS
@@ -2252,6 +2362,7 @@ def _build_my_order_item(
         ),
         "current_process_order": process_row.process_order,
         "process_status": process_row.status,
+        "sub_order_status": current_sub_order_status,
         "visible_quantity": process_row.visible_quantity,
         "process_completed_quantity": process_row.completed_quantity,
         "user_sub_order_id": sub_order.id if sub_order else None,
@@ -2273,6 +2384,7 @@ def _build_my_order_item(
         "pipeline_start_allowed": pipeline_start_allowed,
         "pipeline_end_allowed": pipeline_end_allowed,
         "max_producible_quantity": max_producible,
+        "current_cycle_manual_repair_quantity": current_cycle_manual_repair_quantity,
         "can_first_article": can_first_article,
         "can_end_production": can_end_production,
         "can_apply_assist": can_apply_assist,
@@ -2291,6 +2403,7 @@ def _collect_my_order_items(
     view_mode: str = "own",
     proxy_operator_user_id: int | None = None,
     order_status: str | None = None,
+    sub_order_status: str | None = None,
     current_process_id: int | None = None,
     exact_order_id: int | None = None,
     exact_order_process_id: int | None = None,
@@ -2353,6 +2466,12 @@ def _collect_my_order_items(
             order = process_row.order
             if order is None:
                 continue
+            if not _normalize_my_order_sub_order_visibility(
+                db,
+                process_row=process_row,
+                sub_order=sub_order,
+            ):
+                continue
             items.append(
                 _build_my_order_item(
                     db,
@@ -2408,7 +2527,7 @@ def _collect_my_order_items(
                     .where(
                         ProductionSubOrder.order_process_id == process_row.id,
                         ProductionSubOrder.operator_user_id
-                        == assist_row.target_operator_user_id,
+                        == assist_row.helper_user_id,
                     )
                     .options(selectinload(ProductionSubOrder.operator))
                 )
@@ -2427,44 +2546,12 @@ def _collect_my_order_items(
                 ):
                     continue
 
-            process_remaining = get_process_remaining_quantity(
+            if not _normalize_my_order_sub_order_visibility(
                 db,
                 process_row=process_row,
-            )
-            in_progress_count = get_in_progress_sub_order_count(
-                db,
-                order_process_id=process_row.id,
-            )
-            first_article_max_producible = get_runtime_max_producible_quantity(
-                process_remaining_quantity=process_remaining,
-                in_progress_count=in_progress_count,
-                current_sub_order_status=SUB_ORDER_STATUS_PENDING,
-            )
-            sub_order_pending = sub_order is None or sub_order.status == SUB_ORDER_STATUS_PENDING
-            sub_order_in_progress = sub_order is not None and sub_order.status == SUB_ORDER_STATUS_IN_PROGRESS
-            max_producible = get_runtime_max_producible_quantity(
-                process_remaining_quantity=process_remaining,
-                in_progress_count=in_progress_count,
-                current_sub_order_status=(
-                    sub_order.status
-                    if sub_order is not None
-                    else SUB_ORDER_STATUS_PENDING
-                ),
-            )
-            can_first_article = (
-                assist_row.first_article_used_at is None
-                and process_row.status
-                in {
-                    PROCESS_STATUS_PENDING,
-                    PROCESS_STATUS_IN_PROGRESS,
-                    PROCESS_STATUS_PARTIAL,
-                }
-                and first_article_max_producible > 0
-                and sub_order_pending
-                and is_pipeline_start_allowed_for_process(
-                    order=order, process_row=process_row
-                )
-            )
+                sub_order=sub_order,
+            ):
+                continue
             items.append(
                 _build_my_order_item(
                     db,
@@ -2475,14 +2562,8 @@ def _collect_my_order_items(
                     work_view="assist",
                     assist_authorization_id=assist_row.id,
                     target_operator_user_id=assist_row.target_operator_user_id,
-                    runtime_operator_user_id=assist_row.target_operator_user_id,
-                    runtime_operator_username=(
-                        assist_row.target_operator.username
-                        if assist_row.target_operator is not None
-                        else None
-                    ),
-                    can_first_article_override=can_first_article,
-                    can_end_production_override=False,
+                    runtime_operator_user_id=current_user.id,
+                    runtime_operator_username=current_user.username,
                 )
             )
     else:
@@ -2539,6 +2620,12 @@ def _collect_my_order_items(
                 ),
                 None,
             )
+            if not _normalize_my_order_sub_order_visibility(
+                db,
+                process_row=process_row,
+                sub_order=sub_order,
+            ):
+                continue
             items.append(
                 _build_my_order_item(
                     db,
@@ -2552,12 +2639,21 @@ def _collect_my_order_items(
                 )
             )
 
-    if order_status is not None or current_process_id is not None:
+    if (
+        order_status is not None
+        or sub_order_status is not None
+        or current_process_id is not None
+    ):
         filtered_items: list[dict[str, object]] = []
         for item in items:
             if (
                 order_status is not None
                 and str(item.get("order_status") or "") != order_status
+            ):
+                continue
+            if (
+                sub_order_status is not None
+                and str(item.get("sub_order_status") or "") != sub_order_status
             ):
                 continue
             if current_process_id is not None:
@@ -2588,6 +2684,7 @@ def list_my_orders(
     view_mode: str = "own",
     proxy_operator_user_id: int | None = None,
     order_status: str | None = None,
+    sub_order_status: str | None = None,
     current_process_id: int | None = None,
 ) -> tuple[int, list[dict[str, object]]]:
     items = _collect_my_order_items(
@@ -2597,6 +2694,7 @@ def list_my_orders(
         view_mode=view_mode,
         proxy_operator_user_id=proxy_operator_user_id,
         order_status=order_status,
+        sub_order_status=sub_order_status,
         current_process_id=current_process_id,
         exact_order_id=None,
     )
@@ -2668,6 +2766,7 @@ def export_my_orders_csv(
     view_mode: str = "own",
     proxy_operator_user_id: int | None = None,
     order_status: str | None = None,
+    sub_order_status: str | None = None,
     current_process_id: int | None = None,
 ) -> dict[str, object]:
     items = _collect_my_order_items(
@@ -2677,6 +2776,7 @@ def export_my_orders_csv(
         view_mode=view_mode,
         proxy_operator_user_id=proxy_operator_user_id,
         order_status=order_status,
+        sub_order_status=sub_order_status,
         current_process_id=current_process_id,
         exact_order_id=None,
         exact_order_process_id=None,
@@ -2705,7 +2805,7 @@ def export_my_orders_csv(
                 str(item.get("supplier_name") or ""),
                 str(item.get("current_process_name") or ""),
                 _my_order_producible_quantity_summary(item),
-                order_status_label(str(item.get("order_status") or "")),
+                my_order_sub_order_status_label(str(item.get("sub_order_status") or "")),
                 str(due_date) if due_date else "",
                 str(item.get("remark") or ""),
                 _my_order_work_view_label(str(item.get("work_view") or "own")),

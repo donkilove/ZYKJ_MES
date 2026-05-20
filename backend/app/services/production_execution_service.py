@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.authz_catalog import PERM_PROD_MY_ORDERS_PROXY
@@ -33,8 +33,6 @@ from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
 from app.models.production_record import ProductionRecord
 from app.models.production_sub_order import ProductionSubOrder
-from app.models.repair_defect_phenomenon import RepairDefectPhenomenon
-from app.models.repair_order import RepairOrder
 from app.models.user import User
 from app.services.assist_authorization_service import (
     ASSIST_OP_END_PRODUCTION,
@@ -53,6 +51,7 @@ from app.services.production_order_service import (
     get_active_pipeline_instance_for_sub_order,
     get_active_pipeline_instance_for_link_id,
     get_active_pipeline_instance_for_process_sequence,
+    get_current_cycle_manual_repair_quantity,
     get_in_progress_sub_order_count,
     get_process_remaining_quantity,
     get_runtime_max_producible_quantity,
@@ -135,10 +134,17 @@ def _ensure_effective_operator_can_operate_process(
     *,
     effective_operator_user_id: int,
     process_row: ProductionOrderProcess,
+    assist_authorization_row: ProductionAssistAuthorization | None = None,
 ) -> None:
     effective_operator = db.get(User, effective_operator_user_id)
     if effective_operator is None or not effective_operator.is_active:
         raise ValueError("Effective operator not found or inactive")
+    if (
+        assist_authorization_row is not None
+        and int(assist_authorization_row.helper_user_id) == effective_operator_user_id
+        and int(assist_authorization_row.order_process_id) == int(process_row.id)
+    ):
+        return
     if _has_process_scope_exemption(effective_operator):
         return
     if _is_user_bound_to_process(
@@ -213,58 +219,6 @@ def _lock_sub_order(
         db.add(row)
         db.flush()
     return row
-
-
-def _get_cycle_started_at(
-    db: Session,
-    *,
-    sub_order_id: int | None,
-    operator_user_id: int,
-) -> datetime | None:
-    if sub_order_id is None:
-        return None
-    return (
-        db.execute(
-            select(FirstArticleRecord.created_at)
-            .where(
-                FirstArticleRecord.sub_order_id == sub_order_id,
-                FirstArticleRecord.operator_user_id == operator_user_id,
-                FirstArticleRecord.result == "passed",
-            )
-            .order_by(FirstArticleRecord.created_at.desc(), FirstArticleRecord.id.desc())
-        )
-        .scalars()
-        .first()
-    )
-
-
-def _get_manual_repair_quantity_in_current_cycle(
-    db: Session,
-    *,
-    order_process_id: int,
-    operator_user_id: int,
-    cycle_started_at: datetime | None,
-) -> int:
-    if cycle_started_at is None:
-        return 0
-    manual_repair_exists = (
-        select(RepairDefectPhenomenon.id).where(
-            RepairDefectPhenomenon.repair_order_id == RepairOrder.id,
-            RepairDefectPhenomenon.production_record_id.is_not(None),
-        )
-    ).exists()
-    quantity = (
-        db.execute(
-            select(func.coalesce(func.sum(RepairOrder.repair_quantity), 0)).where(
-                RepairOrder.source_order_process_id == order_process_id,
-                RepairOrder.sender_user_id == operator_user_id,
-                RepairOrder.repair_time >= cycle_started_at,
-                ~manual_repair_exists,
-            )
-        ).scalar()
-        or 0
-    )
-    return max(int(quantity), 0)
 
 
 def _lock_previous_process(
@@ -632,6 +586,15 @@ def _normalize_participant_user_ids(
     return normalized_ids
 
 
+def _validate_participant_users_exclude_effective_operator(
+    *,
+    participant_user_ids: list[int],
+    effective_operator_user_id: int,
+) -> None:
+    if effective_operator_user_id in participant_user_ids:
+        raise ValueError("参与操作员不能包含当前主操作员本人")
+
+
 def submit_first_article(
     db: Session,
     *,
@@ -668,25 +631,22 @@ def submit_first_article(
     }:
         raise ValueError("Current process does not allow first-article operation")
 
-    if assist_authorization_id and not effective_operator_user_id:
-        _assist = db.get(ProductionAssistAuthorization, assist_authorization_id)
-        if _assist is not None and _assist.status == ASSIST_STATUS_APPROVED:
-            effective_operator_user_id = _assist.target_operator_user_id
-
-    effective_user_id = effective_operator_user_id or operator.id
     assist_row = None
-    if effective_user_id != operator.id:
-        if assist_authorization_id:
-            assist_row = get_usable_assist_authorization_for_operation(
-                db,
-                authorization_id=assist_authorization_id,
-                order_id=order_id,
-                order_process_id=order_process_id,
-                target_operator_user_id=effective_user_id,
-                helper_user_id=operator.id,
-                operation=ASSIST_OP_FIRST_ARTICLE,
-            )
-        elif not _can_proxy_cross_user_operation(db, operator=operator):
+    if assist_authorization_id:
+        assist_row = get_usable_assist_authorization_for_operation(
+            db,
+            authorization_id=assist_authorization_id,
+            order_id=order_id,
+            order_process_id=order_process_id,
+            helper_user_id=operator.id,
+            operation=ASSIST_OP_FIRST_ARTICLE,
+        )
+        effective_user_id = operator.id
+    else:
+        effective_user_id = effective_operator_user_id or operator.id
+        if effective_user_id != operator.id and not _can_proxy_cross_user_operation(
+            db, operator=operator
+        ):
             raise ValueError(
                 "Assist authorization is required for cross-user operation"
             )
@@ -695,6 +655,7 @@ def submit_first_article(
         db,
         effective_operator_user_id=effective_user_id,
         process_row=process_row,
+        assist_authorization_row=assist_row,
     )
 
     sub_order = _lock_sub_order(
@@ -781,6 +742,10 @@ def submit_first_article(
     normalized_participant_user_ids = _normalize_participant_user_ids(
         db,
         participant_user_ids=participant_user_ids,
+    )
+    _validate_participant_users_exclude_effective_operator(
+        participant_user_ids=normalized_participant_user_ids,
+        effective_operator_user_id=effective_user_id,
     )
     if normalized_result == "passed":
         effective_operator_label = operator.username
@@ -945,20 +910,27 @@ def end_production(
     if process_row.status not in {PROCESS_STATUS_IN_PROGRESS, PROCESS_STATUS_PARTIAL}:
         raise ValueError("Current process is not in progress")
 
-    if assist_authorization_id and not effective_operator_user_id:
-        _assist = db.get(ProductionAssistAuthorization, assist_authorization_id)
-        if _assist is not None and _assist.status == ASSIST_STATUS_APPROVED:
-            effective_operator_user_id = _assist.target_operator_user_id
-
-    effective_user_id = effective_operator_user_id or operator.id
-    if effective_user_id != operator.id:
-        raise PermissionError("结束生产只能由发起首件的操作员本人执行")
     assist_row = None
+    if assist_authorization_id:
+        assist_row = get_usable_assist_authorization_for_operation(
+            db,
+            authorization_id=assist_authorization_id,
+            order_id=order_id,
+            order_process_id=order_process_id,
+            helper_user_id=operator.id,
+            operation=ASSIST_OP_END_PRODUCTION,
+        )
+        effective_user_id = operator.id
+    else:
+        effective_user_id = effective_operator_user_id or operator.id
+        if effective_user_id != operator.id:
+            raise PermissionError("结束生产只能由发起首件的操作员本人执行")
 
     _ensure_effective_operator_can_operate_process(
         db,
         effective_operator_user_id=effective_user_id,
         process_row=process_row,
+        assist_authorization_row=assist_row,
     )
 
     sub_order = _lock_sub_order(
@@ -996,8 +968,6 @@ def end_production(
         in_progress_count=in_progress_count,
         current_sub_order_status=sub_order.status,
     )
-    if max_producible <= 0:
-        raise ValueError("No producible quantity available for current user")
     defect_quantity = 0
     if defect_items:
         defect_quantity = sum(
@@ -1007,17 +977,28 @@ def end_production(
         )
         if defect_quantity < 0:
             raise ValueError("Defect quantity cannot be negative")
-    total_consumed_quantity = quantity + defect_quantity
+    manual_repair_quantity_before_end = get_current_cycle_manual_repair_quantity(
+        db,
+        order_id=order.id,
+        order_process_id=process_row.id,
+        operator_user_id=effective_user_id,
+    )
+    transfer_quantity = quantity - manual_repair_quantity_before_end - defect_quantity
+    if transfer_quantity < 0:
+        raise ValueError(
+            "本次生产数量不能小于生产中手工送修数量与结束报工送修数量之和"
+        )
+    total_consumed_quantity = transfer_quantity + defect_quantity
     if total_consumed_quantity > max_producible:
         raise RuntimeError(
             f"Concurrent update detected. Max producible quantity is {max_producible}, "
-            f"but report quantity plus defect quantity is {total_consumed_quantity}"
+            f"but transfer quantity plus defect quantity is {total_consumed_quantity}"
         )
     if not _is_end_gate_allowed(db, order=order, process_row=process_row):
         raise ValueError("Current process is blocked by pipeline end gate")
 
-    process_row.completed_quantity += quantity
-    sub_order.completed_quantity += quantity
+    process_row.completed_quantity += transfer_quantity
+    sub_order.completed_quantity += transfer_quantity
 
     if process_row.completed_quantity >= order.quantity:
         process_row.completed_quantity = order.quantity
@@ -1114,32 +1095,25 @@ def end_production(
                 order_id=order.id,
                 order_process_id=process_row.id,
                 sender=operator,
-                production_quantity=quantity + defect_quantity,
+                production_quantity=quantity,
                 defect_items=enriched_defect_items,
                 auto_created=True,
             )
-    cycle_started_at = _get_cycle_started_at(
-        db,
-        sub_order_id=record_row.sub_order_id,
-        operator_user_id=operator.id,
-    )
-    manual_repair_quantity_before_end = _get_manual_repair_quantity_in_current_cycle(
-        db,
-        order_process_id=process_row.id,
-        operator_user_id=operator.id,
-        cycle_started_at=cycle_started_at,
-    )
     total_defect_quantity = manual_repair_quantity_before_end + defect_quantity
-    total_production_quantity = quantity + total_defect_quantity
+    total_production_quantity = quantity
     defect_rate_percent = (
         round((total_defect_quantity / total_production_quantity) * 100, 2)
         if total_production_quantity > 0
         else 0.0
     )
     event_detail = (
-        f"{operator.username} 在工序 {process_row.process_name} 报工 {quantity} 件。"
+        f"{operator.username} 在工序 {process_row.process_name} 报工 {quantity} 件，"
+        f"流转 {transfer_quantity} 件。"
         if not remark
-        else f"{operator.username} 在工序 {process_row.process_name} 报工 {quantity} 件。{remark.strip()}"
+        else (
+            f"{operator.username} 在工序 {process_row.process_name} 报工 {quantity} 件，"
+            f"流转 {transfer_quantity} 件。{remark.strip()}"
+        )
     )
     if total_defect_quantity > 0:
         event_detail = (
@@ -1153,16 +1127,13 @@ def end_production(
         order_id=order.id,
         event_type="production_reported",
         event_title="报工完成",
-        event_detail=(
-            f"{operator.username} 在工序 {process_row.process_name} 报工 {quantity} 件。"
-            if not remark
-            else f"{operator.username} 在工序 {process_row.process_name} 报工 {quantity} 件。{remark.strip()}"
-        ),
+        event_detail=event_detail,
         operator_user_id=operator.id,
         payload={
             "order_process_id": process_row.id,
             "process_code": process_row.process_code,
             "quantity": quantity,
+            "transfer_quantity": transfer_quantity,
             "defect_quantity": defect_quantity,
             "manual_repair_quantity_before_end": manual_repair_quantity_before_end,
             "total_defect_quantity": total_defect_quantity,

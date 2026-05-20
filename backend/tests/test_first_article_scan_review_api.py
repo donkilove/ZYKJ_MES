@@ -440,6 +440,24 @@ class FirstArticleScanReviewApiTest(unittest.TestCase):
             self.assertIn("/api/v1/auth/mobile-scan-review-login", page_response.text)
             self.assertIn("/api/v1/auth/accounts", page_response.text)
 
+    def test_scan_review_create_rejects_operator_in_participants(self) -> None:
+        context = self._create_context("SELFCRT")
+
+        response = self.client.post(
+            f"/api/v1/production/orders/{context['order_id']}/first-article/review-sessions",
+            headers=self._headers(),
+            json={
+                "order_process_id": context["order_process_id"],
+                "template_id": context["template_id"],
+                "check_content": "外观自检",
+                "test_value": "10.01",
+                "participant_user_ids": [1],
+            },
+        )
+
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertIn("参与操作员不能包含当前主操作员本人", response.text)
+
     def test_scan_review_rejects_and_refresh_invalidates_old_token(self) -> None:
         context = self._create_context("FAIL")
         create_response = self.client.post(
@@ -501,6 +519,35 @@ class FirstArticleScanReviewApiTest(unittest.TestCase):
             new_detail_response.json()["data"]["test_value"],
             "长度 10.00",
         )
+
+    def test_scan_review_refresh_rejects_operator_in_participants(self) -> None:
+        context = self._create_context("SELFREF")
+        create_response = self.client.post(
+            f"/api/v1/production/orders/{context['order_id']}/first-article/review-sessions",
+            headers=self._headers(),
+            json={
+                "order_process_id": context["order_process_id"],
+                "template_id": context["template_id"],
+                "check_content": "首轮检查",
+                "test_value": "10.00",
+                "participant_user_ids": [],
+            },
+        )
+        self.assertEqual(create_response.status_code, 201, create_response.text)
+        session_id = int(create_response.json()["data"]["session_id"])
+
+        refresh_response = self.client.post(
+            f"/api/v1/production/orders/{context['order_id']}/first-article/review-sessions/{session_id}/refresh",
+            headers=self._headers(),
+            json={
+                "check_content": "复检内容",
+                "test_value": "10.02",
+                "participant_user_ids": [1],
+            },
+        )
+
+        self.assertEqual(refresh_response.status_code, 400, refresh_response.text)
+        self.assertIn("参与操作员不能包含当前主操作员本人", refresh_response.text)
 
     def test_submit_scan_review_requires_quality_permission(self) -> None:
         context = self._create_context("AUTH")

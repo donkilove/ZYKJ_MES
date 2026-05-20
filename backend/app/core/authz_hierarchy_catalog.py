@@ -664,6 +664,7 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
             "quality.repair_orders.detail",
             "quality.repair_orders.phenomena_summary",
             "quality.repair_orders.complete",
+            "quality.repair_orders.return_to_production",
         ),
     ),
     FeatureDefinition(
@@ -835,6 +836,7 @@ FEATURE_DEFINITIONS: tuple[FeatureDefinition, ...] = (
             "production.repair_orders.list",
             "production.repair_orders.phenomena_summary",
             "production.repair_orders.complete",
+            "production.repair_orders.return_to_production",
         ),
     ),
     FeatureDefinition(

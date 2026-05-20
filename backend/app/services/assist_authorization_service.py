@@ -10,6 +10,7 @@ from app.core.production_constants import (
     PROCESS_STATUS_COMPLETED,
     SUB_ORDER_STATUS_PENDING,
 )
+from app.core.rbac import ROLE_OPERATOR
 from app.models.production_assist_authorization import ProductionAssistAuthorization
 from app.models.production_order import ProductionOrder
 from app.models.production_order_process import ProductionOrderProcess
@@ -33,6 +34,7 @@ ASSIST_STATUS_ALL = {
 
 ASSIST_OP_FIRST_ARTICLE = "first_article"
 ASSIST_OP_END_PRODUCTION = "end_production"
+ASSIST_OP_MANUAL_REPAIR = "manual_repair"
 PERM_FEATURE_PRODUCTION_ASSIST_RECORDS_VIEW = "feature.production.assist.records.view"
 
 
@@ -70,18 +72,18 @@ def _get_order_and_process_for_update(
     return order, process_row
 
 
-def _ensure_target_sub_order_exists(
+def _ensure_operator_sub_order_exists(
     db: Session,
     *,
     order_process_id: int,
-    target_operator_user_id: int,
+    operator_user_id: int,
 ) -> None:
     existing_row = (
         db.execute(
             select(ProductionSubOrder)
             .where(
                 ProductionSubOrder.order_process_id == order_process_id,
-                ProductionSubOrder.operator_user_id == target_operator_user_id,
+                ProductionSubOrder.operator_user_id == operator_user_id,
             )
             .with_for_update()
         )
@@ -93,7 +95,7 @@ def _ensure_target_sub_order_exists(
     db.add(
         ProductionSubOrder(
             order_process_id=order_process_id,
-            operator_user_id=target_operator_user_id,
+            operator_user_id=operator_user_id,
             completed_quantity=0,
             status=SUB_ORDER_STATUS_PENDING,
         )
@@ -124,15 +126,34 @@ def create_assist_authorization(
     helper = db.get(User, helper_user_id)
     if helper is None or not helper.is_active:
         raise ValueError("Helper user not found or inactive")
+    helper_stage_id = getattr(helper, "stage_id", None)
+    process_stage_id = getattr(process_row, "stage_id", None)
+    helper_role_codes = {
+        role.code
+        for role in getattr(helper, "roles", [])
+        if getattr(role, "code", None)
+    }
+    if (
+        ROLE_OPERATOR in helper_role_codes
+        and helper_stage_id is not None
+        and process_stage_id is not None
+        and helper_stage_id == process_stage_id
+    ):
+        raise ValueError("Current stage operator does not require assist authorization")
 
     target_operator = db.get(User, target_operator_user_id)
     if target_operator is None or not target_operator.is_active:
         raise ValueError("Target operator not found or inactive")
 
-    _ensure_target_sub_order_exists(
+    _ensure_operator_sub_order_exists(
         db,
         order_process_id=order_process_id,
-        target_operator_user_id=target_operator_user_id,
+        operator_user_id=target_operator_user_id,
+    )
+    _ensure_operator_sub_order_exists(
+        db,
+        order_process_id=order_process_id,
+        operator_user_id=helper_user_id,
     )
 
     duplicate = (
@@ -143,6 +164,7 @@ def create_assist_authorization(
                 ProductionAssistAuthorization.target_operator_user_id
                 == target_operator_user_id,
                 ProductionAssistAuthorization.requester_user_id == requester.id,
+                ProductionAssistAuthorization.helper_user_id == helper_user_id,
                 ProductionAssistAuthorization.status.in_(
                     [ASSIST_STATUS_PENDING, ASSIST_STATUS_APPROVED]
                 ),
@@ -283,7 +305,6 @@ def get_usable_assist_authorization_for_operation(
     authorization_id: int,
     order_id: int,
     order_process_id: int,
-    target_operator_user_id: int,
     helper_user_id: int,
     operation: str,
 ) -> ProductionAssistAuthorization:
@@ -302,19 +323,18 @@ def get_usable_assist_authorization_for_operation(
         raise ValueError("Assist authorization is not approved")
     if row.order_id != order_id or row.order_process_id != order_process_id:
         raise ValueError("Assist authorization does not match order process")
-    if row.target_operator_user_id != target_operator_user_id:
-        raise ValueError("Assist authorization target operator mismatch")
     if row.helper_user_id != helper_user_id:
         raise ValueError("Assist authorization helper mismatch")
 
     if operation == ASSIST_OP_FIRST_ARTICLE:
-        if row.first_article_used_at is not None:
-            raise ValueError("First-article assist authorization already used")
         if row.end_production_used_at is not None:
             raise ValueError("Assist authorization already consumed")
     elif operation == ASSIST_OP_END_PRODUCTION:
         if row.end_production_used_at is not None:
             raise ValueError("End-production assist authorization already used")
+    elif operation == ASSIST_OP_MANUAL_REPAIR:
+        if row.end_production_used_at is not None:
+            raise ValueError("Assist authorization already consumed")
     else:
         raise ValueError("Unsupported assist operation")
 
@@ -373,24 +393,23 @@ def mark_assist_authorization_used(
     operation: str,
 ) -> None:
     if operation == ASSIST_OP_FIRST_ARTICLE:
-        authorization_row.first_article_used_at = datetime.now(timezone.utc)
-        authorization_row.status = ASSIST_STATUS_CONSUMED
-        authorization_row.consumed_at = datetime.now(timezone.utc)
-        add_order_event_log(
-            db,
-            order_id=authorization_row.order_id,
-            event_type="assist_authorization_consumed",
-            event_title="代班授权已消耗",
-            event_detail=f"代班授权 {authorization_row.id} 已在开始首件时消耗",
-            operator_user_id=authorization_row.helper_user_id,
-            payload={
-                "assist_authorization_id": authorization_row.id,
-                "order_process_id": authorization_row.order_process_id,
-                "target_operator_user_id": authorization_row.target_operator_user_id,
-                "helper_user_id": authorization_row.helper_user_id,
-                "operation": ASSIST_OP_FIRST_ARTICLE,
-            },
-        )
+        if authorization_row.first_article_used_at is None:
+            authorization_row.first_article_used_at = datetime.now(timezone.utc)
+            add_order_event_log(
+                db,
+                order_id=authorization_row.order_id,
+                event_type="assist_authorization_first_article_used",
+                event_title="代班首件已发起",
+                event_detail=f"代班授权 {authorization_row.id} 已进入首件执行阶段",
+                operator_user_id=authorization_row.helper_user_id,
+                payload={
+                    "assist_authorization_id": authorization_row.id,
+                    "order_process_id": authorization_row.order_process_id,
+                    "target_operator_user_id": authorization_row.target_operator_user_id,
+                    "helper_user_id": authorization_row.helper_user_id,
+                    "operation": ASSIST_OP_FIRST_ARTICLE,
+                },
+            )
         return
 
     if operation == ASSIST_OP_END_PRODUCTION:

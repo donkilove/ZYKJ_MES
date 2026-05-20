@@ -177,8 +177,18 @@ class TransactionBoundaryUnitTest(unittest.TestCase):
     def test_create_assist_authorization_service_does_not_commit_transaction(self) -> None:
         db = MagicMock()
         order = SimpleNamespace(id=31, status="in_progress")
-        process_row = SimpleNamespace(id=41, status="in_progress", process_name="工序A")
-        helper = SimpleNamespace(username="helper", is_active=True)
+        process_row = SimpleNamespace(
+            id=41,
+            status="in_progress",
+            process_name="工序A",
+            stage_id=9,
+        )
+        helper = SimpleNamespace(
+            username="helper",
+            is_active=True,
+            stage_id=11,
+            roles=[SimpleNamespace(code="operator")],
+        )
         target_operator = SimpleNamespace(is_active=True)
         requester = SimpleNamespace(id=7, username="requester")
 
