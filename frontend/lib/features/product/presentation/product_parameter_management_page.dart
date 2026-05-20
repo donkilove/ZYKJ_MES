@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:mes_client/core/models/app_session.dart';
@@ -771,6 +772,39 @@ class _ProductParameterManagementPageState
     );
   }
 
+  bool _useImmediateReorderDragStart() {
+    if (kIsWeb) {
+      return true;
+    }
+    return switch (Theme.of(context).platform) {
+      TargetPlatform.windows ||
+      TargetPlatform.macOS ||
+      TargetPlatform.linux => true,
+      TargetPlatform.android ||
+      TargetPlatform.iOS ||
+      TargetPlatform.fuchsia => false,
+    };
+  }
+
+  Widget _buildReorderDragListener({
+    required int index,
+    required bool enabled,
+    required Widget child,
+  }) {
+    if (_useImmediateReorderDragStart()) {
+      return ReorderableDragStartListener(
+        index: index,
+        enabled: enabled,
+        child: child,
+      );
+    }
+    return ReorderableDelayedDragStartListener(
+      index: index,
+      enabled: enabled,
+      child: child,
+    );
+  }
+
   Widget _buildDragHandle({required int index}) {
     final iconColor = (_editorSubmitting || _editorReadOnly)
         ? Theme.of(context).disabledColor
@@ -778,10 +812,11 @@ class _ProductParameterManagementPageState
 
     return Tooltip(
       message: '按住拖动排序',
-      child: ReorderableDelayedDragStartListener(
+      child: _buildReorderDragListener(
         index: index,
         enabled: !_editorSubmitting && !_editorReadOnly,
         child: SizedBox(
+          key: ValueKey('product-parameter-row-drag-handle-$index'),
           width: _rowActionButtonSize,
           height: _rowActionButtonSize,
           child: Center(

@@ -428,6 +428,16 @@ Future<void> _openRoleOperationMenu(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+Finder _findRoleRowMenu(int roleId) {
+  return find.byKey(ValueKey('role-management-row-menu-$roleId'));
+}
+
+Future<void> _openRoleRowOperationMenu(WidgetTester tester, int roleId) async {
+  await tester.ensureVisible(_findRoleRowMenu(roleId));
+  await tester.tap(_findRoleRowMenu(roleId));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   final userService = _FakeSupportUserService();
   final authzService = _FakeSupportAuthzService();
@@ -518,6 +528,10 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(CrudListTableSection), findsOneWidget);
+    expect(_findRoleRowMenu(_maintenanceRole.id), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, '编辑'), findsNothing);
+    expect(find.widgetWithText(OutlinedButton, '停用'), findsNothing);
+    expect(find.widgetWithText(OutlinedButton, '删除'), findsNothing);
     expect(find.textContaining('总数'), findsNothing);
     expect(find.text('第 1 / 1 页'), findsOneWidget);
   });
@@ -539,16 +553,19 @@ void main() {
         ),
       );
 
-      expect(find.widgetWithText(OutlinedButton, '停用'), findsOneWidget);
-      expect(find.widgetWithText(OutlinedButton, '编辑'), findsOneWidget);
-      expect(find.text('删除'), findsNothing);
+      expect(_findRoleRowMenu(_maintenanceRole.id), findsOneWidget);
+      await _openRoleRowOperationMenu(tester, _maintenanceRole.id);
 
-      await tester.tap(find.widgetWithText(OutlinedButton, '停用'));
+      expect(find.text('编辑'), findsOneWidget);
+      expect(find.text('停用'), findsOneWidget);
+      expect(find.text('删除'), findsNothing);
+      expect(userService.disableRoleCalls, 0);
+
+      await tester.tap(find.text('停用'));
       await tester.pumpAndSettle();
 
       expect(find.text('停用角色确认'), findsOneWidget);
       expect(find.textContaining('角色“维修员”'), findsOneWidget);
-      expect(userService.disableRoleCalls, 0);
 
       await tester.tap(find.widgetWithText(FilledButton, '停用').last);
       await tester.pumpAndSettle();
@@ -612,7 +629,8 @@ void main() {
         ),
       );
 
-      await tester.tap(find.widgetWithText(OutlinedButton, '编辑'));
+      await _openRoleRowOperationMenu(tester, _maintenanceRole.id);
+      await tester.tap(find.text('编辑'));
       await tester.pumpAndSettle();
 
       expect(find.text('角色编码'), findsNothing);
@@ -1159,6 +1177,7 @@ void main() {
     expect(find.text('质检复核员'), findsOneWidget);
     expect(userService.lastRolePage, 1);
     expect(userService.lastRolePageSize, 10);
+    expect(_findRoleRowMenu(_customRole.id), findsOneWidget);
 
     await tester.tap(find.widgetWithText(OutlinedButton, '下一页'));
     await tester.pumpAndSettle();
@@ -1169,8 +1188,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(userService.lastRolePage, 1);
     expect(userService.lastRoleKeyword, '复核');
+    expect(_findRoleRowMenu(_customRole.id), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(OutlinedButton, '删除'));
+    await _openRoleRowOperationMenu(tester, _customRole.id);
+    expect(find.text('删除'), findsOneWidget);
+    await tester.tap(find.text('删除'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('role-delete-dialog')), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, '删除'));
@@ -1179,7 +1201,8 @@ void main() {
     expect(userService.lastDeletedRoleId, _customRole.id);
 
     userService.deleteRoleError = ApiException('角色已被绑定，无法删除', 409);
-    await tester.tap(find.widgetWithText(OutlinedButton, '删除'));
+    await _openRoleRowOperationMenu(tester, _customRole.id);
+    await tester.tap(find.text('删除'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '删除'));
     await tester.pumpAndSettle();
@@ -1188,6 +1211,9 @@ void main() {
   });
 
   testWidgets('role management toggle failure shows snackbar', (tester) async {
+    userService.roleResponses = [
+      RoleListResult(total: 1, items: [_maintenanceRole]),
+    ];
     userService.disableRoleError = ApiException('停用失败', 500);
 
     await _pumpPage(
@@ -1203,7 +1229,8 @@ void main() {
       ),
     );
 
-    await tester.tap(find.widgetWithText(OutlinedButton, '停用'));
+    await _openRoleRowOperationMenu(tester, _maintenanceRole.id);
+    await tester.tap(find.text('停用'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, '停用').last);
     await tester.pumpAndSettle();

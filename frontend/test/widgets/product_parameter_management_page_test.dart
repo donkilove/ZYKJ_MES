@@ -180,6 +180,44 @@ class _PageStructureService extends ProductService {
   }
 }
 
+class _ReorderPageStructureService extends _PageStructureService {
+  @override
+  Future<ProductParameterListResult> getProductVersionParameters({
+    required int productId,
+    required int version,
+  }) async {
+    return ProductParameterListResult(
+      productId: productId,
+      productName: '产品$productId',
+      parameterScope: 'version',
+      version: version,
+      versionLabel: 'V1.${version - 1}',
+      lifecycleStatus: 'draft',
+      total: 2,
+      items: [
+        ProductParameterItem(
+          name: '产品名称',
+          category: '基础参数',
+          type: 'Text',
+          value: '产品$productId',
+          description: '',
+          sortOrder: 1,
+          isPreset: true,
+        ),
+        ProductParameterItem(
+          name: '激光功率',
+          category: '激光打标参数',
+          type: 'Text',
+          value: '120W',
+          description: '桌面拖拽回归',
+          sortOrder: 2,
+          isPreset: false,
+        ),
+      ],
+    );
+  }
+}
+
 void main() {
   Finder popupMenuButtons() {
     return find.byWidgetPredicate(
@@ -598,5 +636,68 @@ void main() {
 
     expect(service.historyPages, [1, 2]);
     expect(find.text('第 2 / 2 页'), findsOneWidget);
+  });
+
+  testWidgets('Windows 桌面端可通过拖拽手柄调整参数编辑行顺序', (tester) async {
+    tester.view.physicalSize = const Size(1800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final service = _ReorderPageStructureService();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildMesTheme(
+          brightness: Brightness.light,
+          visualDensity: VisualDensity.standard,
+        ).copyWith(platform: TargetPlatform.windows),
+        home: Scaffold(
+          body: SizedBox(
+            width: 1440,
+            height: 900,
+            child: ProductParameterManagementPage(
+              session: AppSession(baseUrl: '', accessToken: 'token'),
+              onLogout: () {},
+              tabCode: 'product-parameter-management',
+              service: service,
+              canExportParameters: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(popupMenuButtons().first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('编辑参数').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('product-parameter-editor-header')),
+      findsOneWidget,
+    );
+    expect(
+      tester.getTopLeft(find.text('产品名称')).dy,
+      lessThan(tester.getTopLeft(find.text('激光功率')).dy),
+    );
+
+    await tester.drag(
+      find.byKey(const ValueKey('product-parameter-row-drag-handle-0')),
+      const Offset(0, 140),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getTopLeft(find.text('激光功率')).dy,
+      lessThan(tester.getTopLeft(find.text('产品名称')).dy),
+    );
+    expect(
+      find.byKey(const ValueKey('product-parameter-editor-header')),
+      findsOneWidget,
+    );
   });
 }

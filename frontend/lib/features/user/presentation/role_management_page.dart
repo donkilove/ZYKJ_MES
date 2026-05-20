@@ -36,6 +36,8 @@ class RoleManagementPage extends StatefulWidget {
   State<RoleManagementPage> createState() => _RoleManagementPageState();
 }
 
+enum _RoleManagementRowAction { edit, toggle, delete }
+
 class _RoleManagementPageState extends State<RoleManagementPage> {
   static const int _pageSize = 10;
   static const String _roleTypeBuiltin = 'builtin';
@@ -221,6 +223,23 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
     }
   }
 
+  Future<void> _handleRowAction(
+    _RoleManagementRowAction action,
+    RoleItem role,
+  ) async {
+    switch (action) {
+      case _RoleManagementRowAction.edit:
+        await _showRoleDialog(role: role);
+        return;
+      case _RoleManagementRowAction.toggle:
+        await _toggleRole(role);
+        return;
+      case _RoleManagementRowAction.delete:
+        await _deleteRole(role);
+        return;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -265,6 +284,7 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
               final canToggle = widget.canToggleRole;
               final canDelete =
                   widget.canDeleteRole && !_isBuiltinSemanticsRole(role);
+              final hasAnyAction = widget.canEditRole || canToggle || canDelete;
               return DataRow(
                 cells: [
                   DataCell(Text(role.name)),
@@ -287,25 +307,31 @@ class _RoleManagementPageState extends State<RoleManagementPage> {
                     ),
                   ),
                   DataCell(
-                    (widget.canEditRole || canToggle || canDelete)
-                        ? Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: [
+                    hasAnyAction
+                        ? UnifiedListTableHeaderStyle.actionMenuButton<
+                            _RoleManagementRowAction
+                          >(
+                            key: ValueKey(
+                              'role-management-row-menu-${role.id}',
+                            ),
+                            theme: theme,
+                            onSelected: (action) =>
+                                _handleRowAction(action, role),
+                            itemBuilder: (context) => [
                               if (widget.canEditRole)
-                                OutlinedButton(
-                                  onPressed: () => _showRoleDialog(role: role),
-                                  child: const Text('编辑'),
+                                const PopupMenuItem(
+                                  value: _RoleManagementRowAction.edit,
+                                  child: Text('编辑'),
                                 ),
                               if (canToggle)
-                                OutlinedButton(
-                                  onPressed: () => _toggleRole(role),
+                                PopupMenuItem(
+                                  value: _RoleManagementRowAction.toggle,
                                   child: Text(role.isEnabled ? '停用' : '启用'),
                                 ),
                               if (canDelete)
-                                OutlinedButton(
-                                  onPressed: () => _deleteRole(role),
-                                  child: const Text('删除'),
+                                const PopupMenuItem(
+                                  value: _RoleManagementRowAction.delete,
+                                  child: Text('删除'),
                                 ),
                             ],
                           )

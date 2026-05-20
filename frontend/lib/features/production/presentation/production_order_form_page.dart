@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mes_client/core/ui/patterns/mes_detail_page_header.dart';
 import 'package:mes_client/core/ui/patterns/mes_loading_state.dart';
@@ -491,16 +492,50 @@ class _ProductionOrderFormPageState extends State<ProductionOrderFormPage> {
     });
   }
 
+  bool _useImmediateReorderDragStart() {
+    if (kIsWeb) {
+      return true;
+    }
+    return switch (Theme.of(context).platform) {
+      TargetPlatform.windows ||
+      TargetPlatform.macOS ||
+      TargetPlatform.linux => true,
+      TargetPlatform.android ||
+      TargetPlatform.iOS ||
+      TargetPlatform.fuchsia => false,
+    };
+  }
+
+  Widget _buildReorderDragListener({
+    required int index,
+    required bool enabled,
+    required Widget child,
+  }) {
+    if (_useImmediateReorderDragStart()) {
+      return ReorderableDragStartListener(
+        index: index,
+        enabled: enabled,
+        child: child,
+      );
+    }
+    return ReorderableDelayedDragStartListener(
+      index: index,
+      enabled: enabled,
+      child: child,
+    );
+  }
+
   Widget _buildRouteStepDragHandle({required int index}) {
     final iconColor = _submitting
         ? Theme.of(context).disabledColor
         : Theme.of(context).iconTheme.color;
     return Tooltip(
       message: '按住拖动排序',
-      child: ReorderableDelayedDragStartListener(
+      child: _buildReorderDragListener(
         index: index,
         enabled: !_submitting,
         child: SizedBox(
+          key: ValueKey('route-step-drag-handle-$index'),
           width: 36,
           height: 36,
           child: Center(
